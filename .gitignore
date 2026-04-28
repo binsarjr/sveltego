@@ -1,0 +1,26 @@
+# Build artifacts
+.gen/
+build/
+dist/
+node_modules/
+
+# Go
+/sveltego
+/sveltego.exe
+*.test
+*.out
+coverage.txt
+vendor/
+
+# Editors
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Env
+.env
+.env.local
+
+# Logs
+*.log
