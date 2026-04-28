@@ -60,7 +60,7 @@ Field names are PascalCase (Go exported). `nil` not `null`, `len(x)` not `x.leng
 
 ## Roadmap
 
-5 milestones tracked on GitHub:
+6 milestones tracked on GitHub:
 
 | Milestone | Scope |
 |-----------|-------|
@@ -69,6 +69,7 @@ Field names are PascalCase (Go exported). `nil` not `null`, `len(x)` not `x.leng
 | **v0.3** (#34–42) | Vite client bundle, hydration, SPA router, dev server |
 | **v0.4** (#43–59) | Svelte 5 runes, slots, snippets, special elements, scoped CSS |
 | **v1.0** (#60–69) | Benchmarks, docs, examples, streaming/SSG/CSP, CI/release/LSP |
+| **v1.1** (#70–75) | LLM tooling: `llms.txt`, MCP server, copy-for-LLM, AI templates, provenance |
 
 ## See also
 

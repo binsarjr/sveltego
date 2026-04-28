@@ -50,6 +50,10 @@ Runes: `$props`, `$state`, `$derived`, `$effect`, `$bindable`. Snippets and `{@r
 
 Benchmark suite vs adapter-bun with nightly regression gate. Docs site (Vitepress). Blog and dashboard examples. Streaming responses. Prerender / SSG mode. CSP nonce injection. CI (GitHub Actions). Release pipeline (release-please + GoReleaser). LSP for `.svelte` with Go expressions.
 
+### v1.1 (#70–75) — LLM & AI Tooling
+
+`llms.txt` + `llms-full.txt` for AI agents. `sveltego mcp` Model Context Protocol server (`search_docs`, `lookup_api`, `validate_template`, `scaffold_route`). Markdown-first docs with copy-for-LLM buttons. AI assistant project templates (`CLAUDE.md`, `.cursorrules`, `AGENTS.md`, copilot instructions) wired into `sveltego init --ai`. Provenance comments in generated `.gen/*.go`. AI-assisted development guide page.
+
 ## Decision log (high-level)
 
 | Decision | Rationale |
@@ -67,6 +71,7 @@ Benchmark suite vs adapter-bun with nightly regression gate. Docs site (Vitepres
 - [x] Issue templates (feature, RFC, bug)
 - [x] 19 labels, 5 milestones, 69 issues created
 - [x] All 69 issues rewritten in English with industry-standard detail
+- [x] v1.1 milestone added — LLM & AI tooling (#70–75)
 - [ ] Land RFCs (#1–4): parser strategy, expression syntax, file convention, codegen output layout
 - [ ] Bootstrap Go module + CLI skeleton (#5, #6)
 - [ ] Build the MVP pipeline end-to-end (#7–23)
