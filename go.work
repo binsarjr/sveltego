@@ -1,0 +1,18 @@
+go 1.22
+
+use (
+	./benchmarks
+	./packages/adapter-auto
+	./packages/adapter-cloudflare
+	./packages/adapter-docker
+	./packages/adapter-lambda
+	./packages/adapter-server
+	./packages/adapter-static
+	./packages/create-sveltego
+	./packages/enhanced-img
+	./packages/lsp
+	./packages/mcp
+	./packages/sveltego
+	./playgrounds/basic
+	./test-utils
+)

@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+staged_all=$(git diff --cached --name-only --diff-filter=ACM || true)
+staged_go=$(echo "$staged_all" | grep -E '\.go$' || true)
+
+if [[ -n "$staged_go" ]]; then
+  echo "→ gofumpt"
+  echo "$staged_go" | xargs gofumpt -w
+
+  echo "→ goimports"
+  echo "$staged_go" | xargs goimports -w -local github.com/binsarjr/sveltego
+
+  echo "→ re-staging formatted files"
+  echo "$staged_go" | xargs git add
+
+  echo "→ golangci-lint (delta only)"
+  golangci-lint run --new-from-rev=HEAD --fix
+fi
+
+echo "→ go test (changed packages)"
+changed_pkgs=$(echo "$staged_go" | xargs -n1 dirname | sort -u | sed 's|^|./|' || true)
+if [[ -n "$changed_pkgs" ]]; then
+  go test -short -race $changed_pkgs
+fi
+
+# AGENTS.md sync drift guard
+agents_changed=$(echo "$staged_all" | grep -E '^AGENTS\.md$' || true)
+generated_changed=$(echo "$staged_all" | grep -E '^(\.cursorrules|\.github/copilot-instructions\.md)$' || true)
+
+if [[ -n "$generated_changed" && -z "$agents_changed" ]]; then
+  cat >&2 <<'MSG'
+do not edit generated AI rule files; edit AGENTS.md
+Generated AI rule files (.cursorrules, .github/copilot-instructions.md) changed without an AGENTS.md change.
+Edit AGENTS.md and run: bash scripts/sync-ai-docs.sh
+MSG
+  exit 1
+fi
+
+if [[ -n "$agents_changed" ]]; then
+  echo "→ syncing AI docs from AGENTS.md"
+  bash scripts/sync-ai-docs.sh >/dev/null
+  if ! git diff --quiet -- .cursorrules .github/copilot-instructions.md; then
+    echo "→ AGENTS.md drift detected; re-staging regenerated files"
+    git add .cursorrules .github/copilot-instructions.md
+  fi
+fi

@@ -24,3 +24,10 @@ vendor/
 
 # Logs
 *.log
+
+# sveltego build artifacts
+bin/
+coverage*.out
+coverage*.html
+*.prof
+go.work.sum

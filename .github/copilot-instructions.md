@@ -1,0 +1,263 @@
+<!-- AUTO-GENERATED from AGENTS.md by scripts/sync-ai-docs.sh — DO NOT EDIT -->
+
+# Agent instructions for sveltego
+
+Master ruleset for AI agents working in this repo. This file is the **single source of truth**; `.cursorrules` and `.github/copilot-instructions.md` are auto-generated from it via `scripts/sync-ai-docs.sh`. Do not edit those files directly.
+
+Per-tool entry points:
+
+- Claude Code → [`CLAUDE.md`](./CLAUDE.md) (full working rules, layered on top of this file).
+- Cursor → `.cursorrules` (auto-generated).
+- GitHub Copilot → `.github/copilot-instructions.md` (auto-generated).
+- Aider / generic agents → this file.
+
+If a per-package `CLAUDE.md` exists (e.g. `packages/sveltego/core/codegen/CLAUDE.md`), it wins for that package's scope. Cross-cutting rules live here.
+
+---
+
+## 1. Project shape
+
+`sveltego` is a **rewrite of SvelteKit's shape in pure Go**, not an embedding of SvelteKit-the-JS-server. Pre-alpha. No Go source has landed yet — the repo currently holds specs, RFCs, ADRs, and a 105-issue roadmap on GitHub at `binsarjr/sveltego`.
+
+Hard invariants (do not reopen without new evidence — see `tasks/lessons.md` "Pivot to Go-native rewrite"):
+
+- **No JS runtime on the server.** `.svelte` compiles to Go source via codegen (`.gen/*.go`) for SSR. Vite produces the client bundle for hydration only.
+- **Mustache expressions are Go, not JS.** `{Data.User.Name}`, `{len(Data.Posts)}`, `nil` not `null`. PascalCase fields. Validated at codegen via `go/parser.ParseExpr`.
+- **Svelte 5 only.** Runes (`$props`, `$state`, `$derived`, `$effect`, `$bindable`). Skip Svelte 4 legacy reactivity.
+- **Codegen, not interpretation.** Static decisions at build time, no per-request template walking.
+- **Performance target:** 20–40k rps mid-complexity SSR. If a proposal cannot reach that, surface the gap before writing code.
+
+For high-level project context, read [`README.md`](./README.md) first, then [`CLAUDE.md`](./CLAUDE.md).
+
+---
+
+## 2. Read order before acting
+
+Read in order before any non-trivial action. Do not invent conventions — consult these:
+
+1. [`README.md`](./README.md) — what the project is.
+2. [`CLAUDE.md`](./CLAUDE.md) — full working rules and Claude Code entry point.
+3. [`CONTRIBUTING.md`](./CONTRIBUTING.md) — code style, error handling, logging, ctx propagation, naming, testing, forbidden patterns.
+4. [`STABILITY.md`](./STABILITY.md) — per-package stability index. Each package ships its own `STABILITY.md` describing tiers per exported symbol.
+5. [`tasks/todo.md`](./tasks/todo.md) — current execution plan, milestone scope, phase tracking.
+6. [`tasks/lessons.md`](./tasks/lessons.md) — design decisions, append-only journal of why things are the way they are.
+7. [`tasks/decisions/*.md`](./tasks/decisions/) — locked ADRs. Never edit an `Accepted` ADR in place; supersede with a new one.
+8. **Foundation issues #95–105** on `binsarjr/sveltego` — they define the entire project's conventions. Open via `gh issue view <N> --repo binsarjr/sveltego`.
+9. Per-package `CLAUDE.md` for scope-specific patterns when the package exists.
+
+### Foundation issue index
+
+| # | Topic | Why you'd read it |
+|---|---|---|
+| #95 | Monorepo workspace layout | Where files go, module path naming, `go.work` setup |
+| #96 | Code style conventions | gofumpt, goimports, error wrapping, slog, ctx, naming, forbidden patterns |
+| #97 | API stability and versioning | Tier rules (stable/experimental/deprecated), breaking change procedure |
+| #98 | golangci-lint config | What lints run, how to fix violations, lint-fix workflow |
+| #99 | Pre-commit hooks + commit-msg | Conventional Commits format, hook install, scope = package name |
+| #100 | release-please multi-package | Tag format, CHANGELOG generation, per-package versioning |
+| #101 | CI matrix | Required checks before merge, race detector, workspace vs isolated mode |
+| #102 | PR template + Definition of Done | Checklist every PR must satisfy |
+| #103 | AGENTS.md + AI doc sync | This file's spec. Single source of truth for AI agent rules |
+| #104 | Codegen golden testing | `-update` flag flow, determinism rules, review discipline |
+| #105 | Bench regression gate | benchstat thresholds, CI integration, override mechanism |
+
+---
+
+## 3. Hard rules
+
+These are condensed from `CLAUDE.md` §"Working rules". Read `CLAUDE.md` for the full long-form versions; this section is the enforceable summary.
+
+### 3.1 Plan before build
+
+- Tasks with **3+ steps or architectural impact**: write the plan to `tasks/todo.md` first, get approval, then execute.
+- "Plan" and "build" are separate. When asked to plan, output only the plan — no code until "yes / do it / push / lanjut".
+- Vague instructions ("add a settings page") warrant a written plan, not immediate code.
+- Use spec-based development: interview the user about technical approach, UX, concerns, and tradeoffs before writing code. The spec is the contract.
+- If something goes wrong mid-execution: **stop and re-plan**. Do not continue blindly.
+- If the user provides a written plan: follow it exactly. Flag real problems and wait — do not improvise around them.
+- **One-Word Mode:** when the user says "yes", "do it", "push", "lanjut", "ok": execute. Do not repeat the plan.
+
+### 3.2 Verification before done
+
+A task is **not done** when bytes hit disk. It is done when proven correct.
+
+- Re-read every file you edited. The Edit tool reports success on byte-write, not correctness.
+- Run the full local gate before declaring done:
+  - `gofumpt -l .` (no output = clean)
+  - `goimports -l -local github.com/binsarjr/sveltego .`
+  - `golangci-lint run` (when `.golangci.yml` is in scope)
+  - `go vet ./...`
+  - `go test -race ./...`
+  - `go build ./...` across all `go.work` packages
+- If tooling is missing for a check, **say so explicitly**. Never claim success when a gate is unverified.
+- For codegen work: run golden tests and review the diff line-by-line before approving an `-update`.
+- Cross-check artifacts: when issue counts change, README + `tasks/todo.md` + `CLAUDE.md` milestone tables must all match.
+- Ask: **"Would a staff engineer approve this in code review?"** If no, fix before declaring done.
+
+### 3.3 Phased execution
+
+- Never refactor across **>5 files** in one response. Break into phases.
+- Each phase: complete → verify → wait for "ok lanjut" → next phase.
+- For >5 independent files, launch parallel sub-agents (5–8 files per agent). One task per sub-agent.
+- **Step 0 before any structural refactor:** delete dead code first (unused exports, imports, debug logs). Commit cleanup separately.
+
+### 3.4 Edit safety
+
+- Re-read files after **10+ messages** before editing — context decay corrupts memory.
+- Re-read **before every edit**, re-read **after every edit** to confirm the change applied.
+- Never batch >3 edits to the same file without an intervening read.
+- When renaming a symbol, grep for: direct calls, type references, string literals, dynamic imports, re-exports, test files, mocks. Assume the first grep missed something.
+- One source of truth. If tempted to copy state to fix a display bug, the fix is in the wrong place.
+
+### 3.5 Senior dev override
+
+- Ignore default "minimal change, simplest approach" bias when it produces band-aids.
+- If architecture is flawed, state is duplicated, or patterns are inconsistent: propose a structural fix, do not patch around it.
+- Ask: **"What would a senior, experienced, perfectionist dev reject in code review?"** Fix all of it.
+- For non-trivial changes, pause and ask: "Is there a more elegant way?" If a fix feels hacky, implement the clean solution.
+- After 2 failed attempts at the same problem: stop. Re-read the relevant section top-down. Propose something fundamentally different.
+
+### 3.6 Mistake logging
+
+- After **any user correction**, append a dated section to `tasks/lessons.md`:
+  - Date heading.
+  - "Insight" — what was wrong, with the underlying pattern named.
+  - "Self-rules" — numbered, future-tense, prevent the category.
+- Never rewrite older entries. Append-only journal.
+- After fixing a bug, write an autopsy: why did it happen? What category is it? Add a self-rule.
+
+### 3.7 No over-engineering
+
+- No imaginary scenarios. If nobody asked for the scenario, do not handle it.
+- No fallbacks for cases that cannot happen. Trust framework guarantees and internal invariants. Validate at boundaries only (HTTP input, external APIs, file I/O).
+- Three similar lines beats a premature abstraction.
+- No half-finished implementations. If you cannot complete a feature in this phase, do not stub it; file an issue and stop.
+
+### 3.8 Commits
+
+- **Conventional Commits** per RFC #99: `<type>(<scope>): <subject>`.
+- `<scope>` = package name (`sveltego`, `adapter-cloudflare`, `codegen`, `router`, ...) or `repo` for cross-cutting changes.
+- Subject is imperative, no trailing period, ≤ 72 characters.
+- Breaking changes go in the footer: `BREAKING CHANGE: <description>`.
+- Never amend a published commit. Never `--no-verify` unless explicitly asked.
+
+### 3.9 Tone in chat
+
+- Caveman mode is active project-wide via session hook. Drop articles, fillers, pleasantries. Fragments OK.
+- **Code blocks and commit messages stay normal English.** No caveman in shipped artifacts.
+- End-of-turn summary: 1–2 sentences. What changed, what is next.
+- When uncertain, say so. Do not invent file paths, function names, or library APIs.
+- Trust raw data (logs, error output, file contents) over memory or theories.
+
+### 3.10 Destructive action safety
+
+- Never `git reset --hard`, `git push --force`, `git branch -D`, `git clean -f`, `rm -rf` without explicit user authorization in the **same conversation**. Authorization once does not stand for next time.
+- Never bypass hooks (`--no-verify`, `--no-gpg-sign`) unless asked.
+- Investigate before deleting unfamiliar files or branches — they may be in-progress work.
+
+---
+
+## 4. Code conventions
+
+The full spec lives in [`CONTRIBUTING.md`](./CONTRIBUTING.md). Quick non-negotiables:
+
+- **Format:** `gofumpt` (stricter superset of `gofmt`) + `goimports -local github.com/binsarjr/sveltego`. Soft cap 120 chars, hard cap 140.
+- **Errors:** wrap with `fmt.Errorf("pkg: op: %w", err)` across package boundaries. Sentinel errors at file top. Inspect with `errors.Is` / `errors.As` — never compare strings, never `switch err.(type)`.
+- **Logging:** `log/slog` only in runtime. `fmt.Println`, `log.Printf`, `log.Println` are banned outside `cmd/` startup. Always structured fields. No `Fatal` outside `cmd/`.
+- **Context:** `ctx context.Context` is the **first** argument on every public function that does I/O, blocks, or spawns a goroutine. Never store `ctx` in a struct. Check `ctx.Err()` between iterations of long loops.
+- **Concurrency:** every `go` statement has a documented exit condition. Pair with stop signal (closed channel, cancelled context, `WaitGroup`). Fire-and-forget is forbidden. `sync.Pool` requires a benchmark.
+- **Naming:** `snake_case.go` files. Lowercase single-word packages. PascalCase exports without package stutter (`render.Writer`, not `render.RenderWriter`). Acronyms uppercase always (`HTTPClient`, `UserID`).
+- **Docs:** every exported symbol has a one-line godoc comment starting with the symbol name. Multi-file packages ship a `doc.go`.
+- **Tests:** table-driven by default. `t.Helper()` in helpers. `t.Cleanup(...)` for teardown. Golden files under `testdata/golden/`, regenerate with `-update` (RFC #104). No `time.Sleep` in tests. Race detector required.
+
+### Forbidden
+
+- `init()` outside `package main` and well-justified plugin registries.
+- Global mutable state. Configuration travels through constructors.
+- `panic()` outside recovered HTTP middleware boundaries and codegen `must` helpers.
+- `interface{}` / `any` in public API surfaces. Reach for generics first.
+- `os.Exit` outside `cmd/`.
+- `reflect` outside codegen and serialization boundaries.
+
+### Stability tiers
+
+Per RFC #97. Every package ships a `STABILITY.md`.
+
+| Tier | Promise | Allowed change |
+|---|---|---|
+| `stable` | Won't break in current major. | Additive only. Behavior changes go in CHANGELOG. |
+| `experimental` | May break in any minor. Marked `// Experimental:` in godoc. | Anything. Deprecate before promotion. |
+| `deprecated` | Will be removed. Marked `// Deprecated: <reason>, use X` in godoc. | Removed in next major. |
+| `internal-only` | Not importable even if exported. | Anything. |
+
+Before changing exported symbols, check the package's `STABILITY.md`.
+
+---
+
+## 5. File conventions the framework implements
+
+When designing, codegen, or runtime work touches these names, treat them as **load-bearing**:
+
+```
+src/routes/
+  +page.svelte           // SSR template, Go expressions inside {...}
+  +page.server.go        // Load(), Actions()
+  +layout.svelte         // layout chain
+  +layout.server.go      // parent data flow
+  +server.go             // REST endpoints (GET, POST, etc.)
+  +error.svelte          // error boundary
+  (group)/               // route group, no URL segment
+  +page@.svelte          // layout reset
+  [param]/               // route param
+  [[optional]]/          // optional segment
+  [...rest]/             // catch-all
+src/params/<name>.go     // param matchers
+src/lib/                 // shared modules, $lib alias target
+src/service-worker.ts    // service worker convention
+hooks.server.go          // Handle, HandleError, HandleFetch, Reroute, Init
+```
+
+Generated output lives under `.gen/` (gitignored). Every `.gen/*.go` starts with a provenance header — do not edit generated files directly; edit the `.svelte` source.
+
+---
+
+## 6. Issue and PR workflow
+
+- **Issue body contract:** Summary · Background · Goals · Non-Goals · Detailed Design (with code) · Acceptance Criteria · Testing Strategy · Out of Scope · Risks & Open Questions · Dependencies (Blocks / Blocked by) · References.
+- **Required labels per issue:** one `area:*`, one `type:*`, one `priority:*` (`p0` blocker / `p1` important / `p2` nice-to-have). Areas in use: `codegen`, `router`, `runtime`, `cli`, `client`, `forms`, `hooks`, `perf`, `docs`, `infra`, `design`, `llm`. The `blocked` label flags cross-issue waits.
+- Author/edit issues with `gh issue create --body-file` or `gh issue edit --body-file`. **Never** inline `--body` (heredoc avoids quoting traps).
+- Definition of Done: see `.github/PULL_REQUEST_TEMPLATE.md` (RFC #102).
+
+---
+
+## 7. Out of scope (do not propose)
+
+- Svelte 4 legacy reactivity (`$:`, store autoload).
+- Server-side dynamic JS execution.
+- A native Go bundler replacing Vite for the client.
+- Multi-tenant / RBAC primitives in `kit`.
+- Universal (shared client+server) `Load`. Server-only by design.
+
+See issue #94 for the full non-goals RFC once it lands.
+
+---
+
+## 8. Cross-doc consistency
+
+When you edit ANY of these, check the others against the change in the **same commit**:
+
+- `README.md`
+- `CLAUDE.md`
+- `AGENTS.md` (this file)
+- `tasks/todo.md`
+- `tasks/lessons.md`
+- Issue counts in milestone tables
+- `.cursorrules`, `.github/copilot-instructions.md` — auto-synced from `AGENTS.md` via `scripts/sync-ai-docs.sh`. Run the script after editing this file; the sync is verified in CI.
+
+If counts, file lists, or roadmap stages disagree across these, the doc set is broken. Fix all in the same commit.
+
+---
+
+## 9. When in doubt
+
+Ask via the conversation. Never guess file paths, function names, library APIs, or conventions. The cost of asking once is cheaper than the cost of a hallucinated patch landing in the repo.

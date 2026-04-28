@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+msg_file="$1"
+first_line=$(head -1 "$msg_file")
+
+# Allow merge commits, revert commits, fixup
+if [[ "$first_line" =~ ^(Merge|Revert|fixup!|squash!) ]]; then exit 0; fi
+
+pattern='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert|rfc)(\([a-z0-9/_-]+\))?(!)?: .{1,72}$'
+
+if ! [[ "$first_line" =~ $pattern ]]; then
+  cat <<EOF >&2
+Commit message does not match Conventional Commits.
+
+Expected: <type>(<scope>): <subject>
+Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert, rfc
+Scope: package name (sveltego, adapter-cloudflare, codegen, ...)
+
+Example: feat(adapter-cloudflare): support D1 binding
+
+Got: $first_line
+EOF
+  exit 1
+fi

@@ -11,9 +11,9 @@ To avoid hallucinating conventions, layout, or APIs, read **in this order** befo
 3. `tasks/todo.md` — current execution plan, milestone scope, phase tracking.
 4. `tasks/lessons.md` — design decisions, self-rules, append-only journal of why things are the way they are.
 5. **Foundation issues #95–105** on GitHub `binsarjr/sveltego` — they define the entire project's conventions. Do not invent rules; consult these.
-6. `AGENTS.md` (when it lands per #103) — master AI rules synced to `.cursorrules` and copilot instructions.
-7. `CONTRIBUTING.md` (when it lands per #96) — code style, error handling, logging, ctx propagation.
-8. `STABILITY.md` per package (when packages exist per #97) — what's safe to change.
+6. `AGENTS.md` — master AI rules synced to `.cursorrules` and copilot instructions per RFC #103.
+7. `CONTRIBUTING.md` — code style, error handling, logging, ctx propagation.
+8. `STABILITY.md` per package — what's safe to change (RFC #97).
 9. Any package-local `CLAUDE.md` for scope-specific patterns (e.g. `packages/sveltego/core/codegen/CLAUDE.md`).
 
 If a doc is missing, check the corresponding issue body — body-files in `/tmp/setup-bodies/*.md` exist locally during the bootstrap phase.

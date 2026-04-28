@@ -72,3 +72,14 @@ body:
     attributes:
       label: References
       description: Links to upstream code, prior art, related discussions.
+  - type: checkboxes
+    id: dod
+    attributes:
+      label: Definition of Done (close when complete)
+      options:
+        - label: Code merged
+        - label: Tests added (race + golden)
+        - label: CHANGELOG entry generated
+        - label: STABILITY.md updated if public API
+        - label: Doc page updated if user-facing
+        - label: AGENTS.md / CLAUDE.md updated if new pattern
