@@ -22,9 +22,9 @@ The effort is comparable but the rewrite trade buys us performance, deploy simpl
 
 Tracked as GitHub milestones at `binsarjr/sveltego`. Each issue carries Summary, Background, Goals, Non-Goals, Detailed Design, Acceptance Criteria, Testing Strategy, Risks, Dependencies, References.
 
-### MVP (26 issues) — minimum to render a page
+### MVP (37 issues) — minimum to render a page
 
-Foundational RFCs (parser strategy, expression syntax, file convention, codegen layout), then bootstrap (Go module, CLI), then the core pipeline:
+Foundation layer first: monorepo layout RFC (#95), code style + stability RFCs (#96, #97), lint + hooks + release-please + CI + PR template + AI doc sync + golden tests + bench gate (#98–105). Then technical RFCs (parser strategy, expression syntax, file convention, codegen layout — #1–4), then bootstrap (Go module, CLI), then the core pipeline:
 
 - Parser: lexer → AST for the Svelte 5 subset we need.
 - Codegen: text → element/attribute → expression → `{#if}` → `{#each}` → `<script lang="go">` extraction.
@@ -74,11 +74,13 @@ Benchmark suite vs adapter-bun with nightly regression gate. Docs site (Vitepres
 - [x] Direction confirmed (Go-native rewrite, not JS embed)
 - [x] Repo created at `binsarjr/sveltego`
 - [x] Issue templates (feature, RFC, bug)
-- [x] 20 labels, 6 milestones, 94 issues created
+- [x] 20 labels, 6 milestones, 105 issues created
 - [x] All 69 original issues rewritten in English with industry-standard detail
 - [x] v1.1 milestone added — LLM & AI tooling (#70–75)
 - [x] SvelteKit-parity gap audit + 19 issues filed with priorities (#76–94)
-- [ ] Land RFCs (#1–4, #94): parser strategy, expression syntax, file convention, codegen output layout, non-goals
+- [x] Foundation issues filed (#95–105): monorepo layout, conventions, stability, lint, hooks, release-please, CI, PR template, AI sync, golden tests, bench gate
+- [ ] Land foundation RFCs (#95–97) and setup tasks (#98–103) before any code
+- [ ] Land technical RFCs (#1–4, #94, #104, #105): parser strategy, expression syntax, file convention, codegen output layout, non-goals, golden testing, bench gate
 - [ ] Bootstrap Go module + CLI skeleton (#5, #6)
 - [ ] Build the MVP pipeline end-to-end (#7–23, #76, #77, #83)
 - [ ] Smoke-test on hello-world example (#23)

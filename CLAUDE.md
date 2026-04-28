@@ -2,9 +2,43 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Read this first (mandatory at session start)
+
+To avoid hallucinating conventions, layout, or APIs, read **in this order** before any non-trivial action:
+
+1. `README.md` — what the project is.
+2. **This file** (`CLAUDE.md`) — Claude Code-specific entry point.
+3. `tasks/todo.md` — current execution plan, milestone scope, phase tracking.
+4. `tasks/lessons.md` — design decisions, self-rules, append-only journal of why things are the way they are.
+5. **Foundation issues #95–105** on GitHub `binsarjr/sveltego` — they define the entire project's conventions. Do not invent rules; consult these.
+6. `AGENTS.md` (when it lands per #103) — master AI rules synced to `.cursorrules` and copilot instructions.
+7. `CONTRIBUTING.md` (when it lands per #96) — code style, error handling, logging, ctx propagation.
+8. `STABILITY.md` per package (when packages exist per #97) — what's safe to change.
+9. Any package-local `CLAUDE.md` for scope-specific patterns (e.g. `packages/sveltego/core/codegen/CLAUDE.md`).
+
+If a doc is missing, check the corresponding issue body — body-files in `/tmp/setup-bodies/*.md` exist locally during the bootstrap phase.
+
+### Foundation issue index
+
+| # | Topic | Why you'd read it |
+|---|---|---|
+| #95 | Monorepo workspace layout | Where files go, module path naming, `go.work` setup |
+| #96 | Code style conventions | gofumpt, goimports, error wrapping, slog, ctx, naming, forbidden patterns |
+| #97 | API stability and versioning | Tier rules (stable/experimental/deprecated), breaking change procedure |
+| #98 | golangci-lint config | What lints run, how to fix violations, lint-fix workflow |
+| #99 | Pre-commit hooks + commit-msg | Conventional Commits format, hook install, scope = package name |
+| #100 | release-please multi-package | Tag format, CHANGELOG generation, per-package versioning |
+| #101 | CI matrix | Required checks before merge, race detector, workspace vs isolated mode |
+| #102 | PR template + Definition of Done | Checklist every PR must satisfy |
+| #103 | AGENTS.md + AI doc sync | Single source of truth for AI agent rules |
+| #104 | Codegen golden testing | `-update` flag flow, determinism rules, review discipline |
+| #105 | Bench regression gate | benchstat thresholds, CI integration, override mechanism |
+
+When in doubt about a convention: open the relevant issue with `gh issue view <N> --repo binsarjr/sveltego`. Do not guess.
+
 ## Repository state
 
-Pre-alpha. **No Go source yet** — repo holds only specs, RFCs, and a 94-issue roadmap on GitHub at `binsarjr/sveltego`. The first code lands when MVP RFCs (#1–4) are accepted. Until then, work happens in three places:
+Pre-alpha. **No Go source yet** — repo holds specs, RFCs, and a 105-issue roadmap on GitHub at `binsarjr/sveltego`. The first code lands when foundation RFCs (#95–97) and setup tasks (#98–103) land. Until then, all work happens in:
 
 - `tasks/todo.md` — current execution plan, milestone scope, phase tracking
 - `tasks/lessons.md` — design decisions and self-rules captured per session (append-only journal)
@@ -26,11 +60,11 @@ Key invariants:
 
 ## Roadmap structure
 
-6 milestones, 94 issues. Issue numbering follows execution order:
+6 milestones, 105 issues. Issue numbering follows execution order:
 
 | Milestone | Issues | Focus |
 |---|---|---|
-| MVP | #1–23, #76, #77, #83 | RFCs, parser, codegen, runtime, router, CLI to render a page |
+| MVP | #1–23, #76, #77, #83, #95–105 | Foundation RFCs + setup, parser, codegen, runtime, router, CLI to render a page |
 | v0.2 | #24–33, #78–82 | Layouts, hooks, error boundaries, form actions, route groups, page options, env |
 | v0.3 | #34–42, #84, #85, #87, #88 | Vite client, hydration, SPA router, `$app/navigation`, Snapshot, kit.Link, kit.Asset |
 | v0.4 | #43–59, #86, #90 | Svelte 5 full coverage, a11y, `<svelte:options>` |

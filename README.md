@@ -60,11 +60,11 @@ Field names are PascalCase (Go exported). `nil` not `null`, `len(x)` not `x.leng
 
 ## Roadmap
 
-6 milestones, 94 issues tracked on GitHub:
+6 milestones, 105 issues tracked on GitHub:
 
 | Milestone | Issues | Scope |
 |-----------|--------|-------|
-| **MVP** | 26 | Parser, codegen, runtime, router (incl. param matchers, optional/rest), `$lib` alias, CLI — minimum to render a page |
+| **MVP** | 37 | Foundation RFCs (#95–97) + setup (#98–105: lint, hooks, release-please, CI, PR template, AI sync, golden tests, bench gate), parser, codegen, runtime, router (incl. param matchers, optional/rest), `$lib` alias, CLI |
 | **v0.2** | 15 | Layouts, hooks (incl. `Reroute`/`Init`), error boundaries, form actions, cookies, route groups, page options, `$env` |
 | **v0.3** | 13 | Vite client bundle, hydration, SPA router, full `$app/navigation`, Snapshot, typed `kit.Link`, hashed `kit.Asset`, dev server |
 | **v0.4** | 19 | Svelte 5 runes, slots, snippets, special elements, `<svelte:options>`, scoped CSS, a11y warnings |
