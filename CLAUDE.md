@@ -190,30 +190,7 @@ If counts, file lists, or roadmap stages disagree across these, the doc set is b
 - **Proactive compaction.** If you notice context degradation (forgetting file structure, referencing nonexistent vars), run `/compact` and write summary to `context-log.md`. Do not wait for auto-compact at ~167K.
 - **Prompt cache awareness.** Do not switch models mid-session — invalidates cache prefix. Delegate to subagent if a different model needed.
 
-### 14. Serena-First (MANDATORY when Go code lands)
-
-Pre-alpha now, no code yet. Once `packages/sveltego/` has Go source, **Serena MCP tools are mandatory** for symbol-level work. Native `Edit`, `Grep`, `Glob` are forbidden when Serena covers the same task.
-
-| Task | Use (Serena) | Forbidden (native) |
-|---|---|---|
-| Symbol lookup / nav | `mcp__serena__find_symbol` | Grep for symbol defs |
-| File symbol overview | `mcp__serena__get_symbols_overview` | Read whole file to scan |
-| Find callers | `mcp__serena__find_referencing_symbols` | Grep for identifier usage |
-| Edit fn / type body | `mcp__serena__replace_symbol_body` | Edit/Write on symbol body |
-| Insert near symbol | `mcp__serena__insert_before_symbol` / `insert_after_symbol` | Edit anchored on text |
-| Rename symbol | `mcp__serena__rename_symbol` | Edit with `replace_all` |
-| Delete symbol safely | `mcp__serena__safe_delete_symbol` | Manual deletion |
-| Cross-session memory | `mcp__serena__write_memory` / `read_memory` | Ad-hoc `.md` files for memory |
-
-Rules:
-1. Load Serena via `ToolSearch` at session start when coding work begins.
-2. Before editing any symbol: `find_symbol` / `get_symbols_overview` first. No blind Read-then-Edit.
-3. Native `Edit`/`Write` allowed only for: configs, JSON/YAML/TOML, markdown, new file creation, or when Serena unsupported for the language.
-4. Native `Grep`/`Glob` allowed only for: text in non-code files, string literals, log analysis. **Not for symbol discovery.**
-5. If Serena call fails: state failure explicitly, then fall back. Never silently switch.
-6. **Violation = rework.** Caught using native where Serena applies → stop, redo with Serena, log to `tasks/lessons.md`.
-
-### 15. Autonomous bug fixing
+### 14. Autonomous bug fixing
 
 - Given a bug report: **just fix it**. Trace logs, errors, failing tests, resolve.
 - Do not require context switching from the user. No "can you check X for me?" when you can check it yourself.
