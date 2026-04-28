@@ -58,6 +58,169 @@ Key invariants:
 - **Codegen, not interpretation.** Static decisions at build time, no per-request template walking.
 - **Performance target:** 20–40k rps mid-complexity SSR. If a proposal can't reach that, surface it before writing code.
 
+## Working rules (do not skip)
+
+These are the project-explicit form of the global agent directives. They override default biases toward "minimal, fast, often broken" output.
+
+### 1. Plan before build
+
+- For any task with 3+ steps or architectural impact: **plan first**, get approval, then execute. Do not improvise mid-task.
+- Plans live in `tasks/todo.md` with checkable items. Update progress as you go; mark complete only after verification.
+- "Plan" and "build" are separate steps. When asked to plan, **output only the plan**. No code until "yes / do it / push".
+- Vague instructions like "add a settings page" warrant a written plan, not immediate code.
+- **Spec-Based Development:** for non-trivial features, use `AskUserQuestion` to interview the user about technical approach, UX, concerns, and tradeoffs before writing code. Strip every assumption before touching code. The spec is the contract — execute against it, not against guesses.
+- If something goes wrong mid-execution: **stop and re-plan**. Do not continue blindly.
+- If the user provides a written plan: follow it exactly. If you spot a real problem, flag it and wait — do not improvise around it.
+- **Follow References, Not Descriptions.** When the user points to existing code as a reference, study it thoroughly before building. Match its patterns exactly. Working code is a better spec than English description.
+
+### 2. Verification before done (mandatory cross-check)
+
+A task is **not done** when bytes hit disk. It is done when proven correct. Before declaring "selesai" / "done":
+
+- **Re-read every file you edited.** Edit tool reports success on byte-write, not on correctness. Stale context produces silent corruption.
+- Run the full local gate:
+  - `gofumpt -l .` (no output = clean)
+  - `goimports -l -local github.com/binsarjr/sveltego .`
+  - `golangci-lint run` (when `.golangci.yml` lands)
+  - `go vet ./...`
+  - `go test -race ./...`
+  - `go build ./...` across all `go.work` packages
+- If any check is missing tooling (e.g. lint config not yet in repo), **say so explicitly**. Never claim success when a gate is unverified.
+- For codegen work: run golden tests and review the diff line-by-line before approving an `-update`.
+- For PR-flow work (when it starts): wait for CI green before declaring done. Do not push and walk away.
+- Ask yourself: **"Would a staff engineer approve this in code review?"** If no, fix before declaring done.
+- After fixing a bug: **diff behavior between `main` and your change** to verify the fix actually fires on the failing input.
+- Cross-check artifacts: when issue counts change, README + `tasks/todo.md` + CLAUDE.md milestone tables must all match. Run `gh issue list --milestone X --state all --json number | jq length` to verify.
+
+### 3. Phased execution (multi-file work)
+
+- Never refactor across >5 files in one response. Break into phases.
+- Each phase: complete → verify → wait for "ok lanjut" → next phase.
+- For >5 independent files, **launch parallel subagents** (5–8 files per agent). One agent per task. Use `Agent` with `subagent_type=Explore` for research, `general-purpose` for execution.
+- **Step 0 before any structural refactor:** delete dead code first (unused exports, unused imports, debug logs). Commit cleanup separately.
+
+### 4. Edit safety
+
+- **Re-read files after 10+ messages** before editing — context decay corrupts memory of file contents.
+- Re-read **before every edit**, re-read **after every edit** to confirm the change applied.
+- Never batch >3 edits to the same file without an intervening read.
+- When renaming a symbol, grep for: direct calls, type references, string literals, dynamic imports, re-exports, test files, mocks. **Assume the first grep missed something.**
+- One source of truth. If tempted to copy state to fix a display bug, the fix is in the wrong place — find the real source.
+
+### 5. Senior dev override
+
+- Ignore default "minimal change, simplest approach" bias when it produces band-aids.
+- If architecture is flawed, state is duplicated, or patterns are inconsistent: **propose a structural fix**, do not patch around it.
+- Ask: **"What would a senior, experienced, perfectionist dev reject in code review?"** Fix all of it.
+- For non-trivial changes, pause and ask: **"Is there a more elegant way?"** If a fix feels hacky, implement the clean solution you would choose knowing everything you know now.
+- **Two-Perspective Review:** when evaluating your own work, present both views. What a perfectionist would criticize, what a pragmatist would accept. Let the user pick the tradeoff.
+- **Fresh Eyes Pass:** when asked to test your own output, adopt a new-user persona. Walk through as if you've never seen the project. Flag anything confusing, friction-heavy, or unclear.
+- After fixing a bug: **autopsy.** Why did it happen? What category of bug is this? Add a self-rule to `tasks/lessons.md` so the same category cannot return.
+- After 2 failed attempts at the same problem: **stop**. Re-read the relevant section top-down. Say where your mental model was wrong. Propose something fundamentally different.
+- If the user says "step back" or "we're going in circles": drop everything, rethink from scratch, propose something fundamentally different.
+
+### 6. Mistake logging (lessons.md)
+
+- After **any user correction**, append a dated section to `tasks/lessons.md`:
+  - Date heading.
+  - "Insight" — what was wrong, with the underlying pattern named.
+  - "Self-rules" — numbered, future-tense, prevent the category.
+- Never rewrite older entries. Append-only journal.
+- Read recent lessons at session start when relevant.
+
+### 7. Don't over-engineer
+
+- No imaginary scenarios. If nobody asked for the scenario, do not handle it.
+- No fallbacks for cases that can't happen. Trust framework guarantees and internal invariants. Validate at boundaries only (HTTP input, external APIs, file I/O).
+- Three similar lines is better than a premature abstraction.
+- No half-finished implementations. If you cannot complete a feature in this phase, do not stub it; file an issue and stop.
+
+### 8. Comments and code style
+
+- **Default: write no comment.** Code with named identifiers explains itself.
+- Only add a comment when the WHY is non-obvious: a hidden constraint, a workaround for a specific bug, surprising behavior.
+- Never reference the current task or PR (`// added for issue #42`) — those rot.
+- Never write multi-paragraph docstrings or ASCII-art section headers in code.
+- Godoc comments on exported symbols: one sentence starting with the symbol name.
+
+### 9. Destructive action safety
+
+- Never `git reset --hard`, `git push --force`, `git branch -D`, `git clean -f`, `rm -rf` without explicit user authorization in the same conversation. Authorization once does not stand for next time.
+- Never bypass hooks (`--no-verify`, `--no-gpg-sign`) unless the user explicitly asks. If a hook fails, fix the cause.
+- Never amend a published commit. New commit, never `--amend` after push.
+- Investigate before deleting unfamiliar files or branches — they may be in-progress work.
+- Resolve merge conflicts; do not discard.
+
+### 10. File system as state
+
+- Do not hold large data in context. Save to disk, grep/jq/awk it.
+- Write intermediate results to files for multi-pass work.
+- Use `tasks/lessons.md`, `tasks/todo.md`, and per-package `CLAUDE.md` as durable memory. Not chat history.
+- `/tmp/` is fine for batch scripts and bodies; just remember they are ephemeral across sessions.
+
+### 11. Tone and reporting
+
+- Match response size to task. A simple question gets a direct answer, not a section-headed essay.
+- End-of-turn summary: 1–2 sentences. What changed, what's next.
+- When uncertain, say so. Do not invent file paths, function names, or library APIs.
+- Trust raw data (logs, error output, file contents) over your memory or theories. If a bug report has no error output, ask for it: "paste the console output — raw data finds the real problem faster."
+- **One-Word Mode:** when the user says "yes", "do it", "push", "lanjut", "ok": **execute**. Do not repeat the plan. Do not add commentary. Context is loaded; the message is just the trigger.
+- **Caveman mode** is active project-wide via session hook (~/.claude). Drop articles, fillers, pleasantries. Fragments OK. Code blocks and commit messages stay normal English.
+
+### 12. Cross-doc consistency on every doc PR
+
+When you edit ANY of these, check the others against the change:
+
+- `README.md`
+- `CLAUDE.md`
+- `AGENTS.md` (when it exists)
+- `tasks/todo.md`
+- `tasks/lessons.md`
+- Issue counts in milestone tables
+- `.cursorrules`, `.github/copilot-instructions.md` (auto-synced from AGENTS.md, but verify)
+
+If counts, file lists, or roadmap stages disagree across these, the doc set is broken. Fix all in the same commit.
+
+### 13. Tool mechanics (avoid silent corruption)
+
+- **File Read Budget.** Read tool capped at 2,000 lines. For files >500 LOC, use `offset` + `limit` to read in chunks. Never assume one read showed the whole file.
+- **Tool Result Blindness.** Bash output >50,000 chars is silently truncated to a 2,000-byte preview. If a search returns suspiciously few hits, re-run with narrower scope (single dir, stricter glob). State explicitly when you suspect truncation.
+- **Edit tool fails silently** when `old_string` doesn't match exactly (whitespace, line numbers, stale context). Re-read after every edit to confirm.
+- **Background subagents:** do not poll their output mid-run — pulls noise into your context. Wait for completion notification.
+- **Proactive compaction.** If you notice context degradation (forgetting file structure, referencing nonexistent vars), run `/compact` and write summary to `context-log.md`. Do not wait for auto-compact at ~167K.
+- **Prompt cache awareness.** Do not switch models mid-session — invalidates cache prefix. Delegate to subagent if a different model needed.
+
+### 14. Serena-First (MANDATORY when Go code lands)
+
+Pre-alpha now, no code yet. Once `packages/sveltego/` has Go source, **Serena MCP tools are mandatory** for symbol-level work. Native `Edit`, `Grep`, `Glob` are forbidden when Serena covers the same task.
+
+| Task | Use (Serena) | Forbidden (native) |
+|---|---|---|
+| Symbol lookup / nav | `mcp__serena__find_symbol` | Grep for symbol defs |
+| File symbol overview | `mcp__serena__get_symbols_overview` | Read whole file to scan |
+| Find callers | `mcp__serena__find_referencing_symbols` | Grep for identifier usage |
+| Edit fn / type body | `mcp__serena__replace_symbol_body` | Edit/Write on symbol body |
+| Insert near symbol | `mcp__serena__insert_before_symbol` / `insert_after_symbol` | Edit anchored on text |
+| Rename symbol | `mcp__serena__rename_symbol` | Edit with `replace_all` |
+| Delete symbol safely | `mcp__serena__safe_delete_symbol` | Manual deletion |
+| Cross-session memory | `mcp__serena__write_memory` / `read_memory` | Ad-hoc `.md` files for memory |
+
+Rules:
+1. Load Serena via `ToolSearch` at session start when coding work begins.
+2. Before editing any symbol: `find_symbol` / `get_symbols_overview` first. No blind Read-then-Edit.
+3. Native `Edit`/`Write` allowed only for: configs, JSON/YAML/TOML, markdown, new file creation, or when Serena unsupported for the language.
+4. Native `Grep`/`Glob` allowed only for: text in non-code files, string literals, log analysis. **Not for symbol discovery.**
+5. If Serena call fails: state failure explicitly, then fall back. Never silently switch.
+6. **Violation = rework.** Caught using native where Serena applies → stop, redo with Serena, log to `tasks/lessons.md`.
+
+### 15. Autonomous bug fixing
+
+- Given a bug report: **just fix it**. Trace logs, errors, failing tests, resolve.
+- Do not require context switching from the user. No "can you check X for me?" when you can check it yourself.
+- Fix failing CI proactively when it shows up.
+- Offer a checkpoint commit before risky changes.
+- Flag files that grow unwieldy (>500 LOC for non-generated code) — suggest splitting.
+
 ## Roadmap structure
 
 6 milestones, 105 issues. Issue numbering follows execution order:
