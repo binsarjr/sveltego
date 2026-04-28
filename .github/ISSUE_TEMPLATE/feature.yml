@@ -1,0 +1,74 @@
+name: Feature / Implementation
+description: Concrete implementation work with clear scope.
+title: "[area]: <imperative summary>"
+labels: ["type:feature"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One-paragraph TLDR. What is this and why does it exist.
+    validations:
+      required: true
+  - type: textarea
+    id: background
+    attributes:
+      label: Background
+      description: Context. What problem this solves. What currently exists and what is missing.
+    validations:
+      required: true
+  - type: textarea
+    id: goals
+    attributes:
+      label: Goals
+      description: Bullet list of what success looks like.
+      value: |
+        - [ ]
+    validations:
+      required: true
+  - type: textarea
+    id: non-goals
+    attributes:
+      label: Non-Goals
+      description: Explicit out-of-scope items so reviewers don't expect them.
+  - type: textarea
+    id: design
+    attributes:
+      label: Detailed Design
+      description: Technical approach. Code samples, type signatures, diagrams.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: Testable, observable bullets. A reviewer can check each one.
+      value: |
+        - [ ]
+    validations:
+      required: true
+  - type: textarea
+    id: testing
+    attributes:
+      label: Testing Strategy
+      description: Unit / integration / golden / benchmark. What proves this works.
+    validations:
+      required: true
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risks & Open Questions
+      description: Known unknowns, edge cases, potential blockers.
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: Issues that block or are blocked by this.
+      value: |
+        - Blocks:
+        - Blocked by:
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Links to upstream code, prior art, related discussions.

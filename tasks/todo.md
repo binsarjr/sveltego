@@ -1,162 +1,87 @@
-# svelte-adapter-golang — Feasibility & Plan
+# sveltego — Execution Plan
 
-## Tujuan
+## Direction
 
-SvelteKit adapter yang produce Go binary mandiri:
-- Go = HTTP server, static file, routing, IPC ke JS runtime
-- JS runtime embedded = jalankan SvelteKit `Server.respond(request)` SSR
+Rewrite the SvelteKit shape (routing, load, actions, hooks, layouts) in pure Go. No JS runtime on the server. `.svelte` files are compiled to Go source via codegen for SSR, and to a Svelte 5 client bundle via Vite for hydration.
 
-User minta: embed struktur JS yang ada (SvelteKit bundle) ke Go.
+This replaces the earlier "embed JS runtime in Go" investigation. That direction was rejected after the runtime survey because every option (goja, v8go, quickjs, wazero, subprocess Bun) bonds CPU to a JS engine and either kills throughput or breaks cross-compile. See `tasks/lessons.md` for the chain of reasoning.
 
----
+## Why rewrite
 
-## Kontrak SvelteKit Server (yg harus dipenuhi runtime JS)
+| Concern | Embed JS runtime | Rewrite in Go |
+|---|---|---|
+| Cross-compile single binary | Hard (v8go/quickjs need CGO) or large (Bun subprocess +50MB) | Native Go cross-compile |
+| Throughput | 200–8k rps depending on engine | Target 20–40k rps for mid-complexity SSR |
+| CPU profile | Bonded to V8/QuickJS/Bun | Pure Go scheduler, goroutine-native |
+| DX vs SvelteKit | Identical (running real code) | Nearly identical (same file conventions, Go expressions) |
+| Effort | ~70% spent on Web API polyfills | ~70% spent on parser/codegen + runtime |
 
-`new Server(manifest).respond(request, opts) -> Promise<Response>`
+The effort is comparable but the rewrite trade buys us performance, deploy simplicity, and a clean concurrency model.
 
-Dependency runtime:
-- Web standards: `Request`, `Response`, `Headers`, `URL`, `URLSearchParams`, `ReadableStream`, `TextEncoder`/`Decoder`, `globalThis.fetch`
-- `crypto.getRandomValues`, `crypto.subtle` (SHA256 untuk CSP nonce)
-- ES Modules + `import()` dynamic
-- `Promise`, `async/await`
-- `AsyncLocalStorage` (`node:async_hooks`) — **opsional**, fallback ke webcontainer mode (single-request serial) bila tak ada
+## Milestones
 
----
+Tracked as GitHub milestones at `binsarjr/sveltego`. Each issue carries Summary, Background, Goals, Non-Goals, Detailed Design, Acceptance Criteria, Testing Strategy, Risks, Dependencies, References.
 
-## Kandidat Runtime — Ringkasan
+### MVP (#1–23) — minimum to render a page
 
-| Runtime | ESM | Dynamic Import | Web APIs | CGO | Cross-compile | Perf est. | Notes |
-|---|---|---|---|---|---|---|---|
-| **goja** (pure Go) | parsial | ❌ | ❌ | tidak | mulus | ~200-1000 rps | bundle harus IIFE/CJS, polyfill berat |
-| **v8go** | ✅ | ✅ | ❌ (polyfill) | ya | susah (prebuilt V8 per target) | 5-15k rps | binary 50-80MB, maintenance lag |
-| **quickjs-go** (QuickJS-NG) | ✅ | ✅ | ❌ (polyfill) | ya | OK via zig cc | 1-3k rps | binary 5-10MB |
-| **wazero+javy** | ❌ | ❌ | ❌ | tidak | mulus | ~100-500 rps | tidak fit untuk SSR |
-| **subprocess Bun** | ✅ native | ✅ | ✅ native | tidak | mulus (vendor binary) | 3-8k rps | bukan true embed, +50MB binary |
+Foundational RFCs (parser strategy, expression syntax, file convention, codegen layout), then bootstrap (Go module, CLI), then the core pipeline:
 
----
+- Parser: lexer → AST for the Svelte 5 subset we need.
+- Codegen: text → element/attribute → expression → `{#if}` → `{#each}` → `<script lang="go">` extraction.
+- Runtime: `render.Writer` with `sync.Pool`, escape utilities, `kit.LoadCtx`, Locals.
+- Router: scan `src/routes/`, emit manifest, radix-tree match.
+- HTTP pipeline: Load → Render → Response.
+- CLI: `sveltego build` end-to-end.
+- Test harness for golden codegen + a hello-world example.
 
-## Jalur GOJA (pilihan user)
+### v0.2 (#24–33) — Form Actions & Hooks
 
-Realistis tapi butuh effort polyfill berat. Trade-off:
+Layout chain rendering, `+layout.server.go` parent data flow, `Handle` / `HandleError` / `HandleFetch`, `+error.svelte` boundaries, `+server.go` REST endpoints, `Actions()` map with form binding (urlencoded + multipart), `kit.Cookies`, `kit.Redirect / Fail / Error` sentinel helpers.
 
-### Pro
-- Pure Go → cross-compile mulus, single binary kecil, no CGO
-- Mature, production-tested (k6 Grafana)
-- Lifecycle goroutine bersih
+### v0.3 (#34–42) — Client SPA & Hydration
 
-### Kontra
-- ES5.1 + sebagian ES6 → bundle SvelteKit harus di-down-level
-- Tidak ada ESM native → bundle output harus IIFE/CJS, dynamic import jadi sync require
-- Tidak ada event loop bawaan → wajib `goja_nodejs/eventloop`
-- Web APIs nol → polyfill tulis sendiri (Request/Response/Headers/URL/fetch/Streams/crypto)
-- `AsyncLocalStorage` tidak ada → pakai webcontainer mode SvelteKit (serialize request, kerugian throughput)
-- Performa sekitar 10-50× lebih lambat dari V8
+Vite integration for the Svelte client bundle, `window.__sveltego__` hydration payload, client hydrate runtime, SPA router (link interception + history), `__data.json` per-route endpoint, `use:enhance` for forms, prefetch on hover/viewport, precompressed static asset serving, `sveltego dev` with HMR.
 
-### Polyfill Wajib
-1. **`Request`/`Response`/`Headers`/`URL`/`URLSearchParams`** — `globalThis` injection dari Go (bridge ke `net/http`)
-2. **`ReadableStream`** — minimal impl, atau buffer-only mode
-3. **`TextEncoder`/`Decoder`** — wrap `unicode/utf8`
-4. **`fetch`** — bridge ke `net/http.Client`
-5. **`crypto`** — bridge ke `crypto/sha256` + `crypto/rand`
-6. **`process.env`** — `os.Environ()`
-7. **`console.*`** — log → stdout
-8. **Module loader** — bundle SvelteKit ke single CJS file, expose `require` via `goja_nodejs/require`
-9. **Microtask queue** — `goja_nodejs/eventloop`
+### v0.4 (#43–59) — Svelte 5 Full Coverage
 
-### Build Pipeline
-```
-SvelteKit src
-  ↓ writeServer + writeClient (builder)
-  ↓ esbuild bundle target=es2017, format=cjs, single file
-  ↓ patch dynamic import → require
-  ↓ go:embed bundle.js + manifest.js + client/ + prerendered/
-  ↓ go build -o app
-```
+Runes: `$props`, `$state`, `$derived`, `$effect`, `$bindable`. Snippets and `{@render}`. Legacy slots (default + named, with slot props). Special elements: `<svelte:head>`, `<svelte:body>` / `<svelte:window>` / `<svelte:document>`, `<svelte:component>`. CSS scope hash matching upstream. `{@html}`, `{@const}`, `{#await}`, `{#key}`. Nested component import and rendering.
 
-### Komponen Go Adapter
-- `src/index.js` — adapter SvelteKit (Node/Bun side, panggilan dari `vite build`)
-- `runtime/` — Go template:
-  - `main.go` — HTTP server, embed FS, init goja
-  - `bridge.go` — polyfill Web APIs
-  - `eventloop.go` — wrapper goja_nodejs/eventloop
-  - `fetch.go` — bridge fetch ke net/http
-- `bundler.js` — invoke esbuild dengan plugin polyfill
+### v1.0 (#60–69) — Production Ready
 
-### Risiko Utama
-1. **Top-level await** di SvelteKit `index.js` (`await server.init`) — perlu wrapper IIFE async + manual drain event loop
-2. **`globalThis.fetch` patching** dalam `page/render.js` — set per-request, harus thread-safe vs serialized requests
-3. **Streaming responses** — goja String/Bytes ↔ Go []byte, perlu zero-copy bridge
-4. **Bundle size** — SvelteKit Server + deps ~500KB-2MB minified, OK
-5. **Cookie / Set-Cookie multi-value** — Headers polyfill harus support `getSetCookie()`
-6. **Crypto.subtle async** — goja Promise + Go goroutine bridge
+Benchmark suite vs adapter-bun with nightly regression gate. Docs site (Vitepress). Blog and dashboard examples. Streaming responses. Prerender / SSG mode. CSP nonce injection. CI (GitHub Actions). Release pipeline (release-please + GoReleaser). LSP for `.svelte` with Go expressions.
 
-### Probabilitas Sukses
-- **PoC "Hello World" SSR**: tinggi (~80%) — 1-2 minggu
-- **Full SvelteKit kompatibel** (form actions, load fn, hooks, streaming): sedang (~50%) — 1-2 bulan
-- **Production-grade** (perf, edge cases, websocket): rendah-sedang (~30%) — 3-6 bulan
+## Decision log (high-level)
 
----
+| Decision | Rationale |
+|---|---|
+| Pure Go build tool | No Node/Bun runtime dependency in production server; Vite only at build time for client bundle |
+| Go-native expression syntax | PascalCase fields, `nil`, `len()` — avoids a JS-to-Go translator and lets `go/parser.ParseExpr` validate at codegen |
+| Svelte 5 only | Runes are the future; Svelte 4 legacy syntax inflates parser surface |
+| Codegen, not interpretation | Interpreting templates per-request would defeat the perf goal; static codegen lowers to plain Go |
+| Same DX as SvelteKit | File conventions and runtime concepts (`Load`, `Actions`, hooks) directly mapped to Go equivalents |
 
-## Plan Eksekusi (jika approve goja)
+## Phase tracking
 
-### Fase 0 — Setup repo (DIY, no code yet)
-- [ ] init `package.json` adapter
-- [ ] init Go module di `runtime/`
-- [ ] sketch `tsconfig.json`, `.gitignore`
+- [x] Direction confirmed (Go-native rewrite, not JS embed)
+- [x] Repo created at `binsarjr/sveltego`
+- [x] Issue templates (feature, RFC, bug)
+- [x] 19 labels, 5 milestones, 69 issues created
+- [x] All 69 issues rewritten in English with industry-standard detail
+- [ ] Land RFCs (#1–4): parser strategy, expression syntax, file convention, codegen output layout
+- [ ] Bootstrap Go module + CLI skeleton (#5, #6)
+- [ ] Build the MVP pipeline end-to-end (#7–23)
+- [ ] Smoke-test on hello-world example (#23)
 
-### Fase 1 — Bridge minimal
-- [ ] Go: load goja, register `console`, `process.env`
-- [ ] Go: implement `URL`, `Headers`, `Request`, `Response` polyfill
-- [ ] Go: implement `crypto.getRandomValues` + `crypto.subtle.digest`
-- [ ] Go: implement minimal `fetch` (bridge ke `net/http`)
-- [ ] uji dengan JS skrip dummy
+## Open questions
 
-### Fase 2 — Bundler
-- [ ] adapter `src/index.js` — terima Builder SvelteKit
-- [ ] esbuild bundle SvelteKit Server → single CJS
-- [ ] patch `import()` → `require()`
-- [ ] generate manifest.js + emit ke build dir
+- Pinned upstream Svelte commit for CSS hash equivalence (#54) — pick once first build is green.
+- Default `Save-Data` behavior for prefetch (#40) — assume conservative-on; revisit after first dogfooding.
+- Whether to ship a fixed sanitizer for `{@html}` (#55) — current decision: no, recommend `bluemonday` in docs.
 
-### Fase 3 — Runtime integration
-- [ ] Go HTTP handler → bangun `Request` JS → panggil `server.respond` → konversi `Response` JS → `http.ResponseWriter`
-- [ ] static file server (sirv-style) di Go
-- [ ] prerendered routes lookup
-- [ ] uji golden path: routing, layout, slot
+## Out of scope (for now)
 
-### Fase 4 — Edge cases
-- [ ] form actions (POST + redirect)
-- [ ] cookies / Set-Cookie
-- [ ] streaming responses (ReadableStream)
-- [ ] hooks (handle, handleFetch, handleError)
-- [ ] error boundary
-
-### Fase 5 — Perf + harden
-- [ ] benchmark vs adapter-bun
-- [ ] worker pool (multi-goja-runtime), karena AsyncLocalStorage tidak ada → satu runtime per goroutine
-- [ ] precompress assets
-- [ ] graceful shutdown
-
----
-
-## Rekomendasi
-
-User memilih goja. Goja **possible** untuk SvelteKit tapi effort polyfill ~70% dari total kerja. Saran:
-
-1. **Mulai dari hello-world SSR** (Fase 1+2+3 minimal). Buktikan goja bisa jalankan SvelteKit Server.respond untuk satu route static. Jika lolos, lanjut ke fitur lain.
-2. **Plan B**: jika polyfill terlalu menyiksa atau perf jelek, fallback ke **subprocess Bun** dengan binary embed via `go:embed`. Bukan "true embed JS engine in Go" tapi tetap "single Go binary ship".
-3. **Plan C**: **v8go** untuk perf, terima cross-compile pain.
-
-Pertanyaan untuk user sebelum lanjut:
-1. Cross-compile single binary itu hard requirement? (kalau ya, goja > v8go > quickjs)
-2. Target perf? (kalau >5k rps, goja kurang)
-3. Boleh worker pool multi-runtime, atau strict single goroutine?
-4. Streaming response wajib di MVP atau buffer-only OK?
-
----
-
-## Status
-
-- [x] Pelajari kontrak SvelteKit Server
-- [x] Survei runtime
-- [ ] PoC minimal (tunggu approval pendekatan)
-- [x] Laporan feasibility (file ini)
+- Svelte 4 legacy reactivity (`$:`, stores autoload everywhere).
+- Server-side dynamic JS execution.
+- Native Go bundler replacing Vite for client.
+- View Transitions API.
+- Multi-tenant / RBAC primitives in `kit`.

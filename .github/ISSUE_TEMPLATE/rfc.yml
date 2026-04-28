@@ -1,0 +1,61 @@
+name: RFC / Design Decision
+description: Architectural decision requiring discussion before implementation.
+title: "RFC: <topic>"
+labels: ["area:design", "type:chore"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One-paragraph TLDR of the decision being proposed.
+    validations:
+      required: true
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: Why this decision matters now. What forced the question.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Each alternative with pros/cons. Show the work.
+    validations:
+      required: true
+  - type: textarea
+    id: decision
+    attributes:
+      label: Proposed Decision
+      description: The recommended path. Be specific.
+    validations:
+      required: true
+  - type: textarea
+    id: consequences
+    attributes:
+      label: Consequences
+      description: What this commits us to. What it forecloses. Migration cost.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: How we know the RFC is complete (e.g. doc merged, decision recorded).
+      value: |
+        - [ ] RFC document drafted at docs/rfc/NNNN-name.md
+        - [ ] Trade-offs explicitly listed
+        - [ ] Decision approved by maintainer
+        - [ ] Follow-up implementation issues created and linked
+    validations:
+      required: true
+  - type: textarea
+    id: open-questions
+    attributes:
+      label: Open Questions
+      description: Things still uncertain.
+  - type: textarea
+    id: references
+    attributes:
+      label: References
