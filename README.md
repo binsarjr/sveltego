@@ -60,16 +60,17 @@ Field names are PascalCase (Go exported). `nil` not `null`, `len(x)` not `x.leng
 
 ## Roadmap
 
-6 milestones tracked on GitHub:
+6 milestones, 94 issues tracked on GitHub:
 
-| Milestone | Scope |
-|-----------|-------|
-| **MVP** (#1–23) | Parser, codegen, runtime, router, CLI — minimum to render a page |
-| **v0.2** (#24–33) | Layouts, hooks, error boundaries, form actions, cookies |
-| **v0.3** (#34–42) | Vite client bundle, hydration, SPA router, dev server |
-| **v0.4** (#43–59) | Svelte 5 runes, slots, snippets, special elements, scoped CSS |
-| **v1.0** (#60–69) | Benchmarks, docs, examples, streaming/SSG/CSP, CI/release/LSP |
-| **v1.1** (#70–75) | LLM tooling: `llms.txt`, MCP server, copy-for-LLM, AI templates, provenance |
+| Milestone | Issues | Scope |
+|-----------|--------|-------|
+| **MVP** | 26 | Parser, codegen, runtime, router (incl. param matchers, optional/rest), `$lib` alias, CLI — minimum to render a page |
+| **v0.2** | 15 | Layouts, hooks (incl. `Reroute`/`Init`), error boundaries, form actions, cookies, route groups, page options, `$env` |
+| **v0.3** | 13 | Vite client bundle, hydration, SPA router, full `$app/navigation`, Snapshot, typed `kit.Link`, hashed `kit.Asset`, dev server |
+| **v0.4** | 19 | Svelte 5 runes, slots, snippets, special elements, `<svelte:options>`, scoped CSS, a11y warnings |
+| **v1.0** | 14 | Benchmarks, docs, examples, streaming/SSG/CSP, sitemap, image opt, deploy adapters, CI/release/LSP, service worker |
+| **v1.1** | 6 | LLM tooling: `llms.txt`, MCP server, copy-for-LLM, AI templates, provenance |
+| Standalone | 1 | RFC #94: explicit non-goals (universal load, WS, vercel adapter) |
 
 ## See also
 

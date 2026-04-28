@@ -22,37 +22,42 @@ The effort is comparable but the rewrite trade buys us performance, deploy simpl
 
 Tracked as GitHub milestones at `binsarjr/sveltego`. Each issue carries Summary, Background, Goals, Non-Goals, Detailed Design, Acceptance Criteria, Testing Strategy, Risks, Dependencies, References.
 
-### MVP (#1–23) — minimum to render a page
+### MVP (26 issues) — minimum to render a page
 
 Foundational RFCs (parser strategy, expression syntax, file convention, codegen layout), then bootstrap (Go module, CLI), then the core pipeline:
 
 - Parser: lexer → AST for the Svelte 5 subset we need.
 - Codegen: text → element/attribute → expression → `{#if}` → `{#each}` → `<script lang="go">` extraction.
 - Runtime: `render.Writer` with `sync.Pool`, escape utilities, `kit.LoadCtx`, Locals.
-- Router: scan `src/routes/`, emit manifest, radix-tree match.
+- Router: scan `src/routes/`, emit manifest, radix-tree match. Param matchers (`src/params/<name>.go`), optional `[[param]]` and rest `[...rest]` segments.
+- Build: `$lib` alias and shared modules under `src/lib/`.
 - HTTP pipeline: Load → Render → Response.
 - CLI: `sveltego build` end-to-end.
 - Test harness for golden codegen + a hello-world example.
 
-### v0.2 (#24–33) — Form Actions & Hooks
+### v0.2 (15 issues) — Form Actions & Hooks
 
-Layout chain rendering, `+layout.server.go` parent data flow, `Handle` / `HandleError` / `HandleFetch`, `+error.svelte` boundaries, `+server.go` REST endpoints, `Actions()` map with form binding (urlencoded + multipart), `kit.Cookies`, `kit.Redirect / Fail / Error` sentinel helpers.
+Layout chain rendering, `+layout.server.go` parent data flow, `Handle` / `HandleError` / `HandleFetch` / `Reroute` / `Init`, `+error.svelte` boundaries, `+server.go` REST endpoints, `Actions()` map with form binding (urlencoded + multipart), `kit.Cookies`, `kit.Redirect / Fail / Error` sentinel helpers, route groups `(group)/` + layout reset `@`, page options (`Prerender`, `SSR`, `CSR`, `TrailingSlash`), env var convention (`$env/static`, `$env/dynamic`).
 
-### v0.3 (#34–42) — Client SPA & Hydration
+### v0.3 (13 issues) — Client SPA & Hydration
 
-Vite integration for the Svelte client bundle, `window.__sveltego__` hydration payload, client hydrate runtime, SPA router (link interception + history), `__data.json` per-route endpoint, `use:enhance` for forms, prefetch on hover/viewport, precompressed static asset serving, `sveltego dev` with HMR.
+Vite integration for the Svelte client bundle, `window.__sveltego__` hydration payload, client hydrate runtime, SPA router (link interception + history), `__data.json` per-route endpoint, `use:enhance` for forms, prefetch on hover/viewport, precompressed static asset serving, `sveltego dev` with HMR. Full `$app/navigation` API (`goto`, `invalidate`, `preload`, `pushState`), Snapshot API for cross-nav state, typed `kit.Link` with route params, `kit.Asset` with hashed static URLs.
 
-### v0.4 (#43–59) — Svelte 5 Full Coverage
+### v0.4 (19 issues) — Svelte 5 Full Coverage
 
-Runes: `$props`, `$state`, `$derived`, `$effect`, `$bindable`. Snippets and `{@render}`. Legacy slots (default + named, with slot props). Special elements: `<svelte:head>`, `<svelte:body>` / `<svelte:window>` / `<svelte:document>`, `<svelte:component>`. CSS scope hash matching upstream. `{@html}`, `{@const}`, `{#await}`, `{#key}`. Nested component import and rendering.
+Runes: `$props`, `$state`, `$derived`, `$effect`, `$bindable`. Snippets and `{@render}`. Legacy slots (default + named, with slot props). Special elements: `<svelte:head>`, `<svelte:body>` / `<svelte:window>` / `<svelte:document>`, `<svelte:component>`, `<svelte:options>`. CSS scope hash matching upstream. `{@html}`, `{@const}`, `{#await}`, `{#key}`. Nested component import and rendering. Compile-time a11y warnings.
 
-### v1.0 (#60–69) — Production Ready
+### v1.0 (14 issues) — Production Ready
 
-Benchmark suite vs adapter-bun with nightly regression gate. Docs site (Vitepress). Blog and dashboard examples. Streaming responses. Prerender / SSG mode. CSP nonce injection. CI (GitHub Actions). Release pipeline (release-please + GoReleaser). LSP for `.svelte` with Go expressions.
+Benchmark suite vs adapter-bun with nightly regression gate. Docs site (Vitepress). Blog and dashboard examples. Streaming responses. Prerender / SSG mode. CSP nonce injection. CI (GitHub Actions). Release pipeline (release-please + GoReleaser). LSP for `.svelte` with Go expressions. Sitemap/robots helpers, image optimization (`<Image>`), service worker convention, deploy adapters (server, docker, static, lambda, cloudflare).
 
-### v1.1 (#70–75) — LLM & AI Tooling
+### v1.1 (6 issues) — LLM & AI Tooling
 
 `llms.txt` + `llms-full.txt` for AI agents. `sveltego mcp` Model Context Protocol server (`search_docs`, `lookup_api`, `validate_template`, `scaffold_route`). Markdown-first docs with copy-for-LLM buttons. AI assistant project templates (`CLAUDE.md`, `.cursorrules`, `AGENTS.md`, copilot instructions) wired into `sveltego init --ai`. Provenance comments in generated `.gen/*.go`. AI-assisted development guide page.
+
+### Standalone
+
+- #94 RFC: explicit non-goals (universal load, WS server, vercel-style adapter, etc.) — sets boundaries before contributors propose them.
 
 ## Decision log (high-level)
 
@@ -69,12 +74,13 @@ Benchmark suite vs adapter-bun with nightly regression gate. Docs site (Vitepres
 - [x] Direction confirmed (Go-native rewrite, not JS embed)
 - [x] Repo created at `binsarjr/sveltego`
 - [x] Issue templates (feature, RFC, bug)
-- [x] 19 labels, 5 milestones, 69 issues created
-- [x] All 69 issues rewritten in English with industry-standard detail
+- [x] 20 labels, 6 milestones, 94 issues created
+- [x] All 69 original issues rewritten in English with industry-standard detail
 - [x] v1.1 milestone added — LLM & AI tooling (#70–75)
-- [ ] Land RFCs (#1–4): parser strategy, expression syntax, file convention, codegen output layout
+- [x] SvelteKit-parity gap audit + 19 issues filed with priorities (#76–94)
+- [ ] Land RFCs (#1–4, #94): parser strategy, expression syntax, file convention, codegen output layout, non-goals
 - [ ] Bootstrap Go module + CLI skeleton (#5, #6)
-- [ ] Build the MVP pipeline end-to-end (#7–23)
+- [ ] Build the MVP pipeline end-to-end (#7–23, #76, #77, #83)
 - [ ] Smoke-test on hello-world example (#23)
 
 ## Open questions
