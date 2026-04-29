@@ -1,0 +1,1 @@
+<div class:active={IsActive} class:disabled={IsDisabled}>x</div>

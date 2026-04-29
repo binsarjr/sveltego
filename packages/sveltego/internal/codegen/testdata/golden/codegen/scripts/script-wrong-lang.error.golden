@@ -1,0 +1,1 @@
+1:1: unsupported script lang `ts` (hint: sveltego compiles Go inside <script>; remove `lang` or use lang="go")

@@ -1,0 +1,1 @@
+{#if A}a{:else if B}b{/if}

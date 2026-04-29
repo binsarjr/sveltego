@@ -1,0 +1,1 @@
+hello <!-- mid --> world

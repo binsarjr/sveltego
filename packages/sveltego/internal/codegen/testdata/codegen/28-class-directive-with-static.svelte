@@ -1,0 +1,1 @@
+<div class="card" class:active={IsActive}>x</div>

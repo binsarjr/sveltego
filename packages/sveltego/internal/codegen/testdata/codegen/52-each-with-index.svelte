@@ -1,0 +1,1 @@
+{#each Items as item, i}{i}:{item}{/each}
