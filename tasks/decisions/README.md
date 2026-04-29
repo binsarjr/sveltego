@@ -8,6 +8,7 @@ Locked decisions for `sveltego`. Each ADR mirrors a tracked GitHub RFC issue. Th
 | 0002 | Template Expression Syntax | [#2](https://github.com/binsarjr/sveltego/issues/2) | Accepted |
 | 0003 | File Convention (`.gen/` Layout) | [#3](https://github.com/binsarjr/sveltego/issues/3) | Accepted |
 | 0004 | Codegen Output Shape | [#4](https://github.com/binsarjr/sveltego/issues/4) | Accepted |
+| 0005 | Non-Goals | [#94](https://github.com/binsarjr/sveltego/issues/94) | Accepted |
 
 ## Convention
 

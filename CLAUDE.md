@@ -256,10 +256,20 @@ Generated output lives under `.gen/` (gitignored).
 
 ## Out of scope (do not propose)
 
-- Svelte 4 legacy reactivity (`$:`, store autoload).
-- Server-side dynamic JS execution.
-- A native Go bundler replacing Vite for the client.
-- Multi-tenant / RBAC primitives in `kit`.
-- Universal (shared client+server) `Load`. Server-only by design.
+See [ADR 0005](tasks/decisions/0005-non-goals.md) for canonical list and reasoning.
 
-See issue #94 for the full non-goals RFC once it lands.
+- Universal (shared client+server) `Load` (`+page.ts` / `+layout.ts`). Server-only by design.
+- `<script context="module">` (deprecated upstream).
+- WebSocket / SSE primitives in core (BYO `gorilla/websocket`).
+- Vercel / Netlify Functions adapters (Cloudflare Workers adapter **is** in scope).
+- vitePreprocess / arbitrary preprocessor pipeline in codegen.
+- JSDoc-driven type discovery (Go types only).
+- Deep dynamic-import code splitting beyond per-route.
+- Runtime template interpretation.
+- View Transitions API.
+- Built-in i18n primitives (BYO `go-i18n`).
+- Built-in form-validation library (BYO `go-playground/validator`).
+- Svelte 4 legacy reactivity (`$:`, store autoload) — predates ADR 0005, still excluded.
+- Server-side dynamic JS execution.
+- Native Go bundler replacing Vite for the client.
+- Multi-tenant / RBAC primitives in `kit`.

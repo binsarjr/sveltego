@@ -22,6 +22,8 @@ Rewritten from scratch in Go. File layout and DX mirror SvelteKit (file-based ro
 - Svelte 4 legacy syntax
 - Dynamic JS execution on the server
 
+Full enumerated list with reasoning: [ADR 0005 — Non-goals](tasks/decisions/0005-non-goals.md) (mirrors [issue #94](https://github.com/binsarjr/sveltego/issues/94)).
+
 ## Architecture
 
 ```

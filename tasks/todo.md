@@ -94,8 +94,18 @@ Benchmark suite vs adapter-bun with nightly regression gate. Docs site (Vitepres
 
 ## Out of scope (for now)
 
-- Svelte 4 legacy reactivity (`$:`, stores autoload everywhere).
-- Server-side dynamic JS execution.
-- Native Go bundler replacing Vite for client.
+Canonical list: [ADR 0005 — Non-goals](decisions/0005-non-goals.md). Quick reference:
+
+- Universal `+page.ts` / `+layout.ts` loads.
+- `<script context="module">` (Svelte 5 deprecated upstream too).
+- WebSocket / SSE primitives in core.
+- Vercel / Netlify Functions adapters (generic Go runtime via container/Lambda is supported).
+- vitePreprocess / arbitrary preprocessor pipeline in codegen.
+- JSDoc-driven type discovery (we use Go types).
+- Deep dynamic-import code splitting beyond per-route.
+- Runtime template interpretation.
 - View Transitions API.
-- Multi-tenant / RBAC primitives in `kit`.
+- Built-in i18n primitives.
+- Built-in form-validation library.
+
+Re-evaluated yearly via superseding RFC.
