@@ -81,7 +81,8 @@ Benchmark suite vs adapter-bun with nightly regression gate. Docs site (Vitepres
 - [x] Foundation issues filed (#95–105): monorepo layout, conventions, stability, lint, hooks, release-please, CI, PR template, AI sync, golden tests, bench gate
 - [x] Land foundation RFCs (#95–97) and setup tasks (#98–103) — landed Phase 0a 2026-04-29
 - [x] Land golden harness + bench gate (#104, #105) — landed Phase 0b 2026-04-29
-- [ ] Land technical RFCs (#1–4, #94): parser strategy, expression syntax, file convention, codegen output layout, non-goals
+- [x] Lock RFC #94 (non-goals) — ADR 0005, landed Phase 0c 2026-04-29
+- [x] Lock RFCs #1–4 (parser, expression, file convention, codegen) — ADRs 0001–0004, locked 52f96da
 - [ ] Bootstrap Go module + CLI skeleton (#5, #6)
 - [ ] Build the MVP pipeline end-to-end (#7–23, #76, #77, #83)
 - [ ] Smoke-test on hello-world example (#23)
