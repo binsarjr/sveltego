@@ -80,7 +80,8 @@ Benchmark suite vs adapter-bun with nightly regression gate. Docs site (Vitepres
 - [x] SvelteKit-parity gap audit + 19 issues filed with priorities (#76–94)
 - [x] Foundation issues filed (#95–105): monorepo layout, conventions, stability, lint, hooks, release-please, CI, PR template, AI sync, golden tests, bench gate
 - [x] Land foundation RFCs (#95–97) and setup tasks (#98–103) — landed Phase 0a 2026-04-29
-- [ ] Land technical RFCs (#1–4, #94, #104, #105): parser strategy, expression syntax, file convention, codegen output layout, non-goals, golden testing, bench gate
+- [x] Land golden harness + bench gate (#104, #105) — landed Phase 0b 2026-04-29
+- [ ] Land technical RFCs (#1–4, #94): parser strategy, expression syntax, file convention, codegen output layout, non-goals
 - [ ] Bootstrap Go module + CLI skeleton (#5, #6)
 - [ ] Build the MVP pipeline end-to-end (#7–23, #76, #77, #83)
 - [ ] Smoke-test on hello-world example (#23)
