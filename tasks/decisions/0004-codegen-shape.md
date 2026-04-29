@@ -20,6 +20,7 @@
 - **`<script lang="go">` content (Q8):** **hoist to package-level.** User imports become package imports of the generated file. User funcs become package-level funcs in the same package as `Page`. Visibility default unexported; user can export with PascalCase. Mirrors Svelte upstream where `<script>` is module scope.
 - **Snippet method naming (Q9):** **lowercase + `snippet_` prefix on Page receiver.** `{#snippet item(post)}...{/snippet}` becomes `func (p Page) snippet_item(w *render.Writer, ctx *kit.RenderCtx, post Post) error`. Lowercase signals internal-only (Go visibility); prefix avoids future clash with Page methods that the framework may add.
 - **`{@html ...}`:** emits `w.WriteRaw(...)` instead of `w.WriteEscape(...)`. CONTRIBUTING.md documents the XSS risk and recommends `bluemonday` for user-supplied HTML.
+- **PageData inference (struct-literal-only):** Codegen reads sibling `+page.server.go`, locates `Load()`, and if the first return expression is a composite struct literal extracts its fields into `type PageData struct{...}`. Named-type returns and missing files fall back to `type PageData struct{}`. Explicit `type PageData struct{...}` declarations in `+page.server.go` are out of scope until a future RFC. Tracked in `internal/codegen/pagedata.go`.
 
 ## Generated shape
 
@@ -68,14 +69,31 @@ func (p Page) snippet_item(w *render.Writer, ctx *kit.RenderCtx, c Comment) erro
 ```go
 package render
 
-type Writer struct { /* internal buffer + sync.Pool friendly */ }
+type Writer struct { /* unexported buffer; sync.Pool friendly */ }
+
+func New() *Writer
+func Acquire() *Writer
+func Release(w *Writer)
 
 func (w *Writer) WriteString(s string)         // raw, pre-trusted (literals from template)
-func (w *Writer) WriteEscape(s string)         // HTML-escapes special chars
 func (w *Writer) WriteRaw(s string)            // {@html ...} explicit unsafe
-func (w *Writer) WriteJSON(v any) error        // for hydration payload
-func (w *Writer) WriteAttr(name, val string)   // attribute, properly quoted
+func (w *Writer) WriteEscape(v any)            // text-context HTML escape
+func (w *Writer) WriteEscapeAttr(v any)        // attribute-context HTML escape
+func (w *Writer) WriteJSON(v any) error        // hydration payload
+func (w *Writer) Bytes() []byte
+func (w *Writer) Len() int
+func (w *Writer) Reset()
 ```
+
+`WriteAttr(name, val string)` was reserved in the original draft but rejected during Phase 0f: attribute serialization is composed inline in codegen as
+
+```go
+w.WriteString(` name="`)
+w.WriteEscapeAttr(val)
+w.WriteString(`"`)
+```
+
+The composition pattern keeps the runtime surface narrow and lets codegen handle quoting context (boolean attrs, class directives, style directives) without needing a per-shape helper.
 
 ## `kit.RenderCtx`
 
@@ -134,3 +152,7 @@ User code stays in user space, generated wire glue is replaced atomically on reb
 
 - SvelteKit page server: https://svelte.dev/docs/kit/page-options
 - `text/template` Render shape (precedent): https://pkg.go.dev/text/template
+
+### Amendments
+
+- **2026-04-29 (Phase 0f wrap):** Render writer surface locked to as-shipped methods. `WriteAttr` rejected. PageData inference rule pinned to struct-literal-only.
