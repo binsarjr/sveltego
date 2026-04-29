@@ -118,7 +118,11 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         shell: bash
         run: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b "$(go env GOPATH)/bin" v1.62.2
+          set -euxo pipefail
+          mkdir -p "$(go env GOPATH)/bin"
+          curl -sSfL -o /tmp/golangci-install.sh https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh
+          sh /tmp/golangci-install.sh -b "$(go env GOPATH)/bin" v1.62.2
+          "$(go env GOPATH)/bin/golangci-lint" --version
 
       - name: golangci-lint (per module, ubuntu only)
         if: matrix.os == 'ubuntu-latest'
