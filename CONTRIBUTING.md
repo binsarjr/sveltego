@@ -232,6 +232,18 @@ Prefer `kit.App`, `router.Mux`, `codegen.Emitter`.
   or the `testing/synctest` package.
 - Race detector required: `go test -race ./...` runs in CI (RFC #101).
 
+### Testing patterns
+
+- **Golden tests** for deterministic output (codegen, transformers, manifest
+  serialization): see
+  [documentation/docs/contributing/golden-tests.md](documentation/docs/contributing/golden-tests.md).
+  Helper: `github.com/binsarjr/sveltego/test-utils/golden`. Update flow runs
+  the suite with `-args -update`, then humans review the diff before commit.
+- **Bench regression gate** runs on every PR touching Go. Threshold rules,
+  override format (`bench-regression:` in PR body), and local repro commands
+  live in
+  [documentation/docs/contributing/bench-gate.md](documentation/docs/contributing/bench-gate.md).
+
 ## 11. Forbidden
 
 - `init()` functions outside `package main` and well-justified plugin

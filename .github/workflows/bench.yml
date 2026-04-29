@@ -1,0 +1,74 @@
+name: bench
+
+on:
+  pull_request:
+    paths:
+      - '**.go'
+      - 'benchmarks/**'
+      - '.github/workflows/bench.yml'
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: bench-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bench:
+    name: bench
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Install benchstat and bench-compare
+        run: |
+          go install golang.org/x/perf/cmd/benchstat@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          (cd benchmarks/cmd/bench-compare && go install)
+
+      - name: Bench base (${{ github.base_ref }})
+        # TODO: bump -count=6 once real benchmarks land per #60.
+        run: |
+          git checkout "${{ github.base_ref }}"
+          go test -bench=. -benchmem -count=3 -run=^$ -benchtime=1x ./benchmarks/... \
+            | tee /tmp/base.txt
+
+      - name: Bench head (${{ github.event.pull_request.head.sha }})
+        run: |
+          git checkout "${{ github.event.pull_request.head.sha }}"
+          go test -bench=. -benchmem -count=3 -run=^$ -benchtime=1x ./benchmarks/... \
+            | tee /tmp/head.txt
+
+      - name: Run bench-compare gate
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          ALLOW=
+          if printf '%s\n' "$PR_BODY" | grep -q "^bench-regression:"; then
+            ALLOW=-allow-regression
+          fi
+          set +e
+          bench-compare $ALLOW -base /tmp/base.txt -head /tmp/head.txt | tee /tmp/bench.txt
+          echo $? > /tmp/bench.exit
+          set -e
+
+      - name: Post sticky comment
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: bench
+          path: /tmp/bench.txt
+
+      - name: Enforce gate
+        run: exit "$(cat /tmp/bench.exit)"
