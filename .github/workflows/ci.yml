@@ -114,11 +114,58 @@ jobs:
             exit 1
           fi
 
-      - name: golangci-lint
+      - name: Install golangci-lint
         if: matrix.os == 'ubuntu-latest'
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: v1.62.2
+        shell: bash
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b "$(go env GOPATH)/bin" v1.62.2
+
+      - name: golangci-lint (per module, ubuntu only)
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        env:
+          SHARED: ${{ needs.changes.outputs.shared }}
+          SVELTEGO: ${{ needs.changes.outputs.sveltego }}
+          ADAPTER_AUTO: ${{ needs.changes.outputs.adapter-auto }}
+          ADAPTER_CLOUDFLARE: ${{ needs.changes.outputs.adapter-cloudflare }}
+          ADAPTER_DOCKER: ${{ needs.changes.outputs.adapter-docker }}
+          ADAPTER_LAMBDA: ${{ needs.changes.outputs.adapter-lambda }}
+          ADAPTER_SERVER: ${{ needs.changes.outputs.adapter-server }}
+          ADAPTER_STATIC: ${{ needs.changes.outputs.adapter-static }}
+          ENHANCED_IMG: ${{ needs.changes.outputs.enhanced-img }}
+          CREATE_SVELTEGO: ${{ needs.changes.outputs.create-sveltego }}
+          MCP: ${{ needs.changes.outputs.mcp }}
+          LSP: ${{ needs.changes.outputs.lsp }}
+          PLAYGROUND: ${{ needs.changes.outputs.playground }}
+          BENCHMARKS: ${{ needs.changes.outputs.benchmarks }}
+          TEST_UTILS: ${{ needs.changes.outputs.test-utils }}
+        run: |
+          set -euo pipefail
+          PATH="$(go env GOPATH)/bin:$PATH"
+          dirs=$(go list -m -f '{{.Dir}}')
+          for d in $dirs; do
+            if [[ "$SHARED" != "true" ]]; then
+              case "$d" in
+                */packages/sveltego)             [[ "$SVELTEGO" == "true" ]]            || continue ;;
+                */packages/adapter-auto)         [[ "$ADAPTER_AUTO" == "true" ]]        || continue ;;
+                */packages/adapter-cloudflare)   [[ "$ADAPTER_CLOUDFLARE" == "true" ]]  || continue ;;
+                */packages/adapter-docker)       [[ "$ADAPTER_DOCKER" == "true" ]]      || continue ;;
+                */packages/adapter-lambda)       [[ "$ADAPTER_LAMBDA" == "true" ]]      || continue ;;
+                */packages/adapter-server)       [[ "$ADAPTER_SERVER" == "true" ]]      || continue ;;
+                */packages/adapter-static)       [[ "$ADAPTER_STATIC" == "true" ]]      || continue ;;
+                */packages/enhanced-img)         [[ "$ENHANCED_IMG" == "true" ]]        || continue ;;
+                */packages/create-sveltego)      [[ "$CREATE_SVELTEGO" == "true" ]]     || continue ;;
+                */packages/mcp)                  [[ "$MCP" == "true" ]]                 || continue ;;
+                */packages/lsp)                  [[ "$LSP" == "true" ]]                 || continue ;;
+                */playgrounds/basic)             [[ "$PLAYGROUND" == "true" ]]          || continue ;;
+                */benchmarks)                    [[ "$BENCHMARKS" == "true" ]]          || continue ;;
+                */test-utils)                    [[ "$TEST_UTILS" == "true" ]]          || continue ;;
+              esac
+            fi
+            echo "::group::golangci-lint $d"
+            (cd "$d" && golangci-lint run --config "$GITHUB_WORKSPACE/.golangci.yml" ./...)
+            echo "::endgroup::"
+          done
 
       - name: go vet (changed modules)
         shell: bash
