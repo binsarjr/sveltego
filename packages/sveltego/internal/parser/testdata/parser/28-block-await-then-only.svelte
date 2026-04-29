@@ -1,0 +1,1 @@
+{#await Promise}wait{:then v}done{/await}

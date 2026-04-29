@@ -1,0 +1,6 @@
+TagOpen@1:1 len=1 value=<
+Identifier@1:2 len=5 value=input
+AttrName@1:8 len=8 value=disabled
+AttrName@1:17 len=8 value=required
+TagClose@1:25 len=1 value=>
+EOF@1:26 len=0 value=

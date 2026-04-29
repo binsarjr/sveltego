@@ -1,0 +1,1 @@
+{#each Items as item, i (item.ID)}{i}: {item.Name}{/each}

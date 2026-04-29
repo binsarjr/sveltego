@@ -1,0 +1,8 @@
+TagOpen@1:1 len=1 value=<
+Identifier@1:2 len=1 value=p
+TagClose@1:3 len=1 value=>
+Text@1:4 len=5 value=hello
+TagOpenClose@1:9 len=2 value=</
+Identifier@1:11 len=1 value=p
+TagClose@1:12 len=1 value=>
+EOF@1:13 len=0 value=

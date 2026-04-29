@@ -1,0 +1,1 @@
+<p>You have {len(Data.Posts)} posts.</p>

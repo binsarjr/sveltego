@@ -1,0 +1,1 @@
+{#await Promise}loading{:then v}{v}{:catch e}{e}{/await}

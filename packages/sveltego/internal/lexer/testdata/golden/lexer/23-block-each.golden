@@ -1,0 +1,6 @@
+BlockOpen@1:1 len=23 value=#each Data.Posts as p
+MustacheOpen@1:24 len=1 value={
+Text@1:25 len=7 value=p.Title
+MustacheClose@1:32 len=1 value=}
+BlockClose@1:33 len=7 value=/each
+EOF@1:40 len=0 value=

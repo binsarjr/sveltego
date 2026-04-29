@@ -1,0 +1,17 @@
+TagOpen@1:1 len=1 value=<
+Identifier@1:2 len=1 value=a
+AttrName@1:4 len=4 value=href
+AttrEquals@1:8 len=1 value==
+AttrValue@1:9 len=3 value=x
+AttrName@1:13 len=6 value=target
+AttrEquals@1:19 len=1 value==
+AttrValue@1:20 len=8 value=_blank
+AttrName@1:29 len=3 value=rel
+AttrEquals@1:32 len=1 value==
+AttrValue@1:33 len=10 value=noopener
+TagClose@1:43 len=1 value=>
+Text@1:44 len=1 value=y
+TagOpenClose@1:45 len=2 value=</
+Identifier@1:47 len=1 value=a
+TagClose@1:48 len=1 value=>
+EOF@1:49 len=0 value=

@@ -1,0 +1,1 @@
+{#if Data.Ok}yes{/if}

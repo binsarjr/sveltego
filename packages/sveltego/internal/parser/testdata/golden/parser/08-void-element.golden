@@ -1,0 +1,5 @@
+Fragment @1:1
+  Element "input" @1:1
+    Attribute @1:8 name="type" kind=Static static="text"
+  Element "div" @1:20
+    Text @1:25 "after"

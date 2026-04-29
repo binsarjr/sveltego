@@ -1,0 +1,5 @@
+Fragment @1:1
+  Element "div" @1:1
+
+--errors--
+1:8: mismatched closing tag `</span>` for `<div>`

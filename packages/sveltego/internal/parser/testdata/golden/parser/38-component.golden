@@ -1,0 +1,3 @@
+Fragment @1:1
+  Component "Button" self-closing @1:1
+    Attribute @1:9 name="label" kind=Static static="Save"

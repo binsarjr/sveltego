@@ -1,0 +1,6 @@
+BlockOpen@1:1 len=7 value=#if A
+Text@1:8 len=1 value=a
+BlockMid@1:9 len=7 value=:else
+Text@1:16 len=1 value=b
+BlockClose@1:17 len=5 value=/if
+EOF@1:22 len=0 value=

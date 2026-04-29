@@ -1,0 +1,1 @@
+{#each Data.Posts as p}{p.Title}{/each}

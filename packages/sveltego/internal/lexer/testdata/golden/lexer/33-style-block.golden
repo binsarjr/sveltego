@@ -1,0 +1,4 @@
+StyleOpen@1:1 len=7 value=<style>
+StyleBody@1:8 len=21 value=a > b { color: red; }
+StyleClose@1:29 len=8 value=</style>
+EOF@1:37 len=0 value=

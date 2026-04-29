@@ -17,7 +17,7 @@
 
 ## Locked sub-decisions
 
-- **Error recovery (Q1):** Phase 1 ships panic+recover — abort on first error, return single `*ParseError`. Phase 2 (post-MVP) upgrades to synchronization points returning `[]*ParseError`. Filed as a follow-up task once base parser is stable.
+- **Error recovery (Q1):** ~~Phase 1 ships panic+recover — abort on first error, return single `*ParseError`. Phase 2 (post-MVP) upgrades to synchronization points returning `[]*ParseError`.~~ **Superseded 2026-04-29 (Phase 0e).** Public API is `func Parse(src []byte) (*ast.Fragment, ast.Errors)` from day one. Internal control flow uses panic+recover for unwinding inside recursive descent; recovery sync points (next `<` or `{` opener) catch the bailout, append a `ParseError` to the slice, and continue. Same control-flow primitive as the original sub-decision, but the contract surfaces all errors instead of the first one. Rationale: issue #8 acceptance already required ≥2 errors per multi-mistake input, so the deferred upgrade was already due in MVP. Doing it once costs the same as doing it twice.
 - **Lexer modes:** `ModeText`, `ModeMustache`, `ModeAttribute`, `ModeScript`, `ModeStyle`, `ModeComment`. Mode pushed/popped on opener/closer tokens.
 - **Position tracking:** every AST node carries `Pos token.Pos`. Used by codegen for error attribution and by future LSP for hover/jump.
 - **Lexer alphabet:** target ~20 tokens. Final list locked when lexer lands (issue #7).
@@ -26,7 +26,7 @@
 
 1. `lexer` package emits a token stream from `[]byte` source, mode-aware.
 2. `parser` package consumes the stream, produces `ast.File` rooted at `ast.Element` and `ast.ScriptBlock`.
-3. Error type: `*ParseError{File, Line, Col, Msg, Expected, Got}`. Stringer for one-line and multi-line forms.
+3. Error type: `ast.ParseError{Pos, Message, Hint}` collected into `ast.Errors` (named `[]ParseError`). Stringer for one-line; `Errors.Error()` aggregates one-per-line.
 
 ## References
 

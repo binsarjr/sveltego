@@ -1,0 +1,12 @@
+BlockOpen@1:1 len=16 value=#await Promise
+Text@1:17 len=7 value=loading
+BlockMid@1:24 len=9 value=:then v
+MustacheOpen@1:33 len=1 value={
+Text@1:34 len=1 value=v
+MustacheClose@1:35 len=1 value=}
+BlockMid@1:36 len=10 value=:catch e
+MustacheOpen@1:46 len=1 value={
+Text@1:47 len=1 value=e
+MustacheClose@1:48 len=1 value=}
+BlockClose@1:49 len=8 value=/await
+EOF@1:57 len=0 value=

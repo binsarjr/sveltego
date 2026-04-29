@@ -84,7 +84,8 @@ Benchmark suite vs adapter-bun with nightly regression gate. Docs site (Vitepres
 - [x] Lock RFC #94 (non-goals) — ADR 0005, landed Phase 0c 2026-04-29
 - [x] Lock RFCs #1–4 (parser, expression, file convention, codegen) — ADRs 0001–0004, locked 52f96da
 - [x] Bootstrap cobra CLI (#5, #6) — landed Phase 0d 2026-04-29 (e9f7263)
-- [ ] Build the MVP pipeline end-to-end (#7–23, #76, #77, #83)
+- [x] Land parser foundation (#7 lexer + #8 AST/parser) — landed Phase 0e 2026-04-29; split layout `internal/lexer/`, `internal/ast/`, `internal/parser/`; multi-error model supersedes ADR 0001 sub-decision Q1
+- [ ] Build the rest of the MVP pipeline end-to-end (#9–23, #76, #77, #83)
 - [ ] Smoke-test on hello-world example (#23)
 
 ## Open questions

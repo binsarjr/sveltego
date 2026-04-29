@@ -1,0 +1,6 @@
+Fragment @1:1
+  Element "div" @1:1
+    Text @1:6 "x"
+
+--errors--
+1:13: unexpected `{/if}`

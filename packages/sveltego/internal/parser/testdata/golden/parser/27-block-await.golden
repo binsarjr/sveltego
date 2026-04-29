@@ -1,0 +1,8 @@
+Fragment @1:1
+  AwaitBlock @1:1 expr="Promise"
+    pending
+      Text @1:17 "loading"
+    then var="v"
+      Mustache @1:33 expr="v"
+    catch var="e"
+      Mustache @1:46 expr="e"

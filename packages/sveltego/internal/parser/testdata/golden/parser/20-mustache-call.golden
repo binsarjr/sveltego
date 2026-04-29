@@ -1,0 +1,5 @@
+Fragment @1:1
+  Element "p" @1:1
+    Text @1:4 "You have "
+    Mustache @1:13 expr="len(Data.Posts)"
+    Text @1:30 " posts."

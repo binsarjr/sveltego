@@ -1,0 +1,4 @@
+Fragment @1:1
+  SnippetBlock @1:1 name="card" params="p Post"
+    Element "div" @1:24
+      Mustache @1:29 expr="p.Name"

@@ -1,0 +1,4 @@
+Fragment @1:1
+  EachBlock @1:1 iter="Data.Posts" item="p" index="" key=""
+    body
+      Mustache @1:24 expr="p.Title"

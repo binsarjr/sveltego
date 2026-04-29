@@ -1,0 +1,4 @@
+Fragment @1:1
+  Element "svelte:head" @1:1
+    Element "title" @1:14
+      Text @1:21 "x"

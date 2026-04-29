@@ -1,0 +1,4 @@
+MustacheOpen@1:1 len=1 value={
+Text@1:2 len=24 value=Data.User.Posts[0].Title
+MustacheClose@1:26 len=1 value=}
+EOF@1:27 len=0 value=

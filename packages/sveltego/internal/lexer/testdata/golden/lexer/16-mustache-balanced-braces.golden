@@ -1,0 +1,4 @@
+MustacheOpen@1:1 len=1 value={
+Text@1:2 len=13 value=f(struct{}{})
+MustacheClose@1:15 len=1 value=}
+EOF@1:16 len=0 value=

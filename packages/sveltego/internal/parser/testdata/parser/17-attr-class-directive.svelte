@@ -1,0 +1,1 @@
+<div class:active={Ok}>x</div>

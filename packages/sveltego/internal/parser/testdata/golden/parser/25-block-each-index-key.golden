@@ -1,0 +1,6 @@
+Fragment @1:1
+  EachBlock @1:1 iter="Items" item="item" index="i" key="item.ID"
+    body
+      Mustache @1:35 expr="i"
+      Text @1:38 ": "
+      Mustache @1:40 expr="item.Name"

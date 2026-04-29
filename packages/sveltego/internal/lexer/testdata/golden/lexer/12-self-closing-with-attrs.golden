@@ -1,0 +1,10 @@
+TagOpen@1:1 len=1 value=<
+Identifier@1:2 len=3 value=img
+AttrName@1:6 len=3 value=src
+AttrEquals@1:9 len=1 value==
+AttrValue@1:10 len=7 value=x.png
+AttrName@1:18 len=3 value=alt
+AttrEquals@1:21 len=1 value==
+AttrValue@1:22 len=4 value=hi
+TagSelfClose@1:27 len=2 value=/>
+EOF@1:29 len=0 value=

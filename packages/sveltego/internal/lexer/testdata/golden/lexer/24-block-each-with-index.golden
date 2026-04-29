@@ -1,0 +1,10 @@
+BlockOpen@1:1 len=24 value=#each Items as item, i
+MustacheOpen@1:25 len=1 value={
+Text@1:26 len=1 value=i
+MustacheClose@1:27 len=1 value=}
+Text@1:28 len=2 value=: 
+MustacheOpen@1:30 len=1 value={
+Text@1:31 len=4 value=item
+MustacheClose@1:35 len=1 value=}
+BlockClose@1:36 len=7 value=/each
+EOF@1:43 len=0 value=

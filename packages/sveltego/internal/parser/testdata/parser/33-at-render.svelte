@@ -1,0 +1,1 @@
+{@render card(Data.Item)}

@@ -1,0 +1,4 @@
+Fragment @1:1
+  Element "button" @1:1
+    Attribute @1:9 name="disabled" kind=Static boolean
+    Text @1:18 "ok"

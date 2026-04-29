@@ -1,0 +1,13 @@
+TagOpen@1:1 len=1 value=<
+Identifier@1:2 len=3 value=div
+AttrName@1:6 len=5 value=class
+AttrEquals@1:11 len=1 value==
+MustacheOpen@1:12 len=1 value={
+Text@1:13 len=10 value=Data.Class
+MustacheClose@1:23 len=1 value=}
+TagClose@1:24 len=1 value=>
+Text@1:25 len=1 value=x
+TagOpenClose@1:26 len=2 value=</
+Identifier@1:28 len=3 value=div
+TagClose@1:31 len=1 value=>
+EOF@1:32 len=0 value=

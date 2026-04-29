@@ -1,0 +1,6 @@
+Fragment @1:1
+  Element "br" self-closing @1:1
+  Text @1:7 "\n"
+  Element "img" self-closing @2:1
+    Attribute @2:6 name="src" kind=Static static="x.png"
+    Attribute @2:18 name="alt" kind=Static static="x"

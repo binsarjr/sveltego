@@ -1,0 +1,4 @@
+Fragment @1:1
+  Element "button" @1:1
+    Attribute @1:9 name="on:click" kind=EventHandler modifier="click" dynamic="Handle"
+    Text @1:27 "go"

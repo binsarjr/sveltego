@@ -1,0 +1,4 @@
+Fragment @1:1
+  Element "div" @1:1
+    Attribute @1:6 name="class" kind=Static dynamic="Data.Class"
+    Text @1:25 "x"

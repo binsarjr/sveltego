@@ -1,0 +1,4 @@
+Fragment @1:1
+  Element "div" @1:1
+    Attribute @1:6 name="class:active" kind=ClassDirective modifier="active" dynamic="Ok"
+    Text @1:24 "x"

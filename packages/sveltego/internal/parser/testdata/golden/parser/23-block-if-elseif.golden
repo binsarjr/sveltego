@@ -1,0 +1,8 @@
+Fragment @1:1
+  IfBlock @1:1 cond="A"
+    then
+      Text @1:8 "a"
+    ElifBranch @1:9 cond="B"
+      Text @1:21 "b"
+    else
+      Text @1:29 "c"

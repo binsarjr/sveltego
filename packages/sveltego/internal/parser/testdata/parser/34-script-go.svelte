@@ -1,0 +1,1 @@
+<script lang="go">var X = 1</script>

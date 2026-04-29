@@ -1,0 +1,14 @@
+TagOpen@1:1 len=1 value=<
+Identifier@1:2 len=11 value=svelte:head
+TagClose@1:13 len=1 value=>
+TagOpen@1:14 len=1 value=<
+Identifier@1:15 len=5 value=title
+TagClose@1:20 len=1 value=>
+Text@1:21 len=1 value=x
+TagOpenClose@1:22 len=2 value=</
+Identifier@1:24 len=5 value=title
+TagClose@1:29 len=1 value=>
+TagOpenClose@1:30 len=2 value=</
+Identifier@1:32 len=11 value=svelte:head
+TagClose@1:43 len=1 value=>
+EOF@1:44 len=0 value=

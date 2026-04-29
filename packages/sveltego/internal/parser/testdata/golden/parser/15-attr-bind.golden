@@ -1,0 +1,3 @@
+Fragment @1:1
+  Element "input" @1:1
+    Attribute @1:8 name="bind:value" kind=Bind modifier="value" dynamic="Name"

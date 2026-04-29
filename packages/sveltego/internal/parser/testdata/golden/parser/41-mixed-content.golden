@@ -1,0 +1,9 @@
+Fragment @1:1
+  Element "h1" @1:1
+    Text @1:5 "Hello "
+    Mustache @1:11 expr="Data.User.Name"
+  Text @1:32 "\n"
+  Element "p" @2:1
+    Text @2:4 "You have "
+    Mustache @2:13 expr="len(Data.Posts)"
+    Text @2:30 " posts."

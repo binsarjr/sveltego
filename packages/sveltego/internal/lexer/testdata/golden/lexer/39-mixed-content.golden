@@ -1,0 +1,23 @@
+TagOpen@1:1 len=1 value=<
+Identifier@1:2 len=2 value=h1
+TagClose@1:4 len=1 value=>
+Text@1:5 len=6 value=Hello 
+MustacheOpen@1:11 len=1 value={
+Text@1:12 len=14 value=Data.User.Name
+MustacheClose@1:26 len=1 value=}
+TagOpenClose@1:27 len=2 value=</
+Identifier@1:29 len=2 value=h1
+TagClose@1:31 len=1 value=>
+Text@1:32 len=1 value=\n
+TagOpen@2:1 len=1 value=<
+Identifier@2:2 len=1 value=p
+TagClose@2:3 len=1 value=>
+Text@2:4 len=9 value=You have 
+MustacheOpen@2:13 len=1 value={
+Text@2:14 len=15 value=len(Data.Posts)
+MustacheClose@2:29 len=1 value=}
+Text@2:30 len=7 value= posts.
+TagOpenClose@2:37 len=2 value=</
+Identifier@2:39 len=1 value=p
+TagClose@2:40 len=1 value=>
+EOF@2:41 len=0 value=

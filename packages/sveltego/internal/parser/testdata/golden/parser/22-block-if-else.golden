@@ -1,0 +1,6 @@
+Fragment @1:1
+  IfBlock @1:1 cond="A"
+    then
+      Text @1:8 "a"
+    else
+      Text @1:16 "b"

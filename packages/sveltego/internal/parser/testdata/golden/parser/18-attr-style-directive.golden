@@ -1,0 +1,4 @@
+Fragment @1:1
+  Element "div" @1:1
+    Attribute @1:6 name="style:color" kind=StyleDirective modifier="color" static="red"
+    Text @1:24 "x"

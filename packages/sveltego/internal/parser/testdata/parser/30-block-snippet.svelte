@@ -1,0 +1,1 @@
+{#snippet card(p Post)}<div>{p.Name}</div>{/snippet}

@@ -1,0 +1,7 @@
+TagOpen@1:1 len=1 value=<
+Identifier@1:2 len=5 value=input
+AttrName@1:8 len=4 value=type
+AttrEquals@1:12 len=1 value==
+AttrValue@1:13 len=4 value=text
+TagClose@1:17 len=1 value=>
+EOF@1:18 len=0 value=

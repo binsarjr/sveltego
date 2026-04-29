@@ -1,0 +1,2 @@
+Fragment @1:1
+  Style @1:1 body="a > b { color: red; }"

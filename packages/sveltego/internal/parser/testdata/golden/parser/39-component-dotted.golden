@@ -1,0 +1,4 @@
+Fragment @1:1
+  Component "Form.Field" @1:1
+    Attribute @1:13 name="name" kind=Static static="email"
+    Text @1:26 "x"

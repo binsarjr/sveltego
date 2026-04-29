@@ -1,0 +1,21 @@
+Fragment @1:1
+  IfBlock @1:1 cond="Data.HasItems"
+    then
+      Text @1:20 "\n  "
+      Element "ul" @2:3
+        Text @2:7 "\n    "
+        EachBlock @3:5 iter="Data.Items" item="item" index="i" key=""
+          body
+            Text @3:34 "\n      "
+            Element "li" @4:7
+              Mustache @4:11 expr="i"
+              Text @4:14 ": "
+              Mustache @4:16 expr="item.Name"
+            Text @4:32 "\n    "
+        Text @5:12 "\n  "
+      Text @6:8 "\n"
+    else
+      Text @7:8 "\n  "
+      Element "p" @8:3
+        Text @8:6 "none"
+      Text @8:14 "\n"

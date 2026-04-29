@@ -1,0 +1,6 @@
+Fragment @1:1
+  AwaitBlock @1:1 expr="Promise"
+    pending
+      Text @1:17 "wait"
+    then var="v"
+      Text @1:30 "done"

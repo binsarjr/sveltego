@@ -1,0 +1,11 @@
+TagOpen@1:1 len=1 value=<
+Identifier@1:2 len=1 value=a
+AttrName@1:4 len=4 value=href
+AttrEquals@1:8 len=1 value==
+AttrValue@1:9 len=21 value=https://example.com
+TagClose@1:30 len=1 value=>
+Text@1:31 len=4 value=link
+TagOpenClose@1:35 len=2 value=</
+Identifier@1:37 len=1 value=a
+TagClose@1:38 len=1 value=>
+EOF@1:39 len=0 value=

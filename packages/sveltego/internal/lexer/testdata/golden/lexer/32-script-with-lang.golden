@@ -1,0 +1,4 @@
+ScriptOpen@1:1 len=18 value=<script lang="ts">
+ScriptBody@1:19 len=23 value=type X = { a: number };
+ScriptClose@1:42 len=9 value=</script>
+EOF@1:51 len=0 value=

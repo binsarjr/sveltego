@@ -1,0 +1,1 @@
+<script lang="ts">type X = { a: number };</script>

@@ -1,0 +1,1 @@
+<div class={Data.Class}>x</div>

@@ -1,0 +1,4 @@
+ScriptOpen@1:1 len=8 value=<script>
+ScriptBody@1:9 len=23 value=let x = a < b && b > c;
+ScriptClose@1:32 len=9 value=</script>
+EOF@1:41 len=0 value=

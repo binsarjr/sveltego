@@ -1,0 +1,1 @@
+{strings.Contains(s, "}")}

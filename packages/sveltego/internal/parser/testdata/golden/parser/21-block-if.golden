@@ -1,0 +1,4 @@
+Fragment @1:1
+  IfBlock @1:1 cond="Data.Ok"
+    then
+      Text @1:14 "yes"

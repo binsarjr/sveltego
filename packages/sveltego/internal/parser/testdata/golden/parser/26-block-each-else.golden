@@ -1,0 +1,6 @@
+Fragment @1:1
+  EachBlock @1:1 iter="Items" item="item" index="" key=""
+    body
+      Mustache @1:22 expr="item"
+    else
+      Text @1:35 "empty"

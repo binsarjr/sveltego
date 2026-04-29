@@ -184,3 +184,24 @@
 4. **When LSP and shell disagree, trust the shell.** Re-run `go build` / `go vet` / `go test` from a fresh shell session if diagnostics report imports the disk obviously has. Don't immediately edit code to "fix" a stale-cache symptom.
 5. **release-please needs repo settings + workflow permissions.** Either Settings UI or `permissions:` block in the workflow. Document both; pick one per project. Without it, every push to main fails the release-please job silently — easy to miss when CI proper is green.
 
+## 2026-04-29 — Phase 0e landed (parser foundation)
+
+### Insight
+
+- **Issue specs lock package paths the user may override.** Issues #7 and #8 both said `internal/parser/` for token/lexer/AST/parser. User's locked layout decision was three-package split (`internal/lexer/`, `internal/ast/`, `internal/parser/`). The agents need an explicit "override the issue" instruction in the brief — agents will otherwise default to the issue body and produce a single fat package.
+- **Field/method name collisions when a struct field shares a getter name.** Issue #8 design showed both `Pos Position` field and `Pos() Position` method on every node. That collides in Go. Phase 0e-B agent renamed the field to `P` and kept `Pos()` as the accessor. Mechanical resolution but it ripples — every parser construction site uses `&ast.Mustache{P: ast.Pos{...}}` not `&ast.Mustache{Pos: ast.Pos{...}}`. Brief downstream agents about it explicitly; they will otherwise transcribe the issue spec verbatim and fail to compile.
+- **ADR sub-decisions can defer too aggressively.** ADR 0001 deferred multi-error model to "post-MVP Phase 2". Issue #8 acceptance criteria required ≥2 errors per multi-mistake input — i.e., the deferred work was already MVP-blocking. Reading the dependent issue's acceptance list before sealing the ADR would have caught it. Caught at Phase 0e launch instead.
+- **LSP DuplicateDecl false positives after agent file splits.** When an agent moves helper functions from `parser.go` into a new `helpers.go`, gopls reports DuplicateDecl on both files for ~30s while re-indexing. Independent `go build` + `go test` from shell shows clean. Same class as the cobra `BrokenImport` lag from Phase 0d. Reinforces the "trust shell over LSP" rule.
+- **Multi-error parser test as forcing function.** A single fixture with two distinct mistakes is the only way to prove recovery actually re-syncs and continues. Without that fixture, a parser that silently aborts on the first error passes every other test. Make the multi-error test a Phase 0e acceptance gate, not a Phase 1 nice-to-have.
+- **`text/dump` over JSON for AST goldens.** JSON serialization of an AST with interface fields can't fully round-trip without custom unmarshalers — the discriminator is lost. Indented text dump (`Element "div" @1:5\n  Attribute "class" static="foo" @1:10`) sidesteps the unmarshal problem and makes diffs readable for human review of `-update` flows. JSON acceptance criterion in issue #8 was an over-spec for the actual goal (deterministic diffable output).
+- **Two parallel agents on touching layers (lexer + ast) work because each defines its own Pos.** Agent A's Token has flat `Offset/Line/Col` fields. Agent B's `ast.Pos` is a struct. Parser bridges by reading lexer fields and constructing `ast.Pos`. No cross-import, no cycle. The cost is field-naming friction at the bridge, not at the package boundary. Worth it for parallelism.
+
+### Self-rules
+
+1. **Always state package-layout overrides explicitly in agent briefs.** "Issue #N puts files at path X; override to path Y, do not file files at X" — verbatim. Otherwise agents follow the issue body and the orchestrator pays a fix-up round.
+2. **Field-vs-method name collisions on AST nodes default to renaming the field, never the method.** Method is the interface contract (`Node.Pos()`); field is internal storage. Brief downstream agents on the field name once; cite the file (`packages/sveltego/internal/ast/nodes.go`) rather than re-declaring the convention each time.
+3. **Read every dependent issue's acceptance criteria before locking an ADR sub-decision.** "Phase 1 / Phase 2" deferrals are valid only if the dependent MVP issues don't already require Phase 2 behavior. Otherwise the deferral is fictional and the ADR misleads.
+4. **Trust shell over LSP** (reinforced from Phase 0d). When LSP reports DuplicateDecl, BrokenImport, or any errors that contradict `go build`, run the shell and move on. Never edit code in response to a diagnostic without a confirming shell signal.
+5. **Multi-error parser tests are mandatory, not optional.** A single fixture with ≥2 distinct mistakes proves recovery sync. Add it to the test plan up front, not as a follow-up.
+6. **AST goldens use indented text dump, not JSON.** JSON loses interface discriminators. Text dumps diff cleanly. Reserve JSON for serialization to the wire, not for in-repo goldens.
+
