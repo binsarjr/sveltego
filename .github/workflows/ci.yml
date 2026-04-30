@@ -65,7 +65,7 @@ jobs:
             create-sveltego: 'packages/create-sveltego/**'
             mcp: 'packages/mcp/**'
             lsp: 'packages/lsp/**'
-            playground: ['playgrounds/basic/**', 'playgrounds/dashboard/**']
+            playground: ['playgrounds/basic/**', 'playgrounds/blog/**', 'playgrounds/dashboard/**']
             benchmarks: 'benchmarks/**'
             test-utils: 'test-utils/**'
             shared:
@@ -681,13 +681,37 @@ jobs:
             exit 1
           fi
 
-  # Push-to-main only: end-to-end check (compile + build + curl) for the
-  # playground binary. PRs skip this — feature PRs that need it can run
-  # locally via `playgrounds/basic/Makefile` (manual gate).
+  # End-to-end check (compile + build + curl) for each playground binary.
+  # Runs on PRs and the merge queue when sveltego core, playgrounds, or
+  # shared infra changes. Asserts SSR HTML, the hydration payload script,
+  # and the __data.json endpoint produced by the hydration triad (#352)
+  # so the minimum-runnable contract stays green across hydration work.
   playground-smoke:
-    name: playground-smoke (basic)
-    if: github.event_name == 'push'
-    needs: lint-and-test-main
+    name: playground-smoke (${{ matrix.playground }})
+    needs: [changes, lint-and-test-pr]
+    if: |
+      (needs.changes.outputs.shared == 'true' ||
+       needs.changes.outputs.sveltego == 'true' ||
+       needs.changes.outputs.playground == 'true')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - playground: basic
+            port: 3000
+            home_match: 'Hello, sveltego!'
+            extra_path: /post/123
+            extra_match: 'Post 123'
+          - playground: blog
+            port: 8080
+            home_match: 'sveltego blog'
+            extra_path: /pagination-and-actions
+            extra_match: 'Pagination and actions'
+          - playground: dashboard
+            port: 3000
+            home_match: 'sveltego dashboard'
+            extra_path: /login
+            extra_match: 'Sign in'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -698,16 +722,18 @@ jobs:
           cache: false
 
       - name: Compile + Build
-        working-directory: playgrounds/basic
+        working-directory: playgrounds/${{ matrix.playground }}
         run: |
           go run github.com/binsarjr/sveltego/cmd/sveltego compile
-          go run github.com/binsarjr/sveltego/cmd/sveltego build --out ./build/app
+          go run github.com/binsarjr/sveltego/cmd/sveltego build --out ./build/app --no-client
 
       - name: Idempotency check
-        working-directory: playgrounds/basic
+        working-directory: playgrounds/${{ matrix.playground }}
         shell: bash
         run: |
           set -euo pipefail
+          rm -rf .gen
+          go run github.com/binsarjr/sveltego/cmd/sveltego compile
           find .gen -type f -exec sha256sum {} + | sort > /tmp/gen-1.sum
           rm -rf .gen
           go run github.com/binsarjr/sveltego/cmd/sveltego compile
@@ -715,17 +741,17 @@ jobs:
           diff /tmp/gen-1.sum /tmp/gen-2.sum
 
       - name: Rebuild binary after re-compile
-        working-directory: playgrounds/basic
-        run: go run github.com/binsarjr/sveltego/cmd/sveltego build --out ./build/app
+        working-directory: playgrounds/${{ matrix.playground }}
+        run: go run github.com/binsarjr/sveltego/cmd/sveltego build --out ./build/app --no-client
 
       - name: Start server
-        working-directory: playgrounds/basic
+        working-directory: playgrounds/${{ matrix.playground }}
         shell: bash
         run: |
           ./build/app &
           echo $! > server.pid
-          for i in 1 2 3 4 5; do
-            if curl -fsS -o /dev/null http://localhost:3000/; then
+          for i in 1 2 3 4 5 6 7 8; do
+            if curl -fsS -o /dev/null "http://localhost:${{ matrix.port }}/"; then
               exit 0
             fi
             sleep 1
@@ -734,15 +760,34 @@ jobs:
           kill "$(cat server.pid)" 2>/dev/null || true
           exit 1
 
-      - name: Curl /
-        run: curl -fsS http://localhost:3000/ | tee /tmp/root.html | grep "Hello, sveltego!"
+      - name: Curl / (SSR + hydration payload)
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS "http://localhost:${{ matrix.port }}/" | tee /tmp/root.html
+          grep -F '${{ matrix.home_match }}' /tmp/root.html
+          grep -F '<script id="sveltego-data" type="application/json">' /tmp/root.html
 
-      - name: Curl /post/123
-        run: curl -fsS http://localhost:3000/post/123 | tee /tmp/post.html | grep "Post 123"
+      - name: Curl ${{ matrix.extra_path }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS "http://localhost:${{ matrix.port }}${{ matrix.extra_path }}" | tee /tmp/extra.html
+          grep -F '${{ matrix.extra_match }}' /tmp/extra.html
+          grep -F '<script id="sveltego-data" type="application/json">' /tmp/extra.html
+
+      - name: Curl /__data.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS -i "http://localhost:${{ matrix.port }}/__data.json" | tee /tmp/data.txt
+          grep -i '^content-type: application/json' /tmp/data.txt
+          grep -i '^x-sveltego-data: 1' /tmp/data.txt
+          grep -F '"routeId":"/"' /tmp/data.txt
 
       - name: Stop server
         if: always()
-        working-directory: playgrounds/basic
+        working-directory: playgrounds/${{ matrix.playground }}
         shell: bash
         run: |
           if [ -f server.pid ]; then kill "$(cat server.pid)" 2>/dev/null || true; fi

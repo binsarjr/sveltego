@@ -24,6 +24,7 @@ func Load(ctx *kit.LoadCtx) (struct {
 		UpdatedAt string
 	}
 	FlashMsg string
+	Form     any
 }, error,
 ) {
 	zero := struct {
@@ -35,6 +36,7 @@ func Load(ctx *kit.LoadCtx) (struct {
 			UpdatedAt string
 		}
 		FlashMsg string
+		Form     any
 	}{}
 
 	u, _ := ctx.Locals["user"].(*store.User)
@@ -60,6 +62,7 @@ func Load(ctx *kit.LoadCtx) (struct {
 			UpdatedAt string
 		}
 		FlashMsg string
+		Form     any
 	}{
 		Username: u.Username,
 		Item: struct {

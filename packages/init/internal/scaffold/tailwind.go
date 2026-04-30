@@ -85,26 +85,24 @@ const (
 	svelteRange           = "^5.0.0"
 )
 
+// tailwindFiles returns the auxiliary files needed for the chosen
+// Tailwind flavor. package.json is emitted by baseFiles in scaffold.go;
+// tailwindFiles only adds Tailwind-specific siblings (app.css,
+// postcss.config.js, tailwind.config.js).
 func tailwindFiles(flavor TailwindFlavor) []file {
-	if flavor == TailwindNone {
-		return nil
-	}
-	out := []file{
-		{path: "package.json", body: []byte(renderPackageJSON(flavor))},
-	}
 	switch flavor {
 	case TailwindV4:
-		out = append(out,
-			file{path: "src/app.css", body: []byte(appCSSv4Body)},
-		)
+		return []file{
+			{path: "src/app.css", body: []byte(appCSSv4Body)},
+		}
 	case TailwindV3:
-		out = append(out,
-			file{path: "src/app.css", body: []byte(appCSSv3Body)},
-			file{path: "postcss.config.js", body: []byte(postcssConfigBody)},
-			file{path: "tailwind.config.js", body: []byte(tailwindConfigBody)},
-		)
+		return []file{
+			{path: "src/app.css", body: []byte(appCSSv3Body)},
+			{path: "postcss.config.js", body: []byte(postcssConfigBody)},
+			{path: "tailwind.config.js", body: []byte(tailwindConfigBody)},
+		}
 	}
-	return out
+	return nil
 }
 
 // renderLayoutSvelte returns the +layout.svelte body. When Tailwind is
@@ -122,7 +120,7 @@ func renderLayoutSvelte(flavor TailwindFlavor) string {
 	return b.String()
 }
 
-// renderPagSvelte returns the +page.svelte body. With Tailwind we ship
+// renderPageSvelte returns the +page.svelte body. With Tailwind we ship
 // a short snippet exercising both a utility class and a scoped style so
 // the smoke test confirms coexistence.
 func renderPageSvelte(flavor TailwindFlavor) string {
@@ -131,7 +129,7 @@ func renderPageSvelte(flavor TailwindFlavor) string {
 	}
 	var b strings.Builder
 	b.WriteString("<script lang=\"go\"></script>\n\n")
-	b.WriteString("<h1 class=\"text-3xl font-bold underline\">{Data.Greeting}</h1>\n")
+	b.WriteString("<h1 class=\"text-3xl font-bold underline\">{data.Greeting}</h1>\n")
 	b.WriteString("<p class=\"note\">Tailwind utilities + scoped &lt;style&gt; coexist.</p>\n\n")
 	b.WriteString("<style>\n")
 	b.WriteString("  .note { color: rgb(82 82 91); }\n")
@@ -139,16 +137,19 @@ func renderPageSvelte(flavor TailwindFlavor) string {
 	return b.String()
 }
 
-func renderPackageJSON(flavor TailwindFlavor) string {
+// renderPackageJSON returns the project's package.json. The Vite +
+// Svelte toolchain is always present because `sveltego build` shells
+// out to Vite for the client bundle. Tailwind dependencies layer in
+// when the user opts into a flavor.
+func renderPackageJSON(module string, flavor TailwindFlavor) string {
 	var b strings.Builder
 	b.WriteString("{\n")
-	b.WriteString("  \"name\": \"sveltego-app\",\n")
+	fmt.Fprintf(&b, "  %q: %q,\n", "name", projectName(module))
+	b.WriteString("  \"version\": \"0.0.1\",\n")
 	b.WriteString("  \"private\": true,\n")
 	b.WriteString("  \"type\": \"module\",\n")
 	b.WriteString("  \"scripts\": {\n")
-	b.WriteString("    \"dev\": \"vite\",\n")
-	b.WriteString("    \"build\": \"sveltego build\",\n")
-	b.WriteString("    \"preview\": \"vite preview\"\n")
+	b.WriteString("    \"build\": \"sveltego build\"\n")
 	b.WriteString("  },\n")
 	b.WriteString("  \"devDependencies\": {\n")
 	fmt.Fprintf(&b, "    %q: %q,\n", "@sveltejs/vite-plugin-svelte", vitePluginSvelteRange)

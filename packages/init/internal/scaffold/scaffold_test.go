@@ -2,10 +2,13 @@ package scaffold
 
 import (
 	"bytes"
+	"go/parser"
+	"go/token"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	aitemplates "github.com/binsarjr/sveltego/templates/ai"
@@ -24,8 +27,12 @@ func TestRun_BaseScaffold(t *testing.T) {
 		"go.mod",
 		"README.md",
 		".gitignore",
+		"app.html",
+		"package.json",
+		"vite.config.js",
 		"sveltego.config.go",
 		"hooks.server.go",
+		"cmd/app/main.go",
 		"src/routes/+page.svelte",
 		"src/routes/page.server.go",
 		"src/routes/+layout.svelte",
@@ -43,6 +50,94 @@ func TestRun_BaseScaffold(t *testing.T) {
 	}
 	if !bytes.Contains(gomod, []byte("module example.com/hello")) {
 		t.Errorf("go.mod missing module line, got: %s", gomod)
+	}
+	if !bytes.Contains(gomod, []byte("go 1.23")) {
+		t.Errorf("go.mod missing go 1.23 directive, got: %s", gomod)
+	}
+}
+
+// TestRun_MainGoCompiles parses cmd/app/main.go to confirm the scaffold
+// emits syntactically valid Go and that the import path for the generated
+// package picks up the user's module path. Full type-check would require
+// the workspace replace + the .gen package to exist, which is the
+// `sveltego build` integration's job; parsing alone catches the common
+// scaffold corruption cases (broken raw strings, stale module slot).
+func TestRun_MainGoCompiles(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := Run(Options{Dir: dir, Module: "example.com/hello"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	mainPath := filepath.Join(dir, "cmd", "app", "main.go")
+	body, err := os.ReadFile(mainPath)
+	if err != nil {
+		t.Fatalf("read main.go: %v", err)
+	}
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, mainPath, body, parser.ImportsOnly)
+	if err != nil {
+		t.Fatalf("parse main.go: %v\nbody:\n%s", err, body)
+	}
+	if f.Name.Name != "main" {
+		t.Errorf("main.go package = %q, want main", f.Name.Name)
+	}
+	wantImports := []string{
+		`"example.com/hello/.gen"`,
+		`"github.com/binsarjr/sveltego/exports/kit/params"`,
+		`"github.com/binsarjr/sveltego/server"`,
+	}
+	got := make(map[string]bool, len(f.Imports))
+	for _, imp := range f.Imports {
+		got[imp.Path.Value] = true
+	}
+	for _, want := range wantImports {
+		if !got[want] {
+			t.Errorf("main.go missing import %s; got %v", want, got)
+		}
+	}
+}
+
+func TestRun_AppHTMLPlaceholders(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := Run(Options{Dir: dir, Module: "example.com/hello"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	body, err := os.ReadFile(filepath.Join(dir, "app.html"))
+	if err != nil {
+		t.Fatalf("read app.html: %v", err)
+	}
+	for _, marker := range []string{"%sveltego.head%", "%sveltego.body%", "<!DOCTYPE html>"} {
+		if !bytes.Contains(body, []byte(marker)) {
+			t.Errorf("app.html missing %q; got:\n%s", marker, body)
+		}
+	}
+}
+
+func TestRun_PackageJSONNameDerivedFromModule(t *testing.T) {
+	cases := []struct {
+		module string
+		want   string
+	}{
+		{"example.com/hello", "hello"},
+		{"github.com/foo/My-App", "my-app"},
+		{"example.com/Bar", "bar"},
+		{"weird!!chars", "weirdchars"},
+		{"example.com/!!!", "sveltego-app"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.module, func(t *testing.T) {
+			dir := t.TempDir()
+			if _, err := Run(Options{Dir: dir, Module: tc.module}); err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			body, err := os.ReadFile(filepath.Join(dir, "package.json"))
+			if err != nil {
+				t.Fatalf("read package.json: %v", err)
+			}
+			needle := `"name": "` + tc.want + `"`
+			if !strings.Contains(string(body), needle) {
+				t.Errorf("package.json missing %q; got:\n%s", needle, body)
+			}
+		})
 	}
 }
 
