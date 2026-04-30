@@ -176,7 +176,7 @@ func TestScanErrorChainNearest(t *testing.T) {
 	if root == nil {
 		t.Fatal("missing / route")
 	}
-	if !strings.HasSuffix(root.ErrorBoundaryDir, "/routes") {
+	if !strings.HasSuffix(filepath.ToSlash(root.ErrorBoundaryDir), "/routes") {
 		t.Fatalf("root boundary dir = %q, want suffix /routes", root.ErrorBoundaryDir)
 	}
 	if root.ErrorBoundaryPackagePath != ".gen/routes" {
@@ -190,7 +190,7 @@ func TestScanErrorChainNearest(t *testing.T) {
 	if admin == nil {
 		t.Fatal("missing /admin route")
 	}
-	if !strings.HasSuffix(admin.ErrorBoundaryDir, "/admin") {
+	if !strings.HasSuffix(filepath.ToSlash(admin.ErrorBoundaryDir), "/admin") {
 		t.Fatalf("admin boundary dir = %q, want suffix /admin", admin.ErrorBoundaryDir)
 	}
 	if admin.ErrorBoundaryLayoutDepth != 2 {
@@ -201,7 +201,7 @@ func TestScanErrorChainNearest(t *testing.T) {
 	if users == nil {
 		t.Fatal("missing /admin/users route")
 	}
-	if !strings.HasSuffix(users.ErrorBoundaryDir, "/admin") {
+	if !strings.HasSuffix(filepath.ToSlash(users.ErrorBoundaryDir), "/admin") {
 		t.Fatalf("users boundary dir = %q, want suffix /admin", users.ErrorBoundaryDir)
 	}
 	if users.ErrorBoundaryLayoutDepth != 2 {
