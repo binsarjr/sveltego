@@ -35,7 +35,7 @@ func TestRedirect_Helper(t *testing.T) {
 	}
 }
 
-func TestError_Helper(t *testing.T) {
+func TestError_WithMessage(t *testing.T) {
 	t.Parallel()
 
 	err := kit.Error(404, "post not found")
@@ -58,6 +58,45 @@ func TestError_Helper(t *testing.T) {
 	}
 	if herr.Error() != "post not found" {
 		t.Errorf("Error() = %q, want post not found", herr.Error())
+	}
+}
+
+func TestError_DefaultMessage(t *testing.T) {
+	t.Parallel()
+
+	err := kit.Error(404)
+	if err == nil {
+		t.Fatal("Error returned nil")
+	}
+
+	var herr *kit.HTTPErr
+	if !errors.As(err, &herr) {
+		t.Fatalf("errors.As(*HTTPErr) failed: %v", err)
+	}
+	if herr.Code != 404 {
+		t.Errorf("Code = %d, want 404", herr.Code)
+	}
+	if herr.Message != "Not Found" {
+		t.Errorf("Message = %q, want \"Not Found\"", herr.Message)
+	}
+	if herr.HTTPStatus() != 404 {
+		t.Errorf("HTTPStatus = %d, want 404", herr.HTTPStatus())
+	}
+	if herr.Error() != "Not Found" {
+		t.Errorf("Error() = %q, want \"Not Found\"", herr.Error())
+	}
+}
+
+func TestError_DefaultMessage_500(t *testing.T) {
+	t.Parallel()
+
+	err := kit.Error(500)
+	var herr *kit.HTTPErr
+	if !errors.As(err, &herr) {
+		t.Fatalf("errors.As(*HTTPErr) failed: %v", err)
+	}
+	if herr.Message != "Internal Server Error" {
+		t.Errorf("Message = %q, want \"Internal Server Error\"", herr.Message)
 	}
 }
 
