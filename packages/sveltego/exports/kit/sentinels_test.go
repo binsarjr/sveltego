@@ -8,6 +8,15 @@ import (
 	"github.com/binsarjr/sveltego/exports/kit"
 )
 
+// wrapErr is a minimal error wrapper used by tests to avoid the fmt import.
+type wrapErr struct {
+	msg string
+	err error
+}
+
+func (w *wrapErr) Error() string { return w.msg + ": " + w.err.Error() }
+func (w *wrapErr) Unwrap() error { return w.err }
+
 func TestRedirect_Helper(t *testing.T) {
 	t.Parallel()
 
@@ -184,5 +193,50 @@ func TestRedirect_WithoutReload_ForceReloadFalse(t *testing.T) {
 	}
 	if redir.ForceReload {
 		t.Error("ForceReload = true, want false for plain Redirect")
+	}
+}
+
+// userNotFoundError is a domain error type that implements kit.HTTPError.
+type userNotFoundError struct {
+	ID string
+}
+
+func (e *userNotFoundError) Error() string  { return "not found: " + e.ID }
+func (e *userNotFoundError) Status() int    { return 404 }
+func (e *userNotFoundError) Public() string { return "The requested item does not exist." }
+
+func TestHTTPError_InterfaceSatisfied(t *testing.T) {
+	t.Parallel()
+
+	var _ kit.HTTPError = (*userNotFoundError)(nil)
+
+	err := &userNotFoundError{ID: "abc"}
+	var he kit.HTTPError
+	if !errors.As(err, &he) {
+		t.Fatal("errors.As(kit.HTTPError) failed")
+	}
+	if he.Status() != 404 {
+		t.Errorf("Status = %d, want 404", he.Status())
+	}
+	if he.Public() != "The requested item does not exist." {
+		t.Errorf("Public = %q, unexpected", he.Public())
+	}
+	if he.Error() != "not found: abc" {
+		t.Errorf("Error() = %q, want 'not found: abc'", he.Error())
+	}
+}
+
+func TestHTTPError_WrappedErrorDetected(t *testing.T) {
+	t.Parallel()
+
+	inner := &userNotFoundError{ID: "xyz"}
+	wrapped := &wrapErr{msg: "load failed", err: inner}
+
+	var he kit.HTTPError
+	if !errors.As(wrapped, &he) {
+		t.Fatal("errors.As through wrapping failed")
+	}
+	if he.Status() != 404 {
+		t.Errorf("Status = %d, want 404 through wrapping", he.Status())
 	}
 }

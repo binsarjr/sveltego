@@ -102,6 +102,16 @@ func (s *Server) handlePipelineError(w http.ResponseWriter, r *http.Request, ev 
 		return
 	}
 
+	// User-defined types implementing kit.HTTPError carry their own status
+	// and safe public message. Convert them before falling through to
+	// HandleError so the error boundary sees the right code.
+	var httpErr kit.HTTPError
+	if errors.As(err, &httpErr) {
+		safe := kit.SafeError{Code: httpErr.Status(), Message: httpErr.Public()}
+		s.respondWithError(w, r, ev, route, safe, err)
+		return
+	}
+
 	safe := s.hooks.HandleError(ev, err)
 
 	// Preserve the legacy httpStatuser observation: when the user did
