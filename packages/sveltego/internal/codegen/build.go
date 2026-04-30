@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/binsarjr/sveltego/internal/images"
 	"github.com/binsarjr/sveltego/internal/parser"
 	"github.com/binsarjr/sveltego/internal/routescan"
 	"github.com/binsarjr/sveltego/internal/vite"
@@ -58,6 +59,10 @@ type BuildOptions struct {
 	Provenance bool
 	// NoClient skips emitting Vite client entry files and vite.config.gen.js.
 	NoClient bool
+	// ImageWidths overrides the default variant widths used by the
+	// build-time image pipeline for <Image> elements. Empty applies the
+	// framework default (320, 640, 1280); see images.DefaultWidths.
+	ImageWidths []int
 }
 
 // BuildResult summarizes one [Build] invocation. Routes counts every
@@ -143,6 +148,11 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 		logger.Warn("routescan diagnostic", logKeyDiagnostic, d.String())
 	}
 
+	imageVariants, err := buildImageVariants(opts.ProjectRoot, opts.ImageWidths)
+	if err != nil {
+		return nil, err
+	}
+
 	libDir := filepath.Join(opts.ProjectRoot, "lib")
 	libRefs := 0
 	routeCount := 0
@@ -176,7 +186,7 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 		}
 		switch {
 		case route.HasPage:
-			refs, hasHead, hasSnapshot, err := emitPage(opts.ProjectRoot, outDir, modulePath, route, opts.Release, opts.EnvLookup, opts.Provenance, start)
+			refs, hasHead, hasSnapshot, err := emitPage(opts.ProjectRoot, outDir, modulePath, route, opts.Release, opts.EnvLookup, opts.Provenance, start, imageVariants)
 			if err != nil {
 				return nil, err
 			}
@@ -224,7 +234,7 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 			if i < len(route.LayoutServerFiles) {
 				serverFile = route.LayoutServerFiles[i]
 			}
-			hasHead, err := emitLayout(opts.ProjectRoot, outDir, layoutDir, pkgPath, pkgName, serverFile, opts.Release, opts.EnvLookup, opts.Provenance, start)
+			hasHead, err := emitLayout(opts.ProjectRoot, outDir, layoutDir, pkgPath, pkgName, serverFile, opts.Release, opts.EnvLookup, opts.Provenance, start, imageVariants)
 			if err != nil {
 				return nil, err
 			}
@@ -368,7 +378,7 @@ func serviceWorkerEntry(projectRoot string) string {
 // HeadFn wiring). When release is true, any $lib/dev/** import is a
 // fatal error. lookup is used to resolve env.Static* calls to literal
 // values at build time.
-func emitPage(projectRoot, outDir, modulePath string, route routescan.ScannedRoute, release bool, lookup EnvLookup, provenance bool, generatedAt time.Time) (int, bool, bool, error) {
+func emitPage(projectRoot, outDir, modulePath string, route routescan.ScannedRoute, release bool, lookup EnvLookup, provenance bool, generatedAt time.Time, imageVariants map[string]images.Result) (int, bool, bool, error) {
 	pageName := "+page.svelte"
 	if route.HasReset {
 		pageName = "+page@" + route.ResetTarget + ".svelte"
@@ -403,6 +413,7 @@ func emitPage(projectRoot, outDir, modulePath string, route routescan.ScannedRou
 		Provenance:    provenance,
 		SourceContent: srcForHash,
 		GeneratedAt:   generatedAt,
+		ImageVariants: imageVariants,
 	}
 	if route.HasPageServer {
 		opts.ServerFilePath = filepath.Join(route.Dir, "page.server.go")
@@ -709,7 +720,7 @@ func emitErrorPage(projectRoot, outDir, errorDir, pkgPath, pkgName string, prove
 // struct return is used to infer LayoutData fields. When release is true,
 // any $lib/dev/** import is a fatal error. lookup resolves env.Static*
 // calls to literal string values at build time.
-func emitLayout(projectRoot, outDir, layoutDir, pkgPath, pkgName, serverFile string, release bool, lookup EnvLookup, provenance bool, generatedAt time.Time) (bool, error) {
+func emitLayout(projectRoot, outDir, layoutDir, pkgPath, pkgName, serverFile string, release bool, lookup EnvLookup, provenance bool, generatedAt time.Time, imageVariants map[string]images.Result) (bool, error) {
 	layoutPath, err := resolveLayoutSource(layoutDir)
 	if err != nil {
 		return false, err
@@ -738,6 +749,7 @@ func emitLayout(projectRoot, outDir, layoutDir, pkgPath, pkgName, serverFile str
 		Provenance:     provenance,
 		SourceContent:  src,
 		GeneratedAt:    generatedAt,
+		ImageVariants:  imageVariants,
 	})
 	if err != nil {
 		return false, fmt.Errorf("codegen: generate %s: %w", layoutPath, err)

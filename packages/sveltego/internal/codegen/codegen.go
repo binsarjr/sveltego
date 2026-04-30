@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/binsarjr/sveltego/internal/ast"
+	"github.com/binsarjr/sveltego/internal/images"
 )
 
 // Options configures Generate.
@@ -39,6 +40,10 @@ type Options struct {
 	// GeneratedAt pins the timestamp in the file-level banner. Zero uses
 	// time.Now() so tests can pass a fixed value for deterministic output.
 	GeneratedAt time.Time
+	// ImageVariants maps each <Image src=...> path the build pipeline
+	// resolved to its generated variant set. The codegen-time lookup
+	// rejects unknown sources with a clear diagnostic.
+	ImageVariants map[string]images.Result
 }
 
 // LayoutOptions configures GenerateLayout.
@@ -57,6 +62,8 @@ type LayoutOptions struct {
 	SourceContent []byte
 	// GeneratedAt mirrors Options.GeneratedAt for layout files.
 	GeneratedAt time.Time
+	// ImageVariants mirrors Options.ImageVariants for layout files.
+	ImageVariants map[string]images.Result
 }
 
 // ErrorPageOptions configures GenerateErrorPage.
@@ -118,6 +125,7 @@ func Generate(frag *ast.Fragment, opts Options) ([]byte, error) {
 	var b Builder
 	b.provenance = opts.Provenance
 	b.srcPath = opts.Filename
+	b.imageVariants = opts.ImageVariants
 	if opts.Filename != "" {
 		ts := opts.GeneratedAt
 		if ts.IsZero() {
@@ -226,6 +234,7 @@ func GenerateLayout(frag *ast.Fragment, opts LayoutOptions) ([]byte, error) {
 	b.hasChildren = true
 	b.provenance = opts.Provenance
 	b.srcPath = opts.Filename
+	b.imageVariants = opts.ImageVariants
 	if opts.Filename != "" {
 		ts := opts.GeneratedAt
 		if ts.IsZero() {
