@@ -9,6 +9,7 @@ package server
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/binsarjr/sveltego/exports/kit"
@@ -56,5 +57,118 @@ func BenchmarkServeHTTP_index(b *testing.B) {
 	for range b.N {
 		w.Body.Reset()
 		srv.ServeHTTP(w, r)
+	}
+}
+
+func BenchmarkServeHTTP_Hello(b *testing.B) {
+	srv := benchServer(b)
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, r)
+	}
+}
+
+// BenchmarkServeHTTP_HelloWithHead exercises the dedupeTitle path so the
+// head-buffer scan is part of the steady-state allocation profile.
+func BenchmarkServeHTTP_HelloWithHead(b *testing.B) {
+	srv, err := New(Config{
+		Routes: []router.Route{{
+			Pattern:  "/",
+			Segments: []router.Segment{},
+			Page: func(w *render.Writer, _ *kit.RenderCtx, _ any) error {
+				w.WriteString("<h1>hello</h1>")
+				return nil
+			},
+			Head: func(w *render.Writer, _ *kit.RenderCtx, _ any) error {
+				w.WriteString(`<meta charset="utf-8"><title>page</title><meta name="theme" content="dark">`)
+				return nil
+			},
+		}},
+		Shell:  testShell,
+		Logger: quietLogger(),
+	})
+	if err != nil {
+		b.Fatalf("New: %v", err)
+	}
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, r)
+	}
+}
+
+// BenchmarkEscapeScriptJSON_Clean asserts the no-escape fast path is
+// allocation-free.
+func BenchmarkEscapeScriptJSON_Clean(b *testing.B) {
+	payload := []byte(`{"title":"Hello world","count":42,"items":["a","b","c"]}`)
+	w := render.New()
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		w.Reset()
+		writeEscapedScriptJSON(w, payload)
+	}
+}
+
+// BenchmarkEscapeScriptJSON_Dirty exercises the slow path with an
+// embedded `</` sequence to verify escape behavior is preserved.
+func BenchmarkEscapeScriptJSON_Dirty(b *testing.B) {
+	payload := []byte(`{"x":"a</script>b<!--c"}`)
+	w := render.New()
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		w.Reset()
+		writeEscapedScriptJSON(w, payload)
+	}
+}
+
+// BenchmarkDedupeTitle_Single exercises the no-dedupe (single-title)
+// path. Only the titleSpan slice for the single match allocates; the
+// previous implementation also paid a full strings.ToLower copy.
+func BenchmarkDedupeTitle_Single(b *testing.B) {
+	in := []byte(strings.Repeat(`<meta charset="utf-8">`, 8) +
+		`<title>page</title>` +
+		strings.Repeat(`<meta name="theme" content="dark">`, 8))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		_ = dedupeTitle(in)
+	}
+}
+
+// BenchmarkDedupeTitle_NoTitle confirms the no-title fast path is
+// allocation-free; the previous implementation always paid for the
+// strings.ToLower copy.
+func BenchmarkDedupeTitle_NoTitle(b *testing.B) {
+	in := []byte(strings.Repeat(`<meta name="theme" content="dark">`, 16))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		_ = dedupeTitle(in)
+	}
+}
+
+// BenchmarkActionNameFromQuery_Default covers the empty-query default
+// path and confirms zero allocations.
+func BenchmarkActionNameFromQuery_Default(b *testing.B) {
+	b.ReportAllocs()
+	for range b.N {
+		_ = actionNameFromQuery("")
+	}
+}
+
+// BenchmarkActionNameFromQuery_Match exercises a query with one
+// non-action prefix and an action token at index 1.
+func BenchmarkActionNameFromQuery_Match(b *testing.B) {
+	q := "x=1&/submit"
+	b.ReportAllocs()
+	for range b.N {
+		_ = actionNameFromQuery(q)
 	}
 }
