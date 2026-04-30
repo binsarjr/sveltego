@@ -5,15 +5,19 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+
+	"github.com/binsarjr/sveltego/exports/kit"
 )
 
 // Log keys are named constants so sloglint's no-raw-keys rule passes
 // and grep over log output finds every callsite for a given attribute.
 const (
-	logKeyMethod = "method"
-	logKeyPath   = "path"
-	logKeyError  = "error"
-	logKeyStatus = "status"
+	logKeyMethod   = "method"
+	logKeyPath     = "path"
+	logKeyError    = "error"
+	logKeyStatus   = "status"
+	logKeyLocation = "location"
+	logKeyFailCode = "fail_code"
 )
 
 // httpStatuser lets user errors carry a non-500 status into the
@@ -37,8 +41,42 @@ func (s *Server) methodNotAllowed(w http.ResponseWriter, r *http.Request, allowe
 }
 
 // handleLoadError converts a Load() error into a plain-text response.
-// Errors implementing HTTPStatus() drive the status code; otherwise 500.
+// Sentinel types (kit.RedirectErr, kit.HTTPErr, kit.FailErr) take
+// precedence: redirect needs the Location header, HTTPErr writes the
+// caller's message, FailErr outside an action context warns and 500s.
+// Other errors implementing HTTPStatus() drive the status code; the
+// rest fall through to 500.
 func (s *Server) handleLoadError(w http.ResponseWriter, r *http.Request, err error) {
+	var redir *kit.RedirectErr
+	if errors.As(err, &redir) {
+		s.Logger.Info("server: load redirect",
+			logKeyMethod, r.Method,
+			logKeyPath, r.URL.Path,
+			logKeyStatus, redir.Code,
+			logKeyLocation, redir.Location)
+		http.Redirect(w, r, redir.Location, redir.Code)
+		return
+	}
+	var herr *kit.HTTPErr
+	if errors.As(err, &herr) {
+		s.Logger.Info("server: load http error",
+			logKeyMethod, r.Method,
+			logKeyPath, r.URL.Path,
+			logKeyStatus, herr.Code,
+			logKeyError, herr.Message)
+		writePlain(w, herr.Code, herr.Message+"\n")
+		return
+	}
+	var fail *kit.FailErr
+	if errors.As(err, &fail) {
+		s.Logger.Warn("server: kit.Fail outside action context",
+			logKeyMethod, r.Method,
+			logKeyPath, r.URL.Path,
+			logKeyFailCode, fail.Code)
+		writePlain(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError)+"\n")
+		return
+	}
+
 	status := http.StatusInternalServerError
 	var hs httpStatuser
 	if errors.As(err, &hs) {
