@@ -2,10 +2,27 @@
 package gen
 
 import (
+	"fmt"
+
+	"github.com/binsarjr/sveltego/exports/kit"
+	"github.com/binsarjr/sveltego/render"
 	"github.com/binsarjr/sveltego/runtime/router"
 
 	page_routes_docs____path "myapp/.gen/routes/docs/___path"
 )
+
+// render__page_routes_docs____path adapts page_routes_docs____path.Page{}.Render to router.PageHandler.
+func render__page_routes_docs____path(w *render.Writer, ctx *kit.RenderCtx, data any) error {
+	var typed page_routes_docs____path.PageData
+	if data != nil {
+		v, ok := data.(page_routes_docs____path.PageData)
+		if !ok {
+			return fmt.Errorf("sveltego: route %q: PageData type mismatch (got %T, want page_routes_docs____path.PageData)", `/docs/[...path]`, data)
+		}
+		typed = v
+	}
+	return page_routes_docs____path.Page{}.Render(w, ctx, typed)
+}
 
 // Routes returns the route table consumed by router.NewTree.
 func Routes() []router.Route {
@@ -16,7 +33,7 @@ func Routes() []router.Route {
 				{Kind: router.SegmentStatic, Value: `docs`},
 				{Kind: router.SegmentRest, Name: `path`},
 			},
-			Page: page_routes_docs____path.Page{}.Render,
+			Page: render__page_routes_docs____path,
 		},
 	}
 }

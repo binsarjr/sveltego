@@ -36,10 +36,14 @@ import "$lib/db"
 
 	writeFile(t, filepath.Join(root, "src", "routes", "[id]", "+page.svelte"),
 		"<h2>id page</h2>\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "[id]", "+page.server.go"),
-		`package _id_
+	writeFile(t, filepath.Join(root, "src", "routes", "[id]", "page.server.go"),
+		`//go:build sveltego
 
-func Load() (PageData, error) {
+package _id_
+
+import "github.com/binsarjr/sveltego/exports/kit"
+
+func Load(ctx *kit.LoadCtx) (PageData, error) {
 	return struct{ ID string }{ID: "x"}, nil
 }
 `)
@@ -92,6 +96,35 @@ func TestBuild_HappyPath(t *testing.T) {
 		t.Errorf("expected `package _id_`, got:\n%s", idBytes)
 	}
 
+	// Mirror + wire emitted for the route with page.server.go.
+	idMirror := filepath.Join(root, ".gen", "usersrc", "routes", "_id_", "page_server.go")
+	idWire := filepath.Join(root, ".gen", "routes", "_id_", "wire.gen.go")
+	for _, p := range []string{idMirror, idWire} {
+		if _, err := os.Stat(p); err != nil {
+			t.Errorf("expected %s to exist: %v", p, err)
+		}
+	}
+	mirrorBytes, err := os.ReadFile(idMirror)
+	if err != nil {
+		t.Fatalf("read id mirror: %v", err)
+	}
+	if bytes.Contains(mirrorBytes, []byte("//go:build")) {
+		t.Errorf("mirror retained build constraint:\n%s", mirrorBytes)
+	}
+	if !bytes.Contains(mirrorBytes, []byte("package _id_")) {
+		t.Errorf("mirror package clause not rewritten:\n%s", mirrorBytes)
+	}
+	wireBytes, err := os.ReadFile(idWire)
+	if err != nil {
+		t.Fatalf("read id wire: %v", err)
+	}
+	if !bytes.Contains(wireBytes, []byte(`usersrc "example.com/app/.gen/usersrc/routes/_id_"`)) {
+		t.Errorf("wire missing mirror import:\n%s", wireBytes)
+	}
+	if !bytes.Contains(wireBytes, []byte("func Load(ctx *kit.LoadCtx)")) {
+		t.Errorf("wire missing Load wrapper:\n%s", wireBytes)
+	}
+
 	manifestBytes, err := os.ReadFile(manifest)
 	if err != nil {
 		t.Fatalf("read manifest: %v", err)
@@ -99,13 +132,16 @@ func TestBuild_HappyPath(t *testing.T) {
 	for _, want := range []string{
 		`"example.com/app/.gen/routes"`,
 		`"example.com/app/.gen/routes/_id_"`,
+		`func render__page_routes`,
+		`func render__page_routes__id_`,
+		`Page:    render__page_routes__id_`,
 	} {
 		if !bytes.Contains(manifestBytes, []byte(want)) {
-			t.Errorf("manifest missing import %q:\n%s", want, manifestBytes)
+			t.Errorf("manifest missing %q:\n%s", want, manifestBytes)
 		}
 	}
 
-	for _, p := range []string{rootPage, idPage, manifest} {
+	for _, p := range []string{rootPage, idPage, manifest, idWire, idMirror} {
 		assertParsesAsGo(t, p)
 	}
 }
@@ -140,8 +176,8 @@ func TestBuild_ConflictAborts(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "go.mod"), "module example\n\ngo 1.22\n")
 	writeFile(t, filepath.Join(root, "src", "routes", "api", "+page.svelte"), "<h1>p</h1>\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "api", "+server.go"),
-		"package api\n\nimport \"net/http\"\n\nvar Handlers = map[string]http.HandlerFunc{}\n")
+	writeFile(t, filepath.Join(root, "src", "routes", "api", "server.go"),
+		"//go:build sveltego\n\npackage api\n\nimport \"net/http\"\n\nvar Handlers = map[string]http.HandlerFunc{}\n")
 	_, err := Build(BuildOptions{ProjectRoot: root})
 	if err == nil {
 		t.Fatal("expected fatal diagnostic on conflicting page+server")

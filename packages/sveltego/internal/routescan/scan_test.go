@@ -128,7 +128,7 @@ func TestScanMatchers(t *testing.T) {
 func TestScanConflictPageServer(t *testing.T) {
 	t.Parallel()
 	res := mustScan(t, "conflict-page-server", "")
-	if got := diagsContaining(res.Diagnostics, "may not have both +page.svelte and +server.go"); got == 0 {
+	if got := diagsContaining(res.Diagnostics, "may not have both +page.svelte and server.go"); got == 0 {
 		t.Fatalf("want page+server conflict diagnostic, got %v", res.Diagnostics)
 	}
 }
@@ -144,7 +144,7 @@ func TestScanConflictPattern(t *testing.T) {
 func TestScanOrphanPageServer(t *testing.T) {
 	t.Parallel()
 	res := mustScan(t, "orphan-pageserver", "")
-	if got := diagsContaining(res.Diagnostics, "orphan +page.server.go"); got == 0 {
+	if got := diagsContaining(res.Diagnostics, "orphan page.server.go"); got == 0 {
 		t.Fatalf("want orphan diagnostic, got %v", res.Diagnostics)
 	}
 }
@@ -180,6 +180,18 @@ func TestScanLayoutChain(t *testing.T) {
 		if !strings.HasPrefix(leaf.LayoutChain[i], leaf.LayoutChain[i-1]) {
 			t.Fatalf("layout chain not ancestor->self: %v", leaf.LayoutChain)
 		}
+	}
+}
+
+func TestScanMissingBuildTag(t *testing.T) {
+	t.Parallel()
+	res := mustScan(t, "missing-buildtag", "")
+	if got := diagsContaining(res.Diagnostics, "missing //go:build sveltego"); got == 0 {
+		t.Fatalf("want missing-buildtag diagnostic, got %v", res.Diagnostics)
+	}
+	// The route still scans cleanly otherwise (HasPage + HasPageServer set).
+	if len(res.Routes) != 1 || !res.Routes[0].HasPageServer {
+		t.Fatalf("want one route with HasPageServer, got %+v", res.Routes)
 	}
 }
 

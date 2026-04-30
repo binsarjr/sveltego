@@ -11,6 +11,14 @@ import (
 	"github.com/binsarjr/sveltego/runtime/router"
 )
 
+// entry pairs one ScannedRoute with the import alias the manifest will
+// use for the route's gen package. Hoisted to package scope so the
+// adapter emitter can range over the same slice.
+type entry struct {
+	route routescan.ScannedRoute
+	alias string
+}
+
 // ManifestOptions configures [GenerateManifest].
 type ManifestOptions struct {
 	// PackageName is the package clause for the generated file. Defaults to
@@ -55,10 +63,6 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 	}
 
 	// Filter routes the manifest can register, preserving scanner order.
-	type entry struct {
-		route routescan.ScannedRoute
-		alias string
-	}
 	var entries []entry
 	aliasSet := make(map[string]struct{})
 	for _, r := range scan.Routes {
@@ -93,8 +97,24 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 		b.Line("")
 	}
 
+	// Adapter emission needs `fmt` for the type-mismatch error message
+	// only when at least one Page route is present.
+	var hasPage bool
+	for _, e := range entries {
+		if e.route.HasPage {
+			hasPage = true
+			break
+		}
+	}
+
 	b.Line("import (")
 	b.Indent()
+	if hasPage {
+		b.Line(`"fmt"`)
+		b.Line("")
+		b.Line(`"github.com/binsarjr/sveltego/exports/kit"`)
+		b.Line(`"github.com/binsarjr/sveltego/render"`)
+	}
 	b.Line(`"github.com/binsarjr/sveltego/runtime/router"`)
 	if len(entries) > 0 {
 		b.Line("")
@@ -110,6 +130,12 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 	b.Dedent()
 	b.Line(")")
 	b.Line("")
+
+	// Per-route Render adapters: widen Page{}.Render's typed PageData
+	// parameter to the `any`-shaped router.PageHandler. Type assertion
+	// happens inside the adapter so a dispatcher mismatch fails fast
+	// with a descriptive error instead of a panic.
+	emitRenderAdapters(&b, entries)
 
 	b.Line("// Routes returns the route table consumed by router.NewTree.")
 	b.Line("func Routes() []router.Route {")
@@ -152,6 +178,47 @@ func packageAlias(packagePath string) string {
 	return "page_" + strings.Join(parts, "_")
 }
 
+// emitRenderAdapters writes one `render__<alias>` function per Page
+// route that wraps Page{}.Render into router.PageHandler shape. The
+// adapter zero-values PageData on a nil input so an empty Load() return
+// renders cleanly.
+func emitRenderAdapters(b *Builder, entries []entry) {
+	hasAny := false
+	for _, e := range entries {
+		if e.route.HasPage {
+			hasAny = true
+			break
+		}
+	}
+	if !hasAny {
+		return
+	}
+	for _, e := range entries {
+		if !e.route.HasPage {
+			continue
+		}
+		b.Linef("// render__%s adapts %s.Page{}.Render to router.PageHandler.", e.alias, e.alias)
+		b.Linef("func render__%s(w *render.Writer, ctx *kit.RenderCtx, data any) error {", e.alias)
+		b.Indent()
+		b.Linef("var typed %s.PageData", e.alias)
+		b.Line("if data != nil {")
+		b.Indent()
+		b.Linef("v, ok := data.(%s.PageData)", e.alias)
+		b.Line("if !ok {")
+		b.Indent()
+		b.Linef(`return fmt.Errorf("sveltego: route %%q: PageData type mismatch (got %%T, want %s.PageData)", %s, data)`, e.alias, quoteGo(e.route.Pattern))
+		b.Dedent()
+		b.Line("}")
+		b.Line("typed = v")
+		b.Dedent()
+		b.Line("}")
+		b.Linef("return %s.Page{}.Render(w, ctx, typed)", e.alias)
+		b.Dedent()
+		b.Line("}")
+		b.Line("")
+	}
+}
+
 func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string) {
 	b.Line("{")
 	b.Indent()
@@ -161,7 +228,7 @@ func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string) {
 	case r.HasServer:
 		b.Linef("Server: %s.Handlers,", alias)
 	case r.HasPage:
-		b.Linef("Page: %s.Page{}.Render,", alias)
+		b.Linef("Page: render__%s,", alias)
 	}
 	if r.HasPageServer {
 		b.Linef("Load: %s.Load,", alias)

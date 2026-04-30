@@ -128,6 +128,11 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 			}
 			routeCount++
 		}
+		if route.HasPageServer {
+			if err := emitMirrorAndWire(opts.ProjectRoot, outDir, modulePath, route); err != nil {
+				return nil, err
+			}
+		}
 	}
 	libExists := dirExists(libDir)
 
@@ -194,7 +199,7 @@ func emitPage(projectRoot, outDir, modulePath string, route routescan.ScannedRou
 
 	opts := Options{PackageName: route.PackageName}
 	if route.HasPageServer {
-		opts.ServerFilePath = filepath.Join(route.Dir, "+page.server.go")
+		opts.ServerFilePath = filepath.Join(route.Dir, "page.server.go")
 	}
 	out, err := Generate(frag, opts)
 	if err != nil {
@@ -322,11 +327,11 @@ func isFatalDiagnostic(d routescan.Diagnostic) bool {
 	switch {
 	case strings.Contains(msg, "route conflict"):
 		return true
-	case strings.Contains(msg, "orphan +page.server.go"):
+	case strings.Contains(msg, "orphan page.server.go"):
 		return true
 	case strings.Contains(msg, "unknown matcher"):
 		return true
-	case strings.Contains(msg, "may not have both +page.svelte and +server.go"):
+	case strings.Contains(msg, "may not have both +page.svelte and server.go"):
 		return true
 	}
 	return false
@@ -338,6 +343,35 @@ func fatalDiagnosticsError(fatal []routescan.Diagnostic) error {
 		errs = append(errs, errors.New(d.String()))
 	}
 	return fmt.Errorf("codegen: fatal scanner diagnostics:\n%w", errors.Join(errs...))
+}
+
+// emitMirrorAndWire writes the user-source mirror for one route and the
+// adjacent wire.gen.go that the manifest references. The mirror lives at
+// <projectRoot>/<outDir>/usersrc/<encodedSubpath>/<basename> and has its
+// `//go:build sveltego` constraint stripped plus its package clause
+// rewritten to <encodedPackageName>. The wire file lives at
+// <projectRoot>/<outDir>/<encodedSubpath>/wire.gen.go and re-exports
+// Load (always) and Actions (when the user file declares it) wrapped to
+// satisfy router.LoadHandler / router.ActionsHandler.
+func emitMirrorAndWire(projectRoot, outDir, modulePath string, route routescan.ScannedRoute) error {
+	encodedSub := strings.TrimPrefix(route.PackagePath, ".gen/")
+
+	usf := userSourceFile{
+		UserPath:    filepath.Join(route.Dir, "page.server.go"),
+		MirrorPath:  filepath.Join(projectRoot, outDir, "usersrc", filepath.FromSlash(encodedSub), "page_server.go"),
+		PackageName: route.PackageName,
+	}
+	if err := mirrorUserSource(&usf); err != nil {
+		return err
+	}
+
+	wireDir := filepath.Join(projectRoot, outDir, filepath.FromSlash(encodedSub))
+	return emitWire(outDir, modulePath, mirrorRoute{
+		encodedSubpath: encodedSub,
+		packageName:    route.PackageName,
+		wireDir:        wireDir,
+		hasActions:     usf.HasActions,
+	})
 }
 
 func dirExists(path string) bool {

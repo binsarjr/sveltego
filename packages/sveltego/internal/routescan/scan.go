@@ -1,6 +1,7 @@
 package routescan
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -13,15 +14,29 @@ import (
 )
 
 // specialFiles names the seven file conventions a route directory may
-// own. Presence of any one materializes a ScannedRoute.
+// own. Presence of any one materializes a ScannedRoute. The .svelte
+// names retain the SvelteKit-style "+" prefix; the .go names drop it
+// because Go's tooling rejects the "+" character in source filenames
+// (see ADR 0003 amendment, Phase 0i-fix).
 var specialFiles = map[string]struct{}{
-	"+page.svelte":      {},
-	"+layout.svelte":    {},
-	"+error.svelte":     {},
-	"+page@.svelte":     {},
-	"+page.server.go":   {},
-	"+layout.server.go": {},
-	"+server.go":        {},
+	"+page.svelte":     {},
+	"+layout.svelte":   {},
+	"+error.svelte":    {},
+	"+page@.svelte":    {},
+	"page.server.go":   {},
+	"layout.server.go": {},
+	"server.go":        {},
+}
+
+// serverGoFiles is the subset of specialFiles that are user-authored Go
+// source. Each one MUST start with `//go:build sveltego` so the default
+// Go toolchain (`go build`, `go vet`, `golangci-lint`) skips the file
+// and silently skips its containing directory when the directory name
+// itself is invalid as a Go import path (e.g. `[slug]/`).
+var serverGoFiles = map[string]struct{}{
+	"page.server.go":   {},
+	"layout.server.go": {},
+	"server.go":        {},
 }
 
 // Scan walks RoutesDir and returns one ScannedRoute per directory that
@@ -204,9 +219,9 @@ func buildRoute(routesDir, dir string, files map[string]struct{}, dirsWithLayout
 		HasLayout:       has(files, "+layout.svelte"),
 		HasError:        has(files, "+error.svelte"),
 		HasReset:        has(files, "+page@.svelte"),
-		HasPageServer:   has(files, "+page.server.go"),
-		HasLayoutServer: has(files, "+layout.server.go"),
-		HasServer:       has(files, "+server.go"),
+		HasPageServer:   has(files, "page.server.go"),
+		HasLayoutServer: has(files, "layout.server.go"),
+		HasServer:       has(files, "server.go"),
 	}
 	return route, diagnostics
 }
@@ -240,17 +255,87 @@ func validateRouteFiles(r ScannedRoute) []Diagnostic {
 	if r.HasPage && r.HasServer {
 		ds = append(ds, Diagnostic{
 			Path:    r.Dir,
-			Message: fmt.Sprintf("route %q may not have both +page.svelte and +server.go", r.Pattern),
+			Message: fmt.Sprintf("route %q may not have both +page.svelte and server.go", r.Pattern),
 			Hint:    "use either a page or an API endpoint",
 		})
 	}
 	if r.HasPageServer && !r.HasPage && !r.HasServer {
 		ds = append(ds, Diagnostic{
 			Path:    r.Dir,
-			Message: fmt.Sprintf("orphan +page.server.go: route %q has no +page.svelte or +server.go", r.Pattern),
+			Message: fmt.Sprintf("orphan page.server.go: route %q has no +page.svelte or server.go", r.Pattern),
+		})
+	}
+	ds = append(ds, validateBuildTags(r)...)
+	return ds
+}
+
+// validateBuildTags returns one Diagnostic per recognized server .go file
+// in r.Dir whose first non-blank line is not `//go:build sveltego`. The
+// build constraint is mandatory: without it the default Go toolchain
+// either rejects the file (legacy `+`-prefix names, no longer used) or
+// walks into a directory whose name is not a valid Go import path
+// (`[slug]/`, `(group)/`, etc.) and fails. Severity is warning, not
+// error, so users mid-migration still get a buildable .gen tree.
+func validateBuildTags(r ScannedRoute) []Diagnostic {
+	var ds []Diagnostic
+	for name := range serverGoFiles {
+		switch name {
+		case "page.server.go":
+			if !r.HasPageServer {
+				continue
+			}
+		case "layout.server.go":
+			if !r.HasLayoutServer {
+				continue
+			}
+		case "server.go":
+			if !r.HasServer {
+				continue
+			}
+		}
+		path := filepath.Join(r.Dir, name)
+		if hasSveltegoBuildTag(path) {
+			continue
+		}
+		ds = append(ds, Diagnostic{
+			Path:    path,
+			Message: "missing //go:build sveltego constraint; this file may be parsed by go build and break the build",
+			Hint:    "add `//go:build sveltego` as the first line so the default Go toolchain skips it",
 		})
 	}
 	return ds
+}
+
+// hasSveltegoBuildTag returns true when the first non-blank line of path
+// is a `//go:build` directive whose expression mentions the `sveltego`
+// constraint. Boolean operators (`&&`, `||`, `!`, parentheses) and other
+// constraints may coexist; the directive simply has to include the
+// `sveltego` token as one of its identifiers.
+func hasSveltegoBuildTag(path string) bool {
+	f, err := os.Open(path) //nolint:gosec // path is scanner-controlled
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	scan := bufio.NewScanner(f)
+	for scan.Scan() {
+		trimmed := strings.TrimSpace(scan.Text())
+		if trimmed == "" {
+			continue
+		}
+		if !strings.HasPrefix(trimmed, "//go:build") {
+			return false
+		}
+		rest := strings.TrimSpace(strings.TrimPrefix(trimmed, "//go:build"))
+		cleaned := strings.NewReplacer("&&", " ", "||", " ", "(", " ", ")", " ", "!", " ").Replace(rest)
+		for _, tok := range strings.Fields(cleaned) {
+			if tok == "sveltego" {
+				return true
+			}
+		}
+		return false
+	}
+	return false
 }
 
 func detectPatternConflicts(routes []ScannedRoute) []Diagnostic {

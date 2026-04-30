@@ -2,7 +2,7 @@
 
 > SvelteKit-shape framework for Go. Native runtime, zero JS server.
 
-Rewritten from scratch in Go. File layout and DX mirror SvelteKit (file-based routing, `+page.server.go`, layouts, hooks, form actions). Svelte components are compiled to Go source via codegen — no JS runtime on the server. The CPU bonds to Go, not V8.
+Rewritten from scratch in Go. File layout and DX mirror SvelteKit (file-based routing, `page.server.go`, layouts, hooks, form actions). Svelte components are compiled to Go source via codegen — no JS runtime on the server. The CPU bonds to Go, not V8.
 
 ## Status
 
@@ -29,10 +29,10 @@ Full enumerated list with reasoning: [ADR 0005 — Non-goals](tasks/decisions/00
 ```
 .svelte (UI)            ──┬─→ codegen → .gen/*.go    (server SSR)
                           └─→ Vite build → JS bundle (client hydration)
-+page.server.go         ──→  Load(), Actions()
-+layout.server.go       ──→  Load() with parent data flow
+page.server.go          ──→  Load(), Actions()           (// +build sveltego)
+layout.server.go        ──→  Load() with parent data flow (// +build sveltego)
 hooks.server.go         ──→  Handle, HandleError, HandleFetch
-+server.go              ──→  REST endpoints
+server.go               ──→  REST endpoints              (// +build sveltego)
                           ↓
                   sveltego CLI (pure Go)
                           ↓

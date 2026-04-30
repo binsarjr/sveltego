@@ -37,7 +37,7 @@ Foundation layer first: monorepo layout RFC (#95), code style + stability RFCs (
 
 ### v0.2 (15 issues) — Form Actions & Hooks
 
-Layout chain rendering, `+layout.server.go` parent data flow, `Handle` / `HandleError` / `HandleFetch` / `Reroute` / `Init`, `+error.svelte` boundaries, `+server.go` REST endpoints, `Actions()` map with form binding (urlencoded + multipart), `kit.Cookies`, `kit.Redirect / Fail / Error` sentinel helpers, route groups `(group)/` + layout reset `@`, page options (`Prerender`, `SSR`, `CSR`, `TrailingSlash`), env var convention (`$env/static`, `$env/dynamic`).
+Layout chain rendering, `layout.server.go` parent data flow, `Handle` / `HandleError` / `HandleFetch` / `Reroute` / `Init`, `+error.svelte` boundaries, `server.go` REST endpoints, `Actions()` map with form binding (urlencoded + multipart), `kit.Cookies`, `kit.Redirect / Fail / Error` sentinel helpers, route groups `(group)/` + layout reset `@`, page options (`Prerender`, `SSR`, `CSR`, `TrailingSlash`), env var convention (`$env/static`, `$env/dynamic`).
 
 ### v0.3 (13 issues) — Client SPA & Hydration
 
@@ -89,7 +89,8 @@ Benchmark suite vs adapter-bun with nightly regression gate. Docs site (Vitepres
 - [x] Land router foundation (#18 scan + emit, #19 radix matcher, #76 param matchers + built-ins, #77 optional + rest segments) — landed Phase 0g 2026-04-30; runtime/router/ + internal/routescan/ + exports/kit/params/ + internal/codegen/manifest.go; integration smoke compiles end-to-end
 - [x] Land HTTP server pipeline (#20) — landed Phase 0h 2026-04-30; `packages/sveltego/server/` exposes `New(Config) (*Server, error)`, `ListenAndServe`, `Shutdown`, `ServeHTTP`; pipeline is Match → +server.go branch / 405 / Load / Render / Response with shell template parsed once at boot; race-safe under 100×100 concurrent load; ~163 ns/op in-process p50 on M1 Pro
 - [x] Land CLI build orchestrator + `$lib` alias (#21, #83) — landed Phase 0i 2026-04-30; `internal/codegen.Build` walks `src/routes/` → `.gen/routes/.../page.gen.go` + `.gen/manifest.gen.go` + conditional `.gen/embed.go`; CLI `build`/`compile` resolve project root via go.mod walk, `build` wraps `go build -o`; `$lib` import literals rewritten using user's go.mod module path; integration test (`-tags=integration`) builds fixture binary
-- [ ] Smoke-test on hello-world example (#23)
+- [x] Phase 0i-fix — convention amend, manifest adapter, wire emit (closes #106, #107, #108) — landed 2026-04-30; user `.go` files drop `+` prefix and require `//go:build sveltego`; codegen emits `.gen/usersrc/<encoded>/` mirror tree so wire glue can import by Go-valid path; manifest emits per-route `render__<alias>` adapters that widen `Page{}.Render(data PageData)` to `router.PageHandler`; `wire.gen.go` re-exports user Load (and stubs Actions when absent); ADR 0003 amended; routescan emits a warning diagnostic when the build constraint is missing
+- [ ] Smoke-test on hello-world example (#23) — Phase 0j; re-attempt now unblocked by Phase 0i-fix
 
 ## Open questions
 

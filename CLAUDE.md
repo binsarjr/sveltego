@@ -229,23 +229,26 @@ When designing, codegen, or runtime work touches these names, treat them as **lo
 ```
 src/routes/
   +page.svelte           // SSR template, Go expressions inside {...}
-  +page.server.go        // Load(), Actions()
+  page.server.go         // Load(), Actions()           — needs //go:build sveltego
   +layout.svelte         // layout chain
-  +layout.server.go      // parent data flow
-  +server.go             // REST endpoints (GET, POST, etc.)
+  layout.server.go       // parent data flow            — needs //go:build sveltego
+  server.go              // REST endpoints (GET, POST)  — needs //go:build sveltego
   +error.svelte          // error boundary
   (group)/               // route group, no URL segment
   +page@.svelte          // layout reset
   [param]/               // route param
   [[optional]]/          // optional segment
   [...rest]/             // catch-all
-src/params/<name>.go     // param matchers
+src/params/<name>.go     // param matchers              — needs //go:build sveltego
 src/lib/                 // shared modules, $lib alias target
 src/service-worker.ts    // service worker convention
 hooks.server.go          // Handle, HandleError, HandleFetch, Reroute, Init
 ```
 
-Generated output lives under `.gen/` (gitignored).
+Generated output lives under `.gen/` (gitignored). User `.go` files under
+`src/routes/**` and `src/params/**` MUST start with `//go:build sveltego`
+so Go's default toolchain (build/vet/lint) skips them; codegen reads them
+through `go/parser` directly. See ADR 0003 amendment (Phase 0i-fix).
 
 ## Workflow notes
 
