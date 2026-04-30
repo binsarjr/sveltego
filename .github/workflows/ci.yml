@@ -732,6 +732,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          rm -rf .gen
+          go run github.com/binsarjr/sveltego/cmd/sveltego compile
           find .gen -type f -exec sha256sum {} + | sort > /tmp/gen-1.sum
           rm -rf .gen
           go run github.com/binsarjr/sveltego/cmd/sveltego compile
