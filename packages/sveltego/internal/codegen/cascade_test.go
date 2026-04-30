@@ -32,6 +32,7 @@ func TestResolvePageOptions_cascade(t *testing.T) {
 		Prerender:     true,
 		SSR:           true,
 		CSR:           true,
+		SSROnly:       true,
 		TrailingSlash: kit.TrailingSlashIgnore,
 	}
 	if got["/dash/billing"] != billing {

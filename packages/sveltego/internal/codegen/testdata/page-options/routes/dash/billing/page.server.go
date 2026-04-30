@@ -6,6 +6,7 @@ import "github.com/binsarjr/sveltego/exports/kit"
 
 const (
 	Prerender     = true
+	SSROnly       = true
 	TrailingSlash = kit.TrailingSlashIgnore
 )
 
