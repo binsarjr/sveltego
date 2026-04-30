@@ -38,7 +38,7 @@ When in doubt about a convention: open the relevant issue with `gh issue view <N
 
 ## Repository state
 
-Pre-alpha. MVP closed; v0.2, v0.4, and v1.1 shipped; v0.3, v0.5, v0.6, and v1.0 in flight. The Go workspace already hosts the core (`packages/sveltego`), tooling (`packages/lsp`, `packages/mcp`, `packages/init`, `packages/create-sveltego`, `packages/enhanced-img`), five deploy adapters plus `adapter-auto`, the bench harness (`bench/`, `benchmarks/`), AI templates (`templates/ai/`), and end-to-end playgrounds. New work continues to flow through:
+Pre-alpha. MVP closed; v0.2, v0.4, and v1.1 shipped; v0.3, v0.5, v0.6, and v1.0 in flight. The Go workspace already hosts the core (`packages/sveltego`), auth (`packages/auth`), tooling (`packages/lsp`, `packages/mcp`, `packages/init`, `packages/create-sveltego`, `packages/enhanced-img`), five deploy adapters plus `adapter-auto`, the bench harness (`bench/`, `benchmarks/`), AI templates (`templates/ai/`), and end-to-end playgrounds. New work continues to flow through:
 
 - `tasks/todo.md` — current execution plan, milestone scope, phase tracking
 - `tasks/lessons.md` — design decisions and self-rules captured per session (append-only journal)
@@ -256,14 +256,14 @@ through `go/parser` directly. See ADR 0003 amendment (Phase 0i-fix).
 
 ## Workflow notes
 
-- The repo is on `main` only. Push directly after a clean commit; no PR flow yet.
+- Feature work lands via short-lived branches + PRs merged to `main`. Branch naming: `phase/<slug>` for feature phases, `fix/<slug>` for bug fixes, `docs/<slug>` for doc-only changes.
 - Commits use a short imperative subject. Recent style: `docs: track 19 SvelteKit-parity gap issues across milestones`.
 - When adding a new lesson, create `tasks/lessons/YYYY-MM-DD-<topic>.md` and prepend a bullet to the `tasks/lessons.md` index — never edit existing lesson files.
 - When the issue list expands, also update `README.md` milestones table and `tasks/todo.md` milestone counts in the same commit.
 
 ## Out of scope (do not propose)
 
-See [ADR 0005](tasks/decisions/0005-non-goals.md) for canonical list and reasoning.
+See [ADR 0005](tasks/decisions/0005-non-goals.md) for the canonical list and reasoning. [ADR 0007](tasks/decisions/0007-svelte-semantics-revisit.md) revisits expression semantics (Proposed — consult before proposing a JS-runtime or full-Svelte alternative).
 
 - Universal (shared client+server) `Load` (`+page.ts` / `+layout.ts`). Server-only by design.
 - `<script context="module">` (deprecated upstream).
