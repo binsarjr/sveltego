@@ -62,17 +62,18 @@ Field names are PascalCase (Go exported). `nil` not `null`, `len(x)` not `x.leng
 
 ## Roadmap
 
-6 milestones, 105 issues tracked on GitHub:
+8 milestones tracked on GitHub:
 
 | Milestone | Issues | Scope |
 |-----------|--------|-------|
-| **MVP** | 37 | Foundation RFCs (#95–97) + setup (#98–105: lint, hooks, release-please, CI, PR template, AI sync, golden tests, bench gate), parser, codegen, runtime, router (incl. param matchers, optional/rest), `$lib` alias, CLI |
+| **MVP** | 42 | Foundation RFCs (#95–97) + setup (#98–105: lint, hooks, release-please, CI, PR template, AI sync, golden tests, bench gate), parser, codegen, runtime, router (incl. param matchers, optional/rest), `$lib` alias, CLI |
 | **v0.2** | 15 | Layouts, hooks (incl. `Reroute`/`Init`), error boundaries, form actions, cookies, route groups, page options, `$env` |
-| **v0.3** | 13 | Vite client bundle, hydration, SPA router, full `$app/navigation`, Snapshot, typed `kit.Link`, hashed `kit.Asset`, dev server |
+| **v0.3** | 21 | Vite client bundle, hydration, SPA router, full `$app/navigation`, Snapshot, typed `kit.Link`, hashed `kit.Asset`, dev server |
 | **v0.4** | 19 | Svelte 5 runes, slots, snippets, special elements, `<svelte:options>`, scoped CSS, a11y warnings |
-| **v1.0** | 14 | Benchmarks, docs, examples, streaming/SSG/CSP, sitemap, image opt, deploy adapters, CI/release/LSP, service worker |
+| **v0.5** | 23 | SvelteKit parity catch-up: `SSROnly`, `RedirectReload`, `LoadCtx.Header/RawParam`, `Init` error fallbacks, `--release` strip, `HTTPError` interface |
+| **v0.6** | 40 | Authentication: cookie-session library, `Handle[T]` middleware, session playground, docs |
+| **v1.0** | 25 | Benchmarks, docs, examples, streaming/SSG/CSP, sitemap, image opt, deploy adapters, CI/release/LSP, service worker |
 | **v1.1** | 6 | LLM tooling: `llms.txt`, MCP server, copy-for-LLM, AI templates, provenance |
-| Standalone | 1 | RFC #94: explicit non-goals (universal load, WS, vercel adapter) |
 
 ## See also
 

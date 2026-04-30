@@ -16,7 +16,7 @@ This page summarises the surface. Source is the canonical spec; godoc is generat
 |---|---|---|
 | `RequestEvent` | hooks, `+server.go`, actions | Request-scoped state with `URL`, `Params`, `Locals`, `Cookies`. |
 | `RenderCtx` | generated render code | SSR-time context passed into templates. |
-| `LoadCtx` | `Load` in `+page.server.go`, `+layout.server.go` | Load-time context with `Parent()` for layout chain. |
+| `LoadCtx` | `Load` in `page.server.go`, `layout.server.go` | Load-time context with `Parent()` for layout chain. |
 
 `RequestEvent.Fetch(req)` dispatches outbound HTTP through `HandleFetch`.
 

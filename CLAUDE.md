@@ -38,11 +38,7 @@ When in doubt about a convention: open the relevant issue with `gh issue view <N
 
 ## Repository state
 
-Pre-alpha. **No Go source yet** — repo holds specs, RFCs, and a 105-issue roadmap on GitHub at `binsarjr/sveltego`. The first code lands when foundation RFCs (#95–97) and setup tasks (#98–103) land. Until then, all work happens in:
-
-- `tasks/todo.md` — current execution plan, milestone scope, phase tracking
-- `tasks/lessons.md` — design decisions and self-rules captured per session (append-only journal)
-- GitHub issues on `binsarjr/sveltego` — every concrete unit of work
+Pre-alpha. MVP is shipped — Go source for parser, codegen, runtime, router, server pipeline, hooks, form actions, client-side features, and tooling (LSP, MCP, adapters, init) is live in `packages/`. Active development is on `v0.5` (SvelteKit parity catch-up) and `v0.6` (authentication). GitHub milestone roadmap at `binsarjr/sveltego`.
 
 Always read both `tasks/` files at session start before proposing changes.
 
@@ -200,17 +196,18 @@ If counts, file lists, or roadmap stages disagree across these, the doc set is b
 
 ## Roadmap structure
 
-6 milestones, 105 issues. Issue numbering follows execution order:
+8 milestones. Issue numbering follows execution order:
 
 | Milestone | Issues | Focus |
 |---|---|---|
-| MVP | #1–23, #76, #77, #83, #95–105 | Foundation RFCs + setup, parser, codegen, runtime, router, CLI to render a page |
-| v0.2 | #24–33, #78–82 | Layouts, hooks, error boundaries, form actions, route groups, page options, env |
-| v0.3 | #34–42, #84, #85, #87, #88 | Vite client, hydration, SPA router, `$app/navigation`, Snapshot, kit.Link, kit.Asset |
-| v0.4 | #43–59, #86, #90 | Svelte 5 full coverage, a11y, `<svelte:options>` |
-| v1.0 | #60–69, #89, #91–93 | Bench, docs, streaming, SSG, CSP, sitemap, image opt, deploy adapters |
-| v1.1 | #70–75 | LLM tooling: `llms.txt`, MCP server, AI templates, provenance |
-| Standalone | #94 | RFC: explicit non-goals |
+| MVP | 42 | Foundation RFCs + setup, parser, codegen, runtime, router, CLI to render a page |
+| v0.2 | 15 | Layouts, hooks, error boundaries, form actions, route groups, page options, env |
+| v0.3 | 21 | Vite client, hydration, SPA router, `$app/navigation`, Snapshot, kit.Link, kit.Asset |
+| v0.4 | 19 | Svelte 5 full coverage, a11y, `<svelte:options>` |
+| v0.5 | 23 | SvelteKit parity catch-up: `SSROnly`, `RedirectReload`, `LoadCtx.Header/RawParam`, `Init` error fallbacks, `--release` strip, `HTTPError` interface |
+| v0.6 | 40 | Authentication: cookie-session library, `Handle[T]` middleware, session playground, docs |
+| v1.0 | 25 | Bench, docs, streaming, SSG, CSP, sitemap, image opt, deploy adapters |
+| v1.1 | 6 | LLM tooling: `llms.txt`, MCP server, AI templates, provenance |
 
 ## Issue conventions
 
@@ -252,8 +249,8 @@ through `go/parser` directly. See ADR 0003 amendment (Phase 0i-fix).
 
 ## Workflow notes
 
-- The repo is on `main` only. Push directly after a clean commit; no PR flow yet.
-- Commits use a short imperative subject. Recent style: `docs: track 19 SvelteKit-parity gap issues across milestones`.
+- Work happens on feature branches; PRs merge into `main`. Conventional Commits format per RFC #99.
+- Commits use a short imperative subject. Scope = package name (`sveltego`, `kit`, `codegen`, `router`, `docs`, …).
 - When adding a new lesson to `tasks/lessons.md`, append a dated section — never rewrite older entries.
 - When the issue list expands, also update `README.md` milestones table and `tasks/todo.md` milestone counts in the same commit.
 

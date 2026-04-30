@@ -15,7 +15,7 @@ If a per-package `CLAUDE.md` exists (e.g. `packages/sveltego/core/codegen/CLAUDE
 
 ## 1. Project shape
 
-`sveltego` is a **rewrite of SvelteKit's shape in pure Go**, not an embedding of SvelteKit-the-JS-server. Pre-alpha. No Go source has landed yet — the repo currently holds specs, RFCs, ADRs, and a 105-issue roadmap on GitHub at `binsarjr/sveltego`.
+`sveltego` is a **rewrite of SvelteKit's shape in pure Go**, not an embedding of SvelteKit-the-JS-server. Pre-alpha. MVP is shipped — Go source for parser, codegen, runtime, router, hooks, forms, client tooling, and adapters is live in `packages/`. Active development is on v0.5 (SvelteKit parity) and v0.6 (authentication). Roadmap tracked at `binsarjr/sveltego`.
 
 Hard invariants (do not reopen without new evidence — see `tasks/lessons.md` "Pivot to Go-native rewrite"):
 

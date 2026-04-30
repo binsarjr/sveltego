@@ -31,7 +31,7 @@ hello/
   src/
     routes/
       +page.svelte
-      +page.server.go      # //go:build sveltego
+      page.server.go       # //go:build sveltego
     hooks.server.go        # //go:build sveltego (optional)
     lib/                   # $lib alias target
   go.mod
@@ -53,7 +53,7 @@ hello/
 <h1>{Data.Greeting}</h1>
 ```
 
-`src/routes/+page.server.go`:
+`src/routes/page.server.go`:
 
 ```go
 //go:build sveltego

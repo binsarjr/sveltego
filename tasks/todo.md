@@ -22,7 +22,7 @@ The effort is comparable but the rewrite trade buys us performance, deploy simpl
 
 Tracked as GitHub milestones at `binsarjr/sveltego`. Each issue carries Summary, Background, Goals, Non-Goals, Detailed Design, Acceptance Criteria, Testing Strategy, Risks, Dependencies, References.
 
-### MVP (37 issues) — minimum to render a page
+### MVP (42 issues) — minimum to render a page
 
 Foundation layer first: monorepo layout RFC (#95), code style + stability RFCs (#96, #97), lint + hooks + release-please + CI + PR template + AI doc sync + golden tests + bench gate (#98–105). Then technical RFCs (parser strategy, expression syntax, file convention, codegen layout — #1–4), then bootstrap (Go module, CLI), then the core pipeline:
 
@@ -39,7 +39,7 @@ Foundation layer first: monorepo layout RFC (#95), code style + stability RFCs (
 
 Layout chain rendering, `layout.server.go` parent data flow, `Handle` / `HandleError` / `HandleFetch` / `Reroute` / `Init`, `+error.svelte` boundaries, `server.go` REST endpoints, `Actions()` map with form binding (urlencoded + multipart), `kit.Cookies`, `kit.Redirect / Fail / Error` sentinel helpers, route groups `(group)/` + layout reset `@`, page options (`Prerender`, `SSR`, `CSR`, `TrailingSlash`), env var convention (`$env/static`, `$env/dynamic`).
 
-### v0.3 (13 issues) — Client SPA & Hydration
+### v0.3 (21 issues) — Client SPA & Hydration
 
 Vite integration for the Svelte client bundle, `window.__sveltego__` hydration payload, client hydrate runtime, SPA router (link interception + history), `__data.json` per-route endpoint, `use:enhance` for forms, prefetch on hover/viewport, precompressed static asset serving, `sveltego dev` with HMR. Full `$app/navigation` API (`goto`, `invalidate`, `preload`, `pushState`), Snapshot API for cross-nav state, typed `kit.Link` with route params, `kit.Asset` with hashed static URLs.
 
@@ -47,9 +47,17 @@ Vite integration for the Svelte client bundle, `window.__sveltego__` hydration p
 
 Runes: `$props`, `$state`, `$derived`, `$effect`, `$bindable`. Snippets and `{@render}`. Legacy slots (default + named, with slot props). Special elements: `<svelte:head>`, `<svelte:body>` / `<svelte:window>` / `<svelte:document>`, `<svelte:component>`, `<svelte:options>`. CSS scope hash matching upstream. `{@html}`, `{@const}`, `{#await}`, `{#key}`. Nested component import and rendering. Compile-time a11y warnings.
 
-### v1.0 (14 issues) — Production Ready
+### v0.5 (23 issues) — SvelteKit Parity Catch-up
 
-Benchmark suite vs adapter-bun with nightly regression gate. Docs site (Vitepress). Blog and dashboard examples. Streaming responses. Prerender / SSG mode. CSP nonce injection. CI (GitHub Actions). Release pipeline (release-please + GoReleaser). LSP for `.svelte` with Go expressions. Sitemap/robots helpers, image optimization (`<Image>`), service worker convention, deploy adapters (server, docker, static, lambda, cloudflare).
+Parity issues backported from upstream SvelteKit: `SSROnly` page option (forbid `__data.json` scrape), `RedirectReload` force-reload redirect, `LoadCtx.Header()` Set/Add semantics, `LoadCtx.RawParam()` for un-decoded params, `Init()` error with pending fallback pages, `--release` / `SVELTEGO_RELEASE=1` to strip `src/lib/dev/`, `kit.HTTPError` interface for typed status mapping, `kit.Error` default message via `http.StatusText`, route scanner ignoring test files, preserve headers/cookies on error responses. Also: cookie-session auth library foundations (#195–#203).
+
+### v0.6 (40 issues) — Authentication
+
+`packages/auth/cookiesession`: crypto core (AES-256-GCM, secret rotation), `Session[T]` struct, `Handle[T]` middleware factory, `From[T]` accessor, counter playground, docs page (API + threat model + rotation playbook). Full bench harness vs upstream better-auth.
+
+### v1.0 (25 issues) — Production Ready
+
+Benchmark suite vs adapter-bun with nightly regression gate. Docs site (Vitepress). Blog and dashboard examples. Streaming responses. Prerender / SSG mode. CSP nonce injection. CI (GitHub Actions). Release pipeline (release-please + GoReleaser). LSP for `.svelte` with Go expressions. Sitemap/robots helpers, image optimization (`<Image>`), service worker convention, deploy adapters (server, docker, static, lambda, cloudflare). Tailwind v4 migration for examples.
 
 ### v1.1 (6 issues) — LLM & AI Tooling
 
@@ -74,7 +82,7 @@ Benchmark suite vs adapter-bun with nightly regression gate. Docs site (Vitepres
 - [x] Direction confirmed (Go-native rewrite, not JS embed)
 - [x] Repo created at `binsarjr/sveltego`
 - [x] Issue templates (feature, RFC, bug)
-- [x] 20 labels, 6 milestones, 105 issues created
+- [x] 20 labels, 8 milestones created (v0.5 + v0.6 added post-MVP)
 - [x] All 69 original issues rewritten in English with industry-standard detail
 - [x] v1.1 milestone added — LLM & AI tooling (#70–75)
 - [x] SvelteKit-parity gap audit + 19 issues filed with priorities (#76–94)
