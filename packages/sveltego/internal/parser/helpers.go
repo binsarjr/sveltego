@@ -209,6 +209,20 @@ func elementStop(_ string) stopFn {
 	}
 }
 
+// extractScriptModule reports whether a raw `<script ...>` open tag value
+// carries the Svelte 5 `module` boolean attribute (i.e. `<script module>`
+// or `<script module lang="...">`). The legacy `context="module"` form is
+// not accepted; Svelte 5 deprecated it.
+func extractScriptModule(openValue string) bool {
+	inner := strings.TrimSuffix(strings.TrimPrefix(openValue, "<script"), ">")
+	for _, field := range strings.Fields(inner) {
+		if field == "module" {
+			return true
+		}
+	}
+	return false
+}
+
 // extractScriptLang reads the `lang` attribute out of a raw `<script ...>`
 // open tag value. Returns "" when lang is absent.
 func extractScriptLang(openValue string) string {

@@ -1,1 +1,1 @@
-7:1: at most two <script> blocks allowed (one regular plus one context="module")
+7:1: at most two <script> blocks allowed (one regular plus one `<script module>`)

@@ -269,7 +269,10 @@ func TestGenerateNavigationModule(t *testing.T) {
 func TestGenerateClientEntry_importsRouter(t *testing.T) {
 	t.Parallel()
 
-	src := GenerateClientEntry("../../routes/+page.svelte", "../__router/router")
+	src := GenerateClientEntry(ClientEntryOptions{
+		RelSveltePath: "../../routes/+page.svelte",
+		RelRouterPath: "../__router/router",
+	})
 	for _, want := range []string{
 		`import Page from "../../routes/+page.svelte"`,
 		`import { startRouter } from "../__router/router"`,
@@ -279,5 +282,98 @@ func TestGenerateClientEntry_importsRouter(t *testing.T) {
 		if !strings.Contains(src, want) {
 			t.Errorf("entry missing %q:\n%s", want, src)
 		}
+	}
+	if strings.Contains(src, "snapshot") {
+		t.Errorf("entry should not reference snapshot when HasSnapshot=false:\n%s", src)
+	}
+}
+
+// TestGenerateClientEntry_snapshotImport asserts that opting in routes
+// pull the `snapshot` named export out of the +page.svelte module and
+// hand it to startRouter.
+func TestGenerateClientEntry_snapshotImport(t *testing.T) {
+	t.Parallel()
+
+	src := GenerateClientEntry(ClientEntryOptions{
+		RelSveltePath: "../../routes/+page.svelte",
+		RelRouterPath: "../__router/router",
+		HasSnapshot:   true,
+	})
+	for _, want := range []string{
+		`import Page, { snapshot } from "../../routes/+page.svelte"`,
+		"startRouter({ component, payload, target: document.body, snapshot })",
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("entry missing %q:\n%s", want, src)
+		}
+	}
+}
+
+// TestGenerateRouter_snapshotRuntime asserts the snapshot capture and
+// restore plumbing is emitted: an in-memory map keyed by history id,
+// capture before navigate, restore after mount on popstate.
+func TestGenerateRouter_snapshotRuntime(t *testing.T) {
+	t.Parallel()
+
+	src := GenerateRouter(RouterOptions{
+		Routes:         map[string]string{"/": "../routes/+page.svelte"},
+		SnapshotRoutes: map[string]bool{"/": true},
+	})
+	for _, want := range []string{
+		`"/": true`,
+		"function captureSnapshot()",
+		"function restoreSnapshot(",
+		"const snapshots = new Map<number, unknown>",
+		"snapshots.set(currentHistoryId, currentSnapshot.capture())",
+		"snapshotRoutes[routeId] ? mod.snapshot ?? null : null",
+		"captureSnapshot();",
+		"snapshot?: Snapshot",
+		"restoreSnapshot(opts.restoreId)",
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("router missing snapshot wiring %q:\n%s", want, src)
+		}
+	}
+}
+
+// TestGenerateRouter_snapshotKeysSorted asserts the snapshotRoutes
+// table is emitted in deterministic key order so generated output is
+// reproducible across runs.
+func TestGenerateRouter_snapshotKeysSorted(t *testing.T) {
+	t.Parallel()
+
+	src := GenerateRouter(RouterOptions{
+		Routes: map[string]string{
+			"/a": "../routes/a/+page.svelte",
+			"/m": "../routes/m/+page.svelte",
+			"/z": "../routes/z/+page.svelte",
+		},
+		SnapshotRoutes: map[string]bool{
+			"/z": true,
+			"/a": true,
+			"/m": true,
+		},
+	})
+	posA := strings.Index(src, `"/a": true`)
+	posM := strings.Index(src, `"/m": true`)
+	posZ := strings.Index(src, `"/z": true`)
+	if !(posA > 0 && posA < posM && posM < posZ) {
+		t.Fatalf("snapshot keys out of order: a=%d m=%d z=%d\n%s", posA, posM, posZ, src)
+	}
+}
+
+// TestGenerateRouter_noSnapshotRoutes asserts that a router with no
+// snapshot routes still emits the runtime hooks but a never-true table.
+func TestGenerateRouter_noSnapshotRoutes(t *testing.T) {
+	t.Parallel()
+
+	src := GenerateRouter(RouterOptions{
+		Routes: map[string]string{"/": "../routes/+page.svelte"},
+	})
+	if !strings.Contains(src, "const snapshotRoutes: Record<string, true> = {\n};") {
+		t.Errorf("expected empty snapshotRoutes table:\n%s", src)
+	}
+	if !strings.Contains(src, "function captureSnapshot()") {
+		t.Errorf("router still needs captureSnapshot helper:\n%s", src)
 	}
 }

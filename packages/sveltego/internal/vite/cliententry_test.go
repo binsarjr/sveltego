@@ -7,7 +7,10 @@ import (
 
 func TestGenerateClientEntry_ImportsEnhance(t *testing.T) {
 	t.Parallel()
-	out := GenerateClientEntry("../../../src/routes/+page.svelte", "../../__router/router")
+	out := GenerateClientEntry(ClientEntryOptions{
+		RelSveltePath: "../../../src/routes/+page.svelte",
+		RelRouterPath: "../../__router/router",
+	})
 	if !strings.Contains(out, "import { enhance } from './enhance';") {
 		t.Errorf("expected enhance import in entry.ts:\n%s", out)
 	}

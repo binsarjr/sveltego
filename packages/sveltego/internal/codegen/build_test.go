@@ -522,6 +522,63 @@ func TestBuild_EmitsSPARouterModule(t *testing.T) {
 	}
 }
 
+func TestBuild_EmitsSnapshotWiring(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/snap\n\ngo 1.22\n")
+	writeFile(t, filepath.Join(root, "src", "routes", "+page.svelte"),
+		`<script module>
+export const snapshot = {
+  capture: () => window.scrollY,
+  restore: (y) => window.scrollTo(0, y),
+};
+</script>
+<h1>hi</h1>
+`)
+	writeFile(t, filepath.Join(root, "src", "routes", "plain", "+page.svelte"),
+		"<p>plain</p>\n")
+
+	if _, err := Build(BuildOptions{ProjectRoot: root}); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	routerPath := filepath.Join(root, ".gen", "client", "__router", "router.ts")
+	routerBytes, err := os.ReadFile(routerPath)
+	if err != nil {
+		t.Fatalf("router.ts not emitted: %v", err)
+	}
+	if !bytes.Contains(routerBytes, []byte(`"/": true,`)) {
+		t.Errorf("snapshot route /  missing from snapshotRoutes table:\n%s", routerBytes)
+	}
+	if bytes.Contains(routerBytes, []byte(`"/plain": true`)) {
+		t.Errorf("snapshot-free route /plain should not appear in snapshotRoutes:\n%s", routerBytes)
+	}
+	if !bytes.Contains(routerBytes, []byte("function captureSnapshot()")) {
+		t.Errorf("router missing captureSnapshot helper:\n%s", routerBytes)
+	}
+
+	rootEntry := filepath.Join(root, ".gen", "client", "routes", "+page", "entry.ts")
+	rootEntryBytes, err := os.ReadFile(rootEntry)
+	if err != nil {
+		t.Fatalf("root entry.ts not emitted: %v", err)
+	}
+	if !bytes.Contains(rootEntryBytes, []byte(`import Page, { snapshot } from`)) {
+		t.Errorf("snapshot route entry.ts missing snapshot import:\n%s", rootEntryBytes)
+	}
+	if !bytes.Contains(rootEntryBytes, []byte(`startRouter({ component, payload, target: document.body, snapshot })`)) {
+		t.Errorf("snapshot route entry.ts must hand snapshot to startRouter:\n%s", rootEntryBytes)
+	}
+
+	plainEntry := filepath.Join(root, ".gen", "client", "routes", "plain", "+page", "entry.ts")
+	plainEntryBytes, err := os.ReadFile(plainEntry)
+	if err != nil {
+		t.Fatalf("plain entry.ts not emitted: %v", err)
+	}
+	if bytes.Contains(plainEntryBytes, []byte("snapshot")) {
+		t.Errorf("plain route should not import snapshot:\n%s", plainEntryBytes)
+	}
+}
+
 func TestBuild_EmbedSkippedWhenNoAssets(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
