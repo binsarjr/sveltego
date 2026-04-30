@@ -140,8 +140,8 @@ func TestHooks_ShortCircuitSkipsRoute(t *testing.T) {
 func TestHooks_HandleErrorTransformsLoadError(t *testing.T) {
 	t.Parallel()
 	hooks := kit.Hooks{
-		HandleError: func(_ *kit.RequestEvent, _ error) kit.SafeError {
-			return kit.SafeError{Code: http.StatusBadGateway, Message: "upstream", ID: "rid-1"}
+		HandleError: func(_ *kit.RequestEvent, _ error) (kit.SafeError, error) {
+			return kit.SafeError{Code: http.StatusBadGateway, Message: "upstream", ID: "rid-1"}, nil
 		},
 	}
 	srv := newHookServer(t, hooks, []router.Route{{
@@ -320,8 +320,8 @@ func TestHooks_InitErrorServesFallback(t *testing.T) {
 func TestHooks_HandleErrorIDPropagates(t *testing.T) {
 	t.Parallel()
 	hooks := kit.Hooks{
-		HandleError: func(_ *kit.RequestEvent, _ error) kit.SafeError {
-			return kit.SafeError{Code: 503, Message: "down", ID: "rid-x"}
+		HandleError: func(_ *kit.RequestEvent, _ error) (kit.SafeError, error) {
+			return kit.SafeError{Code: 503, Message: "down", ID: "rid-x"}, nil
 		},
 	}
 	srv := newHookServer(t, hooks, []router.Route{{
@@ -350,8 +350,8 @@ func TestHooks_HandleErrorCatchesHandleErrors(t *testing.T) {
 		Handle: func(_ *kit.RequestEvent, _ kit.ResolveFn) (*kit.Response, error) {
 			return nil, errors.New("handle exploded")
 		},
-		HandleError: func(_ *kit.RequestEvent, _ error) kit.SafeError {
-			return kit.SafeError{Code: 502, Message: "handle bad"}
+		HandleError: func(_ *kit.RequestEvent, _ error) (kit.SafeError, error) {
+			return kit.SafeError{Code: 502, Message: "handle bad"}, nil
 		},
 	}
 	srv := newHookServer(t, hooks, []router.Route{{
@@ -377,8 +377,8 @@ func TestHooks_HandleErrorCatchesHandleErrors(t *testing.T) {
 func TestHooks_PanicInLoadFlowsToHandleError(t *testing.T) {
 	t.Parallel()
 	hooks := kit.Hooks{
-		HandleError: func(_ *kit.RequestEvent, err error) kit.SafeError {
-			return kit.SafeError{Code: http.StatusInternalServerError, Message: "sanitized: " + err.Error(), ID: "rid-9"}
+		HandleError: func(_ *kit.RequestEvent, err error) (kit.SafeError, error) {
+			return kit.SafeError{Code: http.StatusInternalServerError, Message: "sanitized: " + err.Error(), ID: "rid-9"}, nil
 		},
 	}
 	srv := newHookServer(t, hooks, []router.Route{{
@@ -420,5 +420,105 @@ func TestHooks_DefaultHooks_passthrough(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "home") {
 		t.Errorf("status=%d body=%q", resp.StatusCode, body)
+	}
+}
+
+func TestHandleError_RedirectShortCircuit(t *testing.T) {
+	t.Parallel()
+	hooks := kit.Hooks{
+		HandleError: func(_ *kit.RequestEvent, _ error) (kit.SafeError, error) {
+			return kit.SafeError{}, kit.Redirect(302, "/login")
+		},
+	}
+	srv := newHookServer(t, hooks, []router.Route{{
+		Pattern: "/", Segments: segmentsFor("/"),
+		Page: staticPage("secret"),
+		Load: func(_ *kit.LoadCtx) (any, error) {
+			return nil, errors.New("unauthenticated")
+		},
+	}})
+	ts := httptest.NewServer(srv)
+	t.Cleanup(ts.Close)
+
+	client := &http.Client{
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	resp, err := client.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusFound {
+		t.Errorf("status = %d, want 302", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Location"); got != "/login" {
+		t.Errorf("Location = %q, want /login", got)
+	}
+}
+
+func TestHandleError_HTTPErrShortCircuit(t *testing.T) {
+	t.Parallel()
+	hooks := kit.Hooks{
+		HandleError: func(_ *kit.RequestEvent, _ error) (kit.SafeError, error) {
+			return kit.SafeError{}, kit.Error(http.StatusPaymentRequired, "subscribe to unlock")
+		},
+	}
+	srv := newHookServer(t, hooks, []router.Route{{
+		Pattern: "/about", Segments: segmentsFor("/about"),
+		Page: staticPage("premium"),
+		Load: func(_ *kit.LoadCtx) (any, error) {
+			return nil, errors.New("paywall")
+		},
+	}})
+	ts := httptest.NewServer(srv)
+	t.Cleanup(ts.Close)
+
+	resp, err := http.Get(ts.URL + "/about")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusPaymentRequired {
+		t.Errorf("status = %d, want 402", resp.StatusCode)
+	}
+	if !strings.Contains(string(body), "subscribe to unlock") {
+		t.Errorf("body = %q, want subscribe to unlock", body)
+	}
+}
+
+func TestHandleError_PlainErrorFallsThroughToBoundary(t *testing.T) {
+	t.Parallel()
+	hooks := kit.Hooks{
+		HandleError: func(_ *kit.RequestEvent, _ error) (kit.SafeError, error) {
+			return kit.SafeError{Code: http.StatusInternalServerError, Message: "boundary reached"}, nil
+		},
+	}
+	srv := newHookServer(t, hooks, []router.Route{{
+		Pattern: "/", Segments: segmentsFor("/"),
+		Page: staticPage("x"),
+		Load: func(_ *kit.LoadCtx) (any, error) {
+			return nil, errors.New("plain error")
+		},
+	}})
+	ts := httptest.NewServer(srv)
+	t.Cleanup(ts.Close)
+
+	resp, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", resp.StatusCode)
+	}
+	if !strings.Contains(string(body), "boundary reached") {
+		t.Errorf("body = %q, want boundary reached", body)
 	}
 }

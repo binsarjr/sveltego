@@ -50,8 +50,8 @@ func Handle(ev *kit.RequestEvent, resolve kit.ResolveFn) (*kit.Response, error) 
 	return resolve(ev)
 }
 
-func HandleError(ev *kit.RequestEvent, err error) kit.SafeError {
-	return kit.SafeError{Code: 500}
+func HandleError(ev *kit.RequestEvent, err error) (kit.SafeError, error) {
+	return kit.SafeError{Code: 500}, nil
 }
 
 func HandleFetch(ev *kit.RequestEvent, req *http.Request) (*http.Response, error) {
