@@ -1,14 +1,18 @@
 package server
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/binsarjr/sveltego/exports/kit"
 	"github.com/binsarjr/sveltego/render"
@@ -67,6 +71,11 @@ func hasAnyLayoutLoader(loaders []router.LayoutLoadHandler) bool {
 // the surrounding pipeline must not emit anything else.
 var errServerRouteWrote = errors.New("server: server route wrote response")
 
+// errStreamingWrote signals the streaming render path already wrote the
+// chunked HTML response to the underlying http.ResponseWriter, so the
+// surrounding pipeline must skip writeResponse and any error wrapping.
+var errStreamingWrote = errors.New("server: streaming response wrote")
+
 // handle is the request entry point. It builds a RequestEvent, runs the
 // optional Reroute hook, then dispatches through the user's Handle (or
 // kit.IdentityHandle when none was authored). The inner resolve closure
@@ -92,7 +101,7 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 
 	res, err := s.runHandle(ev, resolve)
 	if err != nil {
-		if errors.Is(err, errServerRouteWrote) {
+		if errors.Is(err, errServerRouteWrote) || errors.Is(err, errStreamingWrote) {
 			return
 		}
 		s.handlePipelineError(w, r, ev, matched, err)
@@ -185,7 +194,7 @@ func (s *Server) resolve(w http.ResponseWriter, r *http.Request, ev *kit.Request
 	if !optionsAllowSSR(route.Options) {
 		return s.renderEmptyShell(), nil
 	}
-	return s.renderPage(r, ev, route, form)
+	return s.renderPage(w, r, ev, route, form)
 }
 
 // optionsAllowSSR returns true unless the route declared SSR=false. The
@@ -264,12 +273,14 @@ func canonicalRedirect(u *url.URL, path string) string {
 	return out.RequestURI()
 }
 
-// renderPage runs the load chain and renders the page into a fresh
-// buffer, returning a Response carrying the rendered HTML, status, and
-// the Set-Cookie headers accumulated by Load handlers. When form is
-// non-nil the page's PageData.Form field is set from form.data and the
-// response status follows form.code.
-func (s *Server) renderPage(r *http.Request, ev *kit.RequestEvent, route *router.Route, form *formData) (*kit.Response, error) {
+// renderPage runs the load chain and renders the page. When the load
+// chain produced no kit.Streamed values it returns a buffered Response
+// carrying the rendered HTML, status, and headers; when streams are
+// present it switches to the chunked streaming path which writes
+// directly to w and returns errStreamingWrote so writeResponse is
+// skipped. When form is non-nil the page's PageData.Form field is set
+// from form.data and the response status follows form.code.
+func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.RequestEvent, route *router.Route, form *formData) (*kit.Response, error) {
 	var (
 		data        any
 		layoutDatas []any
@@ -303,9 +314,6 @@ func (s *Server) renderPage(r *http.Request, ev *kit.RequestEvent, route *router
 		data = injectFormField(data, form.data)
 	}
 
-	buf := render.Acquire()
-	defer render.Release(buf)
-
 	rctx := &kit.RenderCtx{
 		Locals:  ev.Locals,
 		URL:     ev.URL,
@@ -327,6 +335,21 @@ func (s *Server) renderPage(r *http.Request, ev *kit.RequestEvent, route *router
 			return layout(buf, rctx, layoutData, next)
 		}
 	}
+
+	streams := collectStreams(data, layoutDatas)
+	if len(streams) > 0 {
+		status := http.StatusOK
+		if form != nil && form.code != 0 {
+			status = form.code
+		}
+		if err := s.renderStreaming(w, r, ev, inner, streams, status); err != nil {
+			return nil, err
+		}
+		return nil, errStreamingWrote
+	}
+
+	buf := render.Acquire()
+	defer render.Release(buf)
 
 	buf.WriteString(s.shellHead)
 	buf.WriteString(s.shellMid)
@@ -350,6 +373,153 @@ func (s *Server) renderPage(r *http.Request, ev *kit.RequestEvent, route *router
 		Headers: headers,
 		Body:    body,
 	}, nil
+}
+
+// streamedField pairs the runtime-erased Streamed wrapper with the
+// stable ID emitted in the resolve script so the client patch lands on
+// the right placeholder slot.
+type streamedField struct {
+	id     uint64
+	stream kit.StreamedAny
+}
+
+// collectStreams walks data and every layoutData via reflection and
+// returns each kit.Streamed value found in a struct field. Map values,
+// slice elements, and unexported fields are not traversed; user code
+// that wants to stream nested data should expose it through a top-level
+// field. Returned streams retain the discovery order so resolve scripts
+// emit deterministically.
+func collectStreams(data any, layoutDatas []any) []streamedField {
+	var out []streamedField
+	out = appendStreams(out, data)
+	for _, ld := range layoutDatas {
+		out = appendStreams(out, ld)
+	}
+	return out
+}
+
+func appendStreams(dst []streamedField, v any) []streamedField {
+	if v == nil {
+		return dst
+	}
+	rv := reflect.ValueOf(v)
+	if rv.Kind() == reflect.Pointer {
+		if rv.IsNil() {
+			return dst
+		}
+		rv = rv.Elem()
+	}
+	if rv.Kind() != reflect.Struct {
+		return dst
+	}
+	for i := 0; i < rv.NumField(); i++ {
+		if !rv.Field(i).CanInterface() {
+			continue
+		}
+		fv := rv.Field(i).Interface()
+		if s, ok := fv.(kit.StreamedAny); ok && s != nil {
+			dst = append(dst, streamedField{id: s.StreamID(), stream: s})
+		}
+	}
+	return dst
+}
+
+// renderStreaming writes the chunked HTML response to w. It flushes the
+// shell + page body first, then waits on each stream in registration
+// order, emitting a __sveltego__resolve script per resolution. The
+// shellTail closes the document only after every stream resolves or
+// fails, so the response body is well-formed HTML even on timeout.
+func (s *Server) renderStreaming(w http.ResponseWriter, r *http.Request, ev *kit.RequestEvent, inner func(*render.Writer) error, streams []streamedField, status int) error {
+	if ev.Cookies != nil {
+		ev.Cookies.Apply(w)
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.Header().Del("Content-Length")
+	w.WriteHeader(status)
+
+	buf := render.Acquire()
+	defer render.Release(buf)
+
+	buf.WriteString(s.shellHead)
+	buf.WriteString(s.shellMid)
+	if err := inner(buf); err != nil {
+		return err
+	}
+	if err := buf.FlushTo(w); err != nil {
+		return err
+	}
+
+	ctx := r.Context()
+	for _, f := range streams {
+		emitResolveScript(ctx, buf, f.id, f.stream, s.streamTimeout)
+		if err := buf.FlushTo(w); err != nil {
+			return err
+		}
+	}
+
+	buf.WriteString(s.shellTail)
+	return buf.FlushTo(w)
+}
+
+// emitResolveScript writes a single <script>__sveltego__resolve(id, ...)</script>
+// chunk for the stream. On success the JSON value is the resolved data;
+// on timeout, cancellation, or producer error the call carries an error
+// object the client can branch on. Errors are intentionally string-only
+// to avoid leaking goroutine internals.
+func emitResolveScript(ctx context.Context, buf *render.Writer, id uint64, stream kit.StreamedAny, timeout time.Duration) {
+	v, err := stream.WaitAny(ctx, timeout)
+	buf.WriteString(`<script>__sveltego__resolve(`)
+	buf.WriteString(strconv.FormatUint(id, 10))
+	buf.WriteString(`,`)
+	if err != nil {
+		buf.WriteString(`{"error":`)
+		writeJSONString(buf, err.Error())
+		buf.WriteString(`}`)
+	} else {
+		if encoded, mErr := json.Marshal(v); mErr != nil {
+			buf.WriteString(`{"error":`)
+			writeJSONString(buf, mErr.Error())
+			buf.WriteString(`}`)
+		} else {
+			buf.WriteString(`{"data":`)
+			buf.WriteString(string(escapeScriptJSON(encoded)))
+			buf.WriteString(`}`)
+		}
+	}
+	buf.WriteString(`)</script>`)
+}
+
+// writeJSONString emits s as a JSON string into buf. The fallback path
+// uses json.Marshal so escape rules match the encoder used for the
+// primary payload.
+func writeJSONString(buf *render.Writer, s string) {
+	encoded, err := json.Marshal(s)
+	if err != nil {
+		buf.WriteString(`""`)
+		return
+	}
+	buf.WriteString(string(escapeScriptJSON(encoded)))
+}
+
+// escapeScriptJSON neutralizes "</" and "<!--" sequences inside a JSON
+// payload so an attacker-controlled string can't terminate the enclosing
+// <script> tag or open an HTML comment. Other "<" characters pass through
+// because they're already inside a JSON string literal that the browser's
+// JS parser treats as ordinary text.
+func escapeScriptJSON(p []byte) []byte {
+	if len(p) == 0 {
+		return p
+	}
+	out := make([]byte, 0, len(p))
+	for i := 0; i < len(p); i++ {
+		if p[i] == '<' && i+1 < len(p) && (p[i+1] == '/' || p[i+1] == '!') {
+			out = append(out, '\\', 'u', '0', '0', '3', 'c')
+			continue
+		}
+		out = append(out, p[i])
+	}
+	return out
 }
 
 // writeResponse flushes a Response built by Handle (or its short-circuit

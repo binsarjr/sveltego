@@ -46,14 +46,19 @@ type Config struct {
 	// Content-Security-Policy header. The zero value (Mode CSPOff)
 	// disables the middleware so existing behavior is preserved.
 	CSP kit.CSPConfig
+	// StreamTimeout caps how long the streaming render path waits for
+	// each kit.Streamed value before emitting a timeout error patch.
+	// Zero falls back to kit.DefaultStreamTimeout.
+	StreamTimeout time.Duration
 }
 
 // Server is the http.Handler implementation that drives a sveltego app.
 type Server struct {
-	tree   *router.Tree
-	Logger *slog.Logger
-	hooks  kit.Hooks
-	csp    kit.CSPConfig
+	tree          *router.Tree
+	Logger        *slog.Logger
+	hooks         kit.Hooks
+	csp           kit.CSPConfig
+	streamTimeout time.Duration
 
 	shellHead string
 	shellMid  string
@@ -90,14 +95,19 @@ func New(cfg Config) (*Server, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
+	streamTimeout := cfg.StreamTimeout
+	if streamTimeout <= 0 {
+		streamTimeout = kit.DefaultStreamTimeout
+	}
 	return &Server{
-		tree:      tree,
-		Logger:    logger,
-		hooks:     cfg.Hooks.WithDefaults(),
-		csp:       cfg.CSP,
-		shellHead: head,
-		shellMid:  mid,
-		shellTail: tail,
+		tree:          tree,
+		Logger:        logger,
+		hooks:         cfg.Hooks.WithDefaults(),
+		csp:           cfg.CSP,
+		streamTimeout: streamTimeout,
+		shellHead:     head,
+		shellMid:      mid,
+		shellTail:     tail,
 	}, nil
 }
 
