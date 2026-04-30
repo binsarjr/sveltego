@@ -148,8 +148,8 @@ func (s *Store) CreateUser(ctx context.Context, u *auth.User) error {
 
 // UserByID returns the user with the given id. Returns ErrNotFound if absent.
 func (s *Store) UserByID(ctx context.Context, id string) (*auth.User, error) {
-	q := fmt.Sprintf(`SELECT id, email, email_verified, name, image, created_at, updated_at
-		FROM auth_users WHERE id = %s`, s.ph(1))
+	q := `SELECT id, email, email_verified, name, image, created_at, updated_at
+		FROM auth_users WHERE id = ` + s.ph(1)
 
 	row := s.db.QueryRowContext(ctx, q, id)
 	return s.scanUser(row)
@@ -157,8 +157,8 @@ func (s *Store) UserByID(ctx context.Context, id string) (*auth.User, error) {
 
 // UserByEmail returns the user with the given email. Returns ErrNotFound if absent.
 func (s *Store) UserByEmail(ctx context.Context, email string) (*auth.User, error) {
-	q := fmt.Sprintf(`SELECT id, email, email_verified, name, image, created_at, updated_at
-		FROM auth_users WHERE email = %s`, s.ph(1))
+	q := `SELECT id, email, email_verified, name, image, created_at, updated_at
+		FROM auth_users WHERE email = ` + s.ph(1)
 
 	row := s.db.QueryRowContext(ctx, q, email)
 	return s.scanUser(row)
@@ -233,7 +233,7 @@ func (s *Store) DeleteUser(ctx context.Context, id string) error {
 	}()
 
 	// Verify the user exists first.
-	checkQ := fmt.Sprintf(`SELECT 1 FROM auth_users WHERE id = %s`, s.ph(1))
+	checkQ := `SELECT 1 FROM auth_users WHERE id = ` + s.ph(1)
 	var dummy int
 	err = tx.QueryRowContext(ctx, checkQ, id).Scan(&dummy)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -244,11 +244,12 @@ func (s *Store) DeleteUser(ctx context.Context, id string) error {
 		return err
 	}
 
+	ph := s.ph(1)
 	for _, delQ := range []string{
-		fmt.Sprintf(`DELETE FROM auth_sessions      WHERE user_id = %s`, s.ph(1)),
-		fmt.Sprintf(`DELETE FROM auth_accounts      WHERE user_id = %s`, s.ph(1)),
-		fmt.Sprintf(`DELETE FROM auth_verifications WHERE user_id = %s`, s.ph(1)),
-		fmt.Sprintf(`DELETE FROM auth_users         WHERE id      = %s`, s.ph(1)),
+		`DELETE FROM auth_sessions      WHERE user_id = ` + ph,
+		`DELETE FROM auth_accounts      WHERE user_id = ` + ph,
+		`DELETE FROM auth_verifications WHERE user_id = ` + ph,
+		`DELETE FROM auth_users         WHERE id      = ` + ph,
 	} {
 		if _, err = tx.ExecContext(ctx, delQ, id); err != nil {
 			return err
@@ -279,9 +280,9 @@ func (s *Store) CreateSession(ctx context.Context, sess *auth.Session) error {
 // SessionByToken returns the session for the given token. Returns ErrNotFound
 // if absent, or ErrSessionExpired if the session is past its ExpiresAt.
 func (s *Store) SessionByToken(ctx context.Context, token string) (*auth.Session, error) {
-	q := fmt.Sprintf(`SELECT id, user_id, token, expires_at, fresh_until,
+	q := `SELECT id, user_id, token, expires_at, fresh_until,
 		ip_address, user_agent, created_at, updated_at
-		FROM auth_sessions WHERE token = %s`, s.ph(1))
+		FROM auth_sessions WHERE token = ` + s.ph(1)
 
 	row := s.db.QueryRowContext(ctx, q, token)
 
@@ -342,14 +343,14 @@ func (s *Store) RefreshSession(ctx context.Context, token string, newExpiry time
 
 // RevokeSession deletes the session identified by token. Idempotent.
 func (s *Store) RevokeSession(ctx context.Context, token string) error {
-	q := fmt.Sprintf(`DELETE FROM auth_sessions WHERE token = %s`, s.ph(1))
+	q := `DELETE FROM auth_sessions WHERE token = ` + s.ph(1)
 	_, err := s.db.ExecContext(ctx, q, token)
 	return err
 }
 
 // RevokeAllSessions deletes every session belonging to userID. Idempotent.
 func (s *Store) RevokeAllSessions(ctx context.Context, userID string) error {
-	q := fmt.Sprintf(`DELETE FROM auth_sessions WHERE user_id = %s`, s.ph(1))
+	q := `DELETE FROM auth_sessions WHERE user_id = ` + s.ph(1)
 	_, err := s.db.ExecContext(ctx, q, userID)
 	return err
 }
@@ -378,9 +379,9 @@ func (s *Store) CreateAccount(ctx context.Context, a *auth.Account) error {
 // AccountsByUser returns all accounts for the given userID.
 // Returns an empty slice (not ErrNotFound) when the user has no accounts.
 func (s *Store) AccountsByUser(ctx context.Context, userID string) ([]*auth.Account, error) {
-	q := fmt.Sprintf(`SELECT id, user_id, provider, provider_account_id,
+	q := `SELECT id, user_id, provider, provider_account_id,
 		access_token, refresh_token, expires_at, created_at, updated_at
-		FROM auth_accounts WHERE user_id = %s`, s.ph(1))
+		FROM auth_accounts WHERE user_id = ` + s.ph(1)
 
 	rows, err := s.db.QueryContext(ctx, q, userID)
 	if err != nil {
@@ -439,7 +440,7 @@ func (s *Store) LinkAccount(ctx context.Context, a *auth.Account) error {
 // UnlinkAccount removes the account with the given accountID.
 // Returns ErrNotFound if absent.
 func (s *Store) UnlinkAccount(ctx context.Context, accountID string) error {
-	q := fmt.Sprintf(`DELETE FROM auth_accounts WHERE id = %s`, s.ph(1))
+	q := `DELETE FROM auth_accounts WHERE id = ` + s.ph(1)
 	res, err := s.db.ExecContext(ctx, q, accountID)
 	if err != nil {
 		return err
@@ -473,8 +474,8 @@ func (s *Store) CreateVerification(ctx context.Context, v *auth.Verification) er
 // VerificationByCode returns the Verification identified by code (Token).
 // Returns ErrNotFound if absent.
 func (s *Store) VerificationByCode(ctx context.Context, code string) (*auth.Verification, error) {
-	q := fmt.Sprintf(`SELECT id, user_id, kind, token, expires_at, created_at
-		FROM auth_verifications WHERE token = %s`, s.ph(1))
+	q := `SELECT id, user_id, kind, token, expires_at, created_at
+		FROM auth_verifications WHERE token = ` + s.ph(1)
 
 	row := s.db.QueryRowContext(ctx, q, code)
 
@@ -501,7 +502,7 @@ func (s *Store) VerificationByCode(ctx context.Context, code string) (*auth.Veri
 // ConsumeVerification deletes the Verification identified by code.
 // Returns ErrNotFound if absent.
 func (s *Store) ConsumeVerification(ctx context.Context, code string) error {
-	q := fmt.Sprintf(`DELETE FROM auth_verifications WHERE token = %s`, s.ph(1))
+	q := `DELETE FROM auth_verifications WHERE token = ` + s.ph(1)
 	res, err := s.db.ExecContext(ctx, q, code)
 	if err != nil {
 		return err
