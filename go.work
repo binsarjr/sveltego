@@ -17,6 +17,7 @@ use (
 	./packages/sveltego
 	./playgrounds/basic
 	./playgrounds/blog
+	./playgrounds/dashboard
 	./templates/ai
 	./test-utils
 )
