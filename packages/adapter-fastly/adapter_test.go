@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -152,6 +153,9 @@ func TestBuildInvokesTinyGoWithCorrectFlags(t *testing.T) {
 // the wasm artifact when tinygo succeeds. Uses the same fake-tinygo trick.
 func TestBuildWritesFastlyTOML(t *testing.T) {
 	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("fake tinygo uses a sh script; skipped on Windows")
+	}
 
 	tmp := t.TempDir()
 	wasmOut := filepath.Join(tmp, "dist", "main.wasm")
