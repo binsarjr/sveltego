@@ -21,6 +21,7 @@ const (
 func Load(ctx *kit.LoadCtx) (struct {
 	LastUsername string
 	LastError    string
+	Form         any
 }, error,
 ) {
 	username := ""
@@ -36,6 +37,7 @@ func Load(ctx *kit.LoadCtx) (struct {
 	return struct {
 		LastUsername string
 		LastError    string
+		Form         any
 	}{
 		LastUsername: username,
 		LastError:    errMsg,
