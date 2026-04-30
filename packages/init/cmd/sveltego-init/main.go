@@ -2,7 +2,7 @@
 //
 // Usage:
 //
-//	sveltego-init [--ai] [--force] [--non-interactive] [--module path] <target-dir>
+//	sveltego-init [--ai] [--force] [--non-interactive] [--module path] [--tailwind=v4|v3|none] <target-dir>
 //
 // Without --ai, the AI-assistant templates copy is prompted on a TTY and
 // defaulted to false on a piped stdin or with --non-interactive.
@@ -31,7 +31,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("sveltego-init", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: sveltego-init [--ai] [--force] [--non-interactive] [--module path] <target-dir>")
+		fmt.Fprintln(stderr, "Usage: sveltego-init [--ai] [--force] [--non-interactive] [--module path] [--tailwind=v4|v3|none] <target-dir>")
 		fs.PrintDefaults()
 	}
 	var (
@@ -40,7 +40,13 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 		nonInter = fs.Bool("non-interactive", false, "never prompt; default --ai to false if unset")
 		module   = fs.String("module", "", "Go module path for the generated go.mod (defaults to target dir base name)")
 	)
+	tw := tailwindFlag{value: "none"}
+	fs.Var(&tw, "tailwind", "tailwind flavor: v4 (bare flag default), v3 (PostCSS), or none")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	flavor, err := scaffold.ParseTailwindFlavor(tw.value)
+	if err != nil {
 		return err
 	}
 
@@ -65,10 +71,11 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	}
 
 	res, err := scaffold.Run(scaffold.Options{
-		Dir:    target,
-		Module: *module,
-		AI:     wantAI,
-		Force:  *force,
+		Dir:      target,
+		Module:   *module,
+		AI:       wantAI,
+		Force:    *force,
+		Tailwind: flavor,
 	})
 	if err != nil {
 		return err
@@ -84,8 +91,33 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 		fmt.Fprintln(stdout, "")
 		fmt.Fprintf(stdout, "%d file(s) skipped because they already exist. Re-run with --force to overwrite.\n", len(res.Skipped))
 	}
+	if res.InstallCommand != "" {
+		fmt.Fprintln(stdout, "")
+		fmt.Fprintf(stdout, "next step: cd %s && %s\n", target, res.InstallCommand)
+	}
 	return nil
 }
+
+// tailwindFlag is a flag.Value that allows both `--tailwind` (no
+// argument, defaults to "v4") and `--tailwind=v3|v4|none`. Standard
+// flag.String does not accept the bare form for non-bool flags, so we
+// implement IsBoolFlag and reinterpret the synthetic "true" value.
+type tailwindFlag struct{ value string }
+
+func (f *tailwindFlag) String() string { return f.value }
+
+func (f *tailwindFlag) Set(v string) error {
+	if v == "true" {
+		f.value = "v4"
+		return nil
+	}
+	f.value = v
+	return nil
+}
+
+// IsBoolFlag tells the flag package that --tailwind without an argument
+// is acceptable. The package then calls Set("true"), which we trap.
+func (f *tailwindFlag) IsBoolFlag() bool { return true }
 
 func flagWasSet(fs *flag.FlagSet, name string) bool {
 	set := false

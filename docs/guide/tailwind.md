@@ -11,10 +11,10 @@ Tailwind integrates with sveltego through Vite's plugin system. The server binar
 ## Quickstart (Tailwind v4, preferred)
 
 ```sh
-sveltego init --tailwind
+sveltego-init --tailwind ./my-app
 ```
 
-The `--tailwind` flag (tracked in [#207](https://github.com/binsarjr/sveltego/issues/207)) wires up the Vite plugin and inserts the `@source` directive automatically. Until that flag ships, follow the manual steps below.
+The `--tailwind` flag (tracked in [#207](https://github.com/binsarjr/sveltego/issues/207)) is **not yet implemented**; it will wire up the Vite plugin and insert the `@source` directive automatically when it ships. Until then, scaffold without `--tailwind` and follow the manual steps below.
 
 ### Manual setup
 
@@ -179,7 +179,7 @@ sveltego has no built-in dark-mode helper. Toggle a `dark` class on `<html>` fro
 **Can I use Tailwind v3 and v4 at the same time?**
 No. They use different plugin architectures. Pick one per project.
 
-**How do I opt out of Tailwind after running `sveltego init --tailwind`?**
+**How do I opt out of Tailwind after running `sveltego-init --tailwind`?**
 Remove `@tailwindcss/vite` from `vite.config.ts` and `@import "tailwindcss"` from your CSS. No sveltego-specific cleanup is needed.
 
 **Does the scope hash affect Tailwind's JIT output?**

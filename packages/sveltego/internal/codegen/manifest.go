@@ -671,6 +671,11 @@ func formatPageOptions(o kit.PageOptions) string {
 	if o.SSROnly {
 		parts = append(parts, "SSROnly: true")
 	}
+	if o.CSRF {
+		parts = append(parts, "CSRF: true")
+	} else {
+		parts = append(parts, "CSRF: false")
+	}
 	if o.TrailingSlash != kit.TrailingSlashNever {
 		parts = append(parts, "TrailingSlash: "+trailingSlashIdent(o.TrailingSlash))
 	}

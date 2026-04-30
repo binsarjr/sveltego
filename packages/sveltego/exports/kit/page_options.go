@@ -36,29 +36,32 @@ func (ts TrailingSlash) String() string {
 }
 
 // PageOptions carries the page- and layout-level settings declared as
-// exported constants in *.server.go: Prerender, SSR, CSR, SSROnly, and
-// TrailingSlash. Layout-level values cascade to descendants; page-level
-// values override the cascade.
+// exported constants in *.server.go: Prerender, SSR, CSR, SSROnly,
+// TrailingSlash, and CSRF. Layout-level values cascade to descendants;
+// page-level values override the cascade.
 //
-// SSR and CSR default to true; Prerender and SSROnly default to false.
-// Manifest emission stores the effective resolved value per route, so the
-// pipeline does not re-walk the layout chain at request time.
+// SSR, CSR, and CSRF default to true; Prerender and SSROnly default to
+// false. Manifest emission stores the effective resolved value per
+// route, so the pipeline does not re-walk the layout chain at request
+// time.
 type PageOptions struct {
 	Prerender     bool
 	SSR           bool
 	CSR           bool
 	SSROnly       bool
+	CSRF          bool
 	TrailingSlash TrailingSlash
 }
 
-// DefaultPageOptions returns the framework defaults: SSR and CSR on,
-// Prerender off, TrailingSlash never. Codegen seeds the cascade with
-// this value so a project that declares no options gets the same
+// DefaultPageOptions returns the framework defaults: SSR, CSR, and CSRF
+// on, Prerender off, TrailingSlash never. Codegen seeds the cascade
+// with this value so a project that declares no options gets the same
 // behavior as today.
 func DefaultPageOptions() PageOptions {
 	return PageOptions{
 		SSR:           true,
 		CSR:           true,
+		CSRF:          true,
 		TrailingSlash: TrailingSlashNever,
 	}
 }
@@ -82,6 +85,9 @@ func (base PageOptions) Merge(override PageOptionsOverride) PageOptions {
 	if override.HasSSROnly {
 		out.SSROnly = override.SSROnly
 	}
+	if override.HasCSRF {
+		out.CSRF = override.CSRF
+	}
 	if override.HasTrailingSlash {
 		out.TrailingSlash = override.TrailingSlash
 	}
@@ -100,6 +106,8 @@ type PageOptionsOverride struct {
 	HasCSR           bool
 	SSROnly          bool
 	HasSSROnly       bool
+	CSRF             bool
+	HasCSRF          bool
 	TrailingSlash    TrailingSlash
 	HasTrailingSlash bool
 }
@@ -107,5 +115,5 @@ type PageOptionsOverride struct {
 // Any reports whether at least one option is declared. Codegen uses this
 // to skip cascade resolution when the file declares no options at all.
 func (o PageOptionsOverride) Any() bool {
-	return o.HasPrerender || o.HasSSR || o.HasCSR || o.HasSSROnly || o.HasTrailingSlash
+	return o.HasPrerender || o.HasSSR || o.HasCSR || o.HasSSROnly || o.HasCSRF || o.HasTrailingSlash
 }

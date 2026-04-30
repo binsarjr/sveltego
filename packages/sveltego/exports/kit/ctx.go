@@ -63,6 +63,20 @@ func (c *RenderCtx) RawParam(name string) (string, bool) {
 	return v, ok
 }
 
+// CSRFToken returns the per-request CSRF token the pipeline issued for
+// this render, or the empty string when CSRF is disabled for the route.
+// Codegen emits ctx.CSRFToken() into the hidden _csrf_token input on
+// every POST form unless the form carries the nocsrf attribute.
+func (c *RenderCtx) CSRFToken() string {
+	if c == nil || c.Locals == nil {
+		return ""
+	}
+	if v, ok := c.Locals[csrfTokenKey].(string); ok {
+		return v
+	}
+	return ""
+}
+
 // LoadCtx is the request-scoped context handed to user-written Load
 // functions in +page.server.go and +layout.server.go.
 //
