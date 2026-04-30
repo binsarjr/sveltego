@@ -60,7 +60,7 @@ func TestEmitWire_LoadAndActions(t *testing.T) {
 		t.Fatalf("read wire: %v", err)
 	}
 	got := string(src)
-	if !strings.Contains(got, "func Actions() any { return usersrc.Actions() }") {
+	if !strings.Contains(got, "func Actions() any { return usersrc.Actions }") {
 		t.Errorf("missing Actions wrapper:\n%s", got)
 	}
 	if !strings.Contains(got, `usersrc "myapp/.gen/usersrc/routes"`) {
@@ -77,8 +77,9 @@ package origpkg
 
 import "github.com/binsarjr/sveltego/exports/kit"
 
+var Actions = kit.ActionMap{}
+
 func Load(ctx *kit.LoadCtx) (any, error) { return nil, nil }
-func Actions() any                       { return nil }
 `)
 	dir := t.TempDir()
 	userPath := filepath.Join(dir, "page.server.go")

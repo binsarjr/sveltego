@@ -129,10 +129,21 @@ func (s *Server) resolve(w http.ResponseWriter, r *http.Request, ev *kit.Request
 	if route.Page == nil {
 		return nil, kit.SafeError{Code: http.StatusNotFound, Message: http.StatusText(http.StatusNotFound)}
 	}
+	var form *formData
+	if r.Method == http.MethodPost {
+		res, fd, err := s.dispatchAction(r, ev, route)
+		if err != nil {
+			return nil, err
+		}
+		if res != nil {
+			return res, nil
+		}
+		form = fd
+	}
 	if !optionsAllowSSR(route.Options) {
 		return s.renderEmptyShell(), nil
 	}
-	return s.renderPage(r, ev, route)
+	return s.renderPage(r, ev, route, form)
 }
 
 // optionsAllowSSR returns true unless the route declared SSR=false. The
@@ -213,8 +224,10 @@ func canonicalRedirect(u *url.URL, path string) string {
 
 // renderPage runs the load chain and renders the page into a fresh
 // buffer, returning a Response carrying the rendered HTML, status, and
-// the Set-Cookie headers accumulated by Load handlers.
-func (s *Server) renderPage(r *http.Request, ev *kit.RequestEvent, route *router.Route) (*kit.Response, error) {
+// the Set-Cookie headers accumulated by Load handlers. When form is
+// non-nil the page's PageData.Form field is set from form.data and the
+// response status follows form.code.
+func (s *Server) renderPage(r *http.Request, ev *kit.RequestEvent, route *router.Route, form *formData) (*kit.Response, error) {
 	var (
 		data        any
 		layoutDatas []any
@@ -242,6 +255,10 @@ func (s *Server) renderPage(r *http.Request, ev *kit.RequestEvent, route *router
 			}
 			data = d
 		}
+	}
+
+	if form != nil {
+		data = injectFormField(data, form.data)
 	}
 
 	buf := render.Acquire()
@@ -282,8 +299,12 @@ func (s *Server) renderPage(r *http.Request, ev *kit.RequestEvent, route *router
 	headers := http.Header{}
 	headers.Set("Content-Type", "text/html; charset=utf-8")
 	headers.Set("Content-Length", strconv.Itoa(len(body)))
+	status := http.StatusOK
+	if form != nil && form.code != 0 {
+		status = form.code
+	}
 	return &kit.Response{
-		Status:  http.StatusOK,
+		Status:  status,
 		Headers: headers,
 		Body:    body,
 	}, nil
