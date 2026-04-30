@@ -112,7 +112,46 @@ func (s *Server) handlePipelineError(w http.ResponseWriter, r *http.Request, ev 
 		return
 	}
 
-	safe := s.hooks.HandleError(ev, err)
+	safe, shortCircuit := s.hooks.HandleError(ev, err)
+
+	// HandleError may short-circuit with a redirect or custom HTTP
+	// response instead of rendering the error boundary.
+	if shortCircuit != nil {
+		var redir *kit.RedirectErr
+		if errors.As(shortCircuit, &redir) {
+			s.Logger.Info("server: handleerror redirect",
+				logKeyMethod, r.Method,
+				logKeyPath, r.URL.Path,
+				logKeyStatus, redir.Code,
+				logKeyLocation, redir.Location)
+			if ev != nil && ev.Cookies != nil {
+				ev.Cookies.Apply(w)
+			}
+			http.Redirect(w, r, redir.Location, redir.Code)
+			return
+		}
+		var herr *kit.HTTPErr
+		if errors.As(shortCircuit, &herr) {
+			s.Logger.Info("server: handleerror http error",
+				logKeyMethod, r.Method,
+				logKeyPath, r.URL.Path,
+				logKeyStatus, herr.Code,
+				logKeyError, herr.Message)
+			if ev != nil && ev.Cookies != nil {
+				ev.Cookies.Apply(w)
+			}
+			writePlain(w, herr.Code, herr.Message+"\n")
+			return
+		}
+		// Unknown short-circuit error type: treat as 500 to avoid a
+		// silent no-op. Do not re-enter HandleError.
+		s.Logger.Error("server: handleerror returned unknown short-circuit error",
+			logKeyMethod, r.Method,
+			logKeyPath, r.URL.Path,
+			logKeyError, shortCircuit.Error())
+		writePlain(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError)+"\n")
+		return
+	}
 
 	// Preserve the legacy httpStatuser observation: when the user did
 	// not author HandleError, the identity default returns 500 — but

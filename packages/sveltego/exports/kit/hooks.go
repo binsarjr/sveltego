@@ -46,7 +46,14 @@ type HandleFn func(ev *RequestEvent, resolve ResolveFn) (*Response, error)
 // pipeline calls it whenever Handle, Load, Render, or a +server.go
 // handler returns an error and converts the SafeError into the user-
 // facing HTTP response.
-type HandleErrorFn func(ev *RequestEvent, err error) SafeError
+//
+// Returning a non-nil error short-circuits the error boundary entirely.
+// The returned error is handled by the same sentinel logic as pipeline
+// errors: a *RedirectErr produces a redirect, a *HTTPErr produces a
+// plain HTTP response. This lets a HandleError hook redirect
+// unauthenticated users to /login instead of rendering +error.svelte.
+// The short-circuit does NOT re-enter HandleError (no infinite loop).
+type HandleErrorFn func(ev *RequestEvent, err error) (SafeError, error)
 
 // HandleFetchFn is the signature of the optional HandleFetch hook. The
 // pipeline plugs it into RequestEvent.Fetch so outbound HTTP traffic
@@ -107,8 +114,8 @@ func IdentityHandle(ev *RequestEvent, resolve ResolveFn) (*Response, error) {
 
 // IdentityHandleError is the default HandleError hook. It maps any error
 // to a generic 500 SafeError without exposing internal detail.
-func IdentityHandleError(_ *RequestEvent, _ error) SafeError {
-	return SafeError{Code: http.StatusInternalServerError, Message: http.StatusText(http.StatusInternalServerError)}
+func IdentityHandleError(_ *RequestEvent, _ error) (SafeError, error) {
+	return SafeError{Code: http.StatusInternalServerError, Message: http.StatusText(http.StatusInternalServerError)}, nil
 }
 
 // IdentityHandleFetch is the default HandleFetch hook. It dispatches req

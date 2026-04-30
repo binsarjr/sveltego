@@ -138,7 +138,7 @@ func resultCount(fn *goast.FuncDecl) int {
 // strings. Sentinel errors keep tests stable across formatting changes.
 var (
 	errBadHandleSig      = errors.New("Handle must have signature func(*kit.RequestEvent, kit.ResolveFn) (*kit.Response, error)")
-	errBadHandleErrorSig = errors.New("HandleError must have signature func(*kit.RequestEvent, error) kit.SafeError")
+	errBadHandleErrorSig = errors.New("HandleError must have signature func(*kit.RequestEvent, error) (kit.SafeError, error)")
 	errBadHandleFetchSig = errors.New("HandleFetch must have signature func(*kit.RequestEvent, *http.Request) (*http.Response, error)")
 	errBadRerouteSig     = errors.New("Reroute must have signature func(*url.URL) string")
 	errBadInitSig        = errors.New("Init must have signature func(context.Context) error")
@@ -155,7 +155,7 @@ func validateHandleSig(fn *goast.FuncDecl) error {
 }
 
 func validateHandleErrorSig(fn *goast.FuncDecl) error {
-	if paramCount(fn) != 2 || resultCount(fn) != 1 {
+	if paramCount(fn) != 2 || resultCount(fn) != 2 {
 		return errBadHandleErrorSig
 	}
 	return nil

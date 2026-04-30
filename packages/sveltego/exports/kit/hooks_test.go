@@ -176,7 +176,10 @@ func TestIdentityReroute_returnsEmpty(t *testing.T) {
 
 func TestIdentityHandleError_returns500(t *testing.T) {
 	t.Parallel()
-	se := kit.IdentityHandleError(newEvent(t), errors.New("x"))
+	se, err := kit.IdentityHandleError(newEvent(t), errors.New("x"))
+	if err != nil {
+		t.Fatalf("IdentityHandleError returned unexpected error: %v", err)
+	}
 	if se.Code != http.StatusInternalServerError {
 		t.Errorf("Code = %d, want 500", se.Code)
 	}

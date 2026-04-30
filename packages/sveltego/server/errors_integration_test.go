@@ -71,8 +71,8 @@ func TestErrorBoundary_RouteLocalOverridesGlobal(t *testing.T) {
 	})
 
 	hooks := kit.Hooks{
-		HandleError: func(_ *kit.RequestEvent, err error) kit.SafeError {
-			return kit.SafeError{Code: http.StatusInternalServerError, Message: err.Error()}
+		HandleError: func(_ *kit.RequestEvent, err error) (kit.SafeError, error) {
+			return kit.SafeError{Code: http.StatusInternalServerError, Message: err.Error()}, nil
 		},
 	}
 	srv.hooks = hooks.WithDefaults()
@@ -118,8 +118,8 @@ func TestErrorBoundary_OuterLayoutsRetained(t *testing.T) {
 	}})
 
 	hooks := kit.Hooks{
-		HandleError: func(_ *kit.RequestEvent, err error) kit.SafeError {
-			return kit.SafeError{Code: http.StatusBadGateway, Message: err.Error()}
+		HandleError: func(_ *kit.RequestEvent, err error) (kit.SafeError, error) {
+			return kit.SafeError{Code: http.StatusBadGateway, Message: err.Error()}, nil
 		},
 	}
 	srv.hooks = hooks.WithDefaults()
@@ -174,8 +174,8 @@ func TestErrorBoundary_StatusFollowsSafeError(t *testing.T) {
 	}})
 
 	hooks := kit.Hooks{
-		HandleError: func(_ *kit.RequestEvent, _ error) kit.SafeError {
-			return kit.SafeError{Code: http.StatusTeapot, Message: "i am a teapot", ID: "rid-42"}
+		HandleError: func(_ *kit.RequestEvent, _ error) (kit.SafeError, error) {
+			return kit.SafeError{Code: http.StatusTeapot, Message: "i am a teapot", ID: "rid-42"}, nil
 		},
 	}
 	srv.hooks = hooks.WithDefaults()
@@ -209,8 +209,8 @@ func TestErrorBoundary_NoBoundaryFallsBackToPlain(t *testing.T) {
 	}})
 
 	hooks := kit.Hooks{
-		HandleError: func(_ *kit.RequestEvent, err error) kit.SafeError {
-			return kit.SafeError{Code: http.StatusServiceUnavailable, Message: err.Error()}
+		HandleError: func(_ *kit.RequestEvent, err error) (kit.SafeError, error) {
+			return kit.SafeError{Code: http.StatusServiceUnavailable, Message: err.Error()}, nil
 		},
 	}
 	srv.hooks = hooks.WithDefaults()
@@ -251,8 +251,8 @@ func TestErrorBoundary_BoundaryRenderFailureFallsBack(t *testing.T) {
 	}})
 
 	hooks := kit.Hooks{
-		HandleError: func(_ *kit.RequestEvent, err error) kit.SafeError {
-			return kit.SafeError{Code: http.StatusInternalServerError, Message: err.Error()}
+		HandleError: func(_ *kit.RequestEvent, err error) (kit.SafeError, error) {
+			return kit.SafeError{Code: http.StatusInternalServerError, Message: err.Error()}, nil
 		},
 	}
 	srv.hooks = hooks.WithDefaults()
@@ -340,8 +340,8 @@ func TestErrorPreservesHeadersAndCookies_BoundaryPath(t *testing.T) {
 		Error: errorBoundary("root"),
 	}})
 	hooks := kit.Hooks{
-		HandleError: func(_ *kit.RequestEvent, _ error) kit.SafeError {
-			return kit.SafeError{Code: http.StatusUnauthorized, Message: "unauthorized"}
+		HandleError: func(_ *kit.RequestEvent, _ error) (kit.SafeError, error) {
+			return kit.SafeError{Code: http.StatusUnauthorized, Message: "unauthorized"}, nil
 		},
 	}
 	srv.hooks = hooks.WithDefaults()
@@ -380,9 +380,9 @@ func TestErrorPreservesHeaders_HandleError(t *testing.T) {
 		},
 	}})
 	hooks := kit.Hooks{
-		HandleError: func(ev *kit.RequestEvent, _ error) kit.SafeError {
+		HandleError: func(ev *kit.RequestEvent, _ error) (kit.SafeError, error) {
 			ev.ResponseHeader().Set("X-Error-ID", "err-42")
-			return kit.SafeError{Code: http.StatusInternalServerError, Message: "internal server error"}
+			return kit.SafeError{Code: http.StatusInternalServerError, Message: "internal server error"}, nil
 		},
 	}
 	srv.hooks = hooks.WithDefaults()

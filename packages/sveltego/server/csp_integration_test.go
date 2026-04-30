@@ -138,8 +138,8 @@ func TestCSP_ReportOnlyUsesReportOnlyHeader(t *testing.T) {
 func TestCSP_HeaderPresentOnErrorPath(t *testing.T) {
 	t.Parallel()
 	hooks := kit.Hooks{
-		HandleError: func(_ *kit.RequestEvent, _ error) kit.SafeError {
-			return kit.SafeError{Code: http.StatusBadGateway, Message: "upstream"}
+		HandleError: func(_ *kit.RequestEvent, _ error) (kit.SafeError, error) {
+			return kit.SafeError{Code: http.StatusBadGateway, Message: "upstream"}, nil
 		},
 	}
 	srv := newCSPServer(t, kit.CSPConfig{Mode: kit.CSPStrict}, []router.Route{{
