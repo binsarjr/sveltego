@@ -216,6 +216,134 @@ func TestActions_PostWithoutActionsReturnsMethodNotAllowed(t *testing.T) {
 	}
 }
 
+func newTestServerWithHooks(t *testing.T, routes []router.Route, hooks kit.Hooks) *Server {
+	t.Helper()
+	srv, err := New(Config{
+		Routes: routes,
+		Shell:  testShell,
+		Logger: quietLogger(),
+		Hooks:  hooks,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	return srv
+}
+
+func TestHandleAction_shortCircuitsAction(t *testing.T) {
+	t.Parallel()
+	actions := kit.ActionMap{
+		"default": func(_ *kit.RequestEvent) kit.ActionResult {
+			return kit.ActionDataResult(200, "reached")
+		},
+	}
+	hooks := kit.Hooks{
+		HandleAction: func(_ *kit.RequestEvent, _ string, _ kit.ActionFn) kit.ActionResult {
+			return kit.ActionFail(403, "csrf check failed")
+		},
+	}
+	srv := newTestServerWithHooks(t, []router.Route{{
+		Pattern:  "/login",
+		Segments: []router.Segment{{Kind: router.SegmentStatic, Value: "login"}},
+		Page:     formAwarePage(),
+		Load:     formAwareLoad(),
+		Actions:  func() any { return actions },
+	}}, hooks)
+	ts := httptest.NewServer(srv)
+	defer ts.Close()
+
+	resp, err := http.Post(ts.URL+"/login", "application/x-www-form-urlencoded", strings.NewReader(""))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+	// HandleAction short-circuits with ActionFail(403) — pipeline re-renders
+	// the page with status 403 and the failure data in Form.
+	if resp.StatusCode != 403 {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 403, body = %s", resp.StatusCode, body)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "csrf check failed") {
+		t.Fatalf("expected csrf message in body, got: %s", body)
+	}
+}
+
+func TestHandleAction_wrapsAction(t *testing.T) {
+	t.Parallel()
+	var trail []string
+	actions := kit.ActionMap{
+		"submit": func(_ *kit.RequestEvent) kit.ActionResult {
+			trail = append(trail, "action")
+			return kit.ActionDataResult(200, "ok")
+		},
+	}
+	hooks := kit.Hooks{
+		HandleAction: func(ev *kit.RequestEvent, name string, next kit.ActionFn) kit.ActionResult {
+			trail = append(trail, "before:"+name)
+			r := next(ev)
+			trail = append(trail, "after:"+name)
+			return r
+		},
+	}
+	srv := newTestServerWithHooks(t, []router.Route{{
+		Pattern:  "/form",
+		Segments: []router.Segment{{Kind: router.SegmentStatic, Value: "form"}},
+		Page:     formAwarePage(),
+		Load:     formAwareLoad(),
+		Actions:  func() any { return actions },
+	}}, hooks)
+	ts := httptest.NewServer(srv)
+	defer ts.Close()
+
+	resp, err := http.Post(ts.URL+"/form?/submit", "application/x-www-form-urlencoded", strings.NewReader(""))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	want := []string{"before:submit", "action", "after:submit"}
+	if strings.Join(trail, ",") != strings.Join(want, ",") {
+		t.Errorf("trail = %v, want %v", trail, want)
+	}
+}
+
+func TestHandleAction_receivesActionName(t *testing.T) {
+	t.Parallel()
+	var capturedName string
+	actions := kit.ActionMap{
+		"checkout": func(_ *kit.RequestEvent) kit.ActionResult {
+			return kit.ActionDataResult(200, "done")
+		},
+	}
+	hooks := kit.Hooks{
+		HandleAction: func(ev *kit.RequestEvent, name string, next kit.ActionFn) kit.ActionResult {
+			capturedName = name
+			return next(ev)
+		},
+	}
+	srv := newTestServerWithHooks(t, []router.Route{{
+		Pattern:  "/cart",
+		Segments: []router.Segment{{Kind: router.SegmentStatic, Value: "cart"}},
+		Page:     formAwarePage(),
+		Load:     formAwareLoad(),
+		Actions:  func() any { return actions },
+	}}, hooks)
+	ts := httptest.NewServer(srv)
+	defer ts.Close()
+
+	resp, err := http.Post(ts.URL+"/cart?/checkout", "application/x-www-form-urlencoded", strings.NewReader(""))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+	if capturedName != "checkout" {
+		t.Errorf("capturedName = %q, want checkout", capturedName)
+	}
+}
+
 func TestActions_BindFormInsideAction(t *testing.T) {
 	t.Parallel()
 	type loginForm struct {

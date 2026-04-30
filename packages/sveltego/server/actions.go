@@ -42,8 +42,9 @@ func injectFormField(data, formValue any) any {
 
 // dispatchAction resolves the form action keyed by the request URL's
 // `?/<name>` query (default: "default") against route.Actions and runs
-// it. The returned response or error follows the same shape as
-// renderPage so the surrounding pipeline writes one Response.
+// it through the HandleAction middleware. The returned response or error
+// follows the same shape as renderPage so the surrounding pipeline writes
+// one Response.
 //
 // Returning (nil, nil) means the caller should fall through to
 // renderPage with the `Form` payload installed via formData.
@@ -67,7 +68,7 @@ func (s *Server) dispatchAction(r *http.Request, ev *kit.RequestEvent, route *ro
 		}, nil, nil
 	}
 
-	result := fn(ev)
+	result := s.hooks.HandleAction(ev, name, fn)
 	switch v := result.(type) {
 	case kit.ActionRedirectResult:
 		code := v.Code

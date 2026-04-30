@@ -215,8 +215,74 @@ func TestSafeError_implementsErrorAndStatuser(t *testing.T) {
 func TestHooks_WithDefaults_fillsNil(t *testing.T) {
 	t.Parallel()
 	h := kit.Hooks{}.WithDefaults()
-	if h.Handle == nil || h.HandleError == nil || h.HandleFetch == nil || h.Reroute == nil || h.Init == nil {
+	if h.Handle == nil || h.HandleError == nil || h.HandleFetch == nil || h.HandleAction == nil || h.Reroute == nil || h.Init == nil {
 		t.Fatalf("WithDefaults left nil fields: %+v", h)
+	}
+}
+
+func TestIdentityHandleAction_callsNext(t *testing.T) {
+	t.Parallel()
+	ev := newEvent(t)
+	called := false
+	next := func(_ *kit.RequestEvent) kit.ActionResult {
+		called = true
+		return kit.ActionDataResult(200, "ok")
+	}
+	result := kit.IdentityHandleAction(ev, "default", next)
+	if !called {
+		t.Error("IdentityHandleAction did not call next")
+	}
+	ad, ok := result.(kit.ActionData)
+	if !ok || ad.Data != "ok" {
+		t.Errorf("unexpected result: %#v", result)
+	}
+}
+
+func TestHandleActionFn_shortCircuit(t *testing.T) {
+	t.Parallel()
+	ev := newEvent(t)
+	// Middleware that rejects without calling next (CSRF use-case).
+	reject := func(_ *kit.RequestEvent, _ string, _ kit.ActionFn) kit.ActionResult {
+		return kit.ActionFail(403, "forbidden")
+	}
+	called := false
+	next := func(_ *kit.RequestEvent) kit.ActionResult {
+		called = true
+		return kit.ActionDataResult(200, "reached")
+	}
+	result := reject(ev, "default", next)
+	if called {
+		t.Error("next should not be called on short-circuit")
+	}
+	afd, ok := result.(kit.ActionFailData)
+	if !ok || afd.Code != 403 {
+		t.Errorf("unexpected result: %#v", result)
+	}
+}
+
+func TestHandleActionFn_wraps(t *testing.T) {
+	t.Parallel()
+	ev := newEvent(t)
+	var trail []string
+	// Middleware that runs before and after next.
+	wrap := func(ev *kit.RequestEvent, name string, next kit.ActionFn) kit.ActionResult {
+		trail = append(trail, "before:"+name)
+		r := next(ev)
+		trail = append(trail, "after:"+name)
+		return r
+	}
+	next := func(_ *kit.RequestEvent) kit.ActionResult {
+		trail = append(trail, "action")
+		return kit.ActionDataResult(200, "done")
+	}
+	result := wrap(ev, "submit", next)
+	want := []string{"before:submit", "action", "after:submit"}
+	if strings.Join(trail, ",") != strings.Join(want, ",") {
+		t.Errorf("trail = %v, want %v", trail, want)
+	}
+	ad, ok := result.(kit.ActionData)
+	if !ok || ad.Data != "done" {
+		t.Errorf("unexpected result: %#v", result)
 	}
 }
 
