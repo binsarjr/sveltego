@@ -610,6 +610,41 @@
 5. **Codegen-error fixtures need a placeholder error golden checked in BEFORE `GOLDEN_UPDATE=1`.** The fixture driver routes by file existence, not by error presence. Always: write the `.svelte`, write a placeholder `.error.golden`, run update. Skipping step two silently routes the case to the positive-fixture path and the test fails with "generate: <message>" instead of materializing the golden.
 6. **When a multi-bullet acceptance list mixes "guard" and "build-time resolver", land the guard now and defer the resolver to its dependency-blocked follow-up.** #82 is two features stitched into one issue body; the guard ships independently because it has no dependency on Vite. Splitting the work at the natural seam (codegen-time rejection vs build-time substitution) lets the safety property land immediately while the inlining work waits for #34. Document the split in the PR body and lessons entry so the deferral is visible.
 
+## Phase 0ff — LSP server scaffold (#69) (2026-04-30)
+
+### Insight
+
+- **Spec said `cmd/sveltego-lsp/`; repo already had `packages/lsp/` listed in `go.work` and `.github/workflows/ci.yml`'s changes filter.** Following the spec literally would have spawned a parallel `cmd/` tree that CI doesn't lint, doesn't include in changes-output fan-out, and that release-please's per-package versioning doesn't track. Repo conventions outrank prompt-supplied paths when CI is already wired for the existing layout — the binary belongs at `packages/lsp/cmd/sveltego-lsp/`.
+- **Zero-dep JSON-RPC framing is ~80 LOC and avoids dragging `go.lsp.dev/protocol`'s transitive surface (jsonrpc2, jsonrpc2_v2, xerrors, ...) into a fresh module.** A scaffold doesn't need the full protocol surface; `Content-Length` framing + a small `Message` struct + a method switch is enough to round-trip `initialize`/`shutdown` and any handler we want to stub later. Adding the dep is a one-line follow-up the day a handler actually needs typed LSP structs.
+- **`*RPCError` returned as `error` requires an explicit `Error()` method.** A struct embedding JSON-RPC's three required fields is not automatically an `error` value — Go won't let you return `&RPCError{...}` from a function declared to return `error` without the method. Easy to miss because the struct shape mirrors the wire form, but the wire form is not the language form.
+- **`go test ./...` from repo root fails in a multi-module workspace** with "directory prefix does not contain modules listed in go.work". Always per-module test loop (or `go list ./... | xargs go test`) when verifying a multi-module change. The CI matrix knows this; local gates must too.
+
+### Self-rules
+
+1. **Before creating a new top-level directory the prompt names, grep `.github/workflows/` and `go.work` for existing entries.** If the package is already listed, deliver inside the existing path, no matter what the task spec says. CI fan-out is the source of truth.
+2. **Roll a minimal JSON-RPC frame loop for LSP scaffolds.** ~80 LOC of `Content-Length` framing + a `Message` struct beats pulling a 10MB protocol library that the scaffold doesn't yet exercise. Add the library when a handler actually needs the typed structs.
+3. **Any custom error type that flows through an `error`-typed return must have an `Error() string` method.** Add it the moment the struct is defined, not when the compiler complains. Naming the type `RPCError` does not magically grant the interface.
+4. **Multi-module repos: never run `go test ./...` from the root.** Loop over modules (`for d in $(yq '.use[]' go.work)` or hard-code) or use the per-module CI step. The root-level command silently fails to enumerate workspace members.
+5. **VS Code extension scaffolds belong in `editor/<editor>/` per the issue spec, not in `packages/lsp/editor/`.** The editor tree is editor-agnostic; the Go package owns the binary. Keep the boundary clean so future Neovim / Helix clients sit alongside as siblings.
+
+## Phase 0ee — typed kit.Link helper (#87) (2026-04-30)
+
+### Insight
+
+- **Typed link helpers belong in their own emitter file, not woven into the manifest emitter.** `manifest.go` already shoulders route table emission, page/layout adapters, and error page wiring. A second concern (URL builder generation) on the same file would dilute the audit surface. A standalone `link_emit.go` lets the manifest stay focused and reuses only the small primitives that exist for everyone (`Builder`, `quoteGo`).
+- **Keep build-flow integration outside `internal/codegen/build.go` when concurrency forbids touching it.** The clean alternative is to expose an `EmitLinksFile(projectRoot, outDir)` entry point and have the CLI (`cmd/sveltego/compile.go`, `build.go`) call it sequentially after `codegen.Build`. The CLI is the orchestrator already; adding one more step there beats wedging into a forbidden file or deferring the wire-up to a follow-up. Same effective behavior; no contention with parallel agents.
+- **Pattern-walking emit beats AST-walking emit for URL building.** `routescan` already gives us `Pattern`; splitting it on `/` and re-classifying each part against `[`/`[[`/`[...` prefixes is shorter than threading `[]router.Segment` through the emitter. The emitted code stays simple (`b.WriteString(p.Slug)` per param) and reads like the user wrote it. Saves a parallel walk against `Segments` that would have to keep two indexes in lockstep.
+- **The `kit.Link` runtime helper is a fallback, not the headline API.** Spec lists it second; the typed codegen helper is the primary surface. The fallback is an HTTP-runtime niche (a string template arrives at request time and needs param substitution). Implementing it as a single small function with sentinel errors keeps the public API surface narrow — no wrapper types, no per-shape constructors. Errors are sentinels (`ErrLinkPattern`, `ErrLinkParam`) because runtime/exports forbid `fmt` per `.golangci.yml` depguard rules.
+- **Empty rest values disappear cleanly; required missing values fail loudly.** `Link("/docs/[...path]", {})` returns `/docs` because rest segments are zero-or-more by definition; `Link("/blog/[slug]", {})` returns `ErrLinkParam` because required params have no zero value. Two cases, two return shapes — surfaces wrong-shape callers fast at the boundary.
+
+### Self-rules
+
+1. **A new emitter that consumes scan output and produces a separate gen artifact gets its own file.** Don't grow `manifest.go` beyond the route table. Reuse only the cross-cutting primitives (`Builder`, `quoteGo`); fork everything that's emitter-specific. Audit surface stays small per file.
+2. **When `internal/codegen/build.go` is off-limits but a new artifact must land in `.gen/`, expose a single `EmitXFile(projectRoot, outDir)` entry point and call it from the CLI after `codegen.Build`.** The CLI orchestrates; the codegen package provides the unit. No build flow surgery, no follow-up debt.
+3. **Pattern-walking is preferred when the segment slice and the pattern string carry the same information and the emitted code reads as path-string concatenation.** The walker stays simple, the index bookkeeping is local to one loop, and the diff-friendliness of the goldens is high (each emitted line maps 1:1 to a path part).
+4. **Runtime/exports packages reach for `errors` package sentinels, not `fmt.Errorf`.** depguard forbids `fmt` in `**/runtime/**` and `**/exports/**`. Lint catches it; remember up front so the second pass is unnecessary. Sentinels also let callers `errors.Is` the failure mode without parsing strings — a strictly better contract.
+5. **Helper-name disambiguation uses a numeric suffix (`Blog`, `Blog_2`), not kind-tagged hints (`BlogParam`, `BlogStatic`).** Collisions are rare (two routes that lower to the same PascalCase concat); the numeric suffix is unambiguous and preserves the original name for the first occurrence. Kind-tagged hints would break the principle of least surprise — most users see `Blog` and don't expect `BlogParam` to also exist.
+
 ## Phase 0gg — sveltego-mcp scaffold (#71) (2026-04-30)
 
 ### Insight

@@ -38,7 +38,7 @@ func TestRoot_Help(t *testing.T) {
 	if !strings.Contains(stdout, "Usage:") {
 		t.Errorf("expected help text to contain Usage:, got %q", stdout)
 	}
-	for _, sub := range []string{"build", "compile", "dev", "check", "version"} {
+	for _, sub := range []string{"build", "compile", "dev", "check", "routes", "version"} {
 		if !strings.Contains(stdout, sub) {
 			t.Errorf("expected help to list %q subcommand, got %q", sub, stdout)
 		}

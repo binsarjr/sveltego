@@ -99,6 +99,7 @@ func TestCompileCmd_FixtureProject(t *testing.T) {
 	for _, p := range []string{
 		filepath.Join(root, ".gen", "routes", "page.gen.go"),
 		filepath.Join(root, ".gen", "manifest.gen.go"),
+		filepath.Join(root, ".gen", "links", "links.go"),
 	} {
 		if _, err := os.Stat(p); err != nil {
 			t.Errorf("expected %s to exist after compile: %v", p, err)

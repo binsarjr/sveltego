@@ -1,0 +1,72 @@
+{
+  "name": "sveltego-vscode",
+  "displayName": "sveltego",
+  "description": "VS Code language client for sveltego — Go expressions inside .svelte files.",
+  "version": "0.0.0-scaffold",
+  "publisher": "binsarjr",
+  "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/binsarjr/sveltego.git",
+    "directory": "editor/vscode"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:svelte",
+    "workspaceContains:**/+page.svelte",
+    "workspaceContains:**/+layout.svelte"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "svelte",
+        "extensions": [
+          ".svelte"
+        ],
+        "aliases": [
+          "Svelte"
+        ]
+      }
+    ],
+    "configuration": {
+      "title": "sveltego",
+      "properties": {
+        "sveltego.lsp.path": {
+          "type": "string",
+          "default": "sveltego-lsp",
+          "description": "Path to the sveltego-lsp binary. Falls back to PATH lookup."
+        },
+        "sveltego.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Traces the communication between VS Code and the sveltego language server."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.3"
+  }
+}
