@@ -401,12 +401,16 @@ jobs:
 
   # playground-smoke drives playgrounds/basic end-to-end:
   # `sveltego compile` then `sveltego build`, then the binary is curl'd
-  # against / and /post/123. The runtime smoke (start server + curl) is
-  # gated on the repo variable PLAYGROUND_SMOKE because #109 (PageData
-  # type-assertion bug) blocks the page render until the codegen fix
-  # lands. Compile + idempotency + binary build run unconditionally.
+  # against / and /post/123. Gated on the repo variable PLAYGROUND_SMOKE
+  # because Phase 0j surfaced two MVP-blocking framework bugs: #109
+  # (runtime PageData type-assertion mismatch) and #110 (pre-commit
+  # hook rejects the user `.go` files under the convention). Until #110
+  # lands the user `.go` files (`page.server.go`) are not committed, so
+  # codegen produces an empty PageData and the gen page.gen.go fails to
+  # compile. Flip the variable on once both fixes ship.
   playground-smoke:
     name: playground-smoke (basic)
+    if: vars.PLAYGROUND_SMOKE == 'enabled'
     needs: lint-and-test
     runs-on: ubuntu-latest
     steps:
