@@ -69,6 +69,7 @@ func BenchmarkWriteEscapeAttr_Dirty(b *testing.B) {
 func BenchmarkWriteJSON(b *testing.B) {
 	payload := map[string]any{"name": "Tom", "tags": []string{"a", "b", "c"}, "n": 42}
 	b.ReportAllocs()
+	b.ResetTimer()
 	for range b.N {
 		w := render.Acquire()
 		_ = w.WriteJSON(payload)
@@ -79,6 +80,7 @@ func BenchmarkWriteJSON(b *testing.B) {
 func BenchmarkWriteRawBytes(b *testing.B) {
 	payload := []byte("<title>page</title><meta name=\"x\" content=\"y\">")
 	b.ReportAllocs()
+	b.ResetTimer()
 	for range b.N {
 		w := render.Acquire()
 		w.WriteRawBytes(payload)
@@ -94,6 +96,7 @@ type benchStruct struct {
 func BenchmarkWriteEscape_Default(b *testing.B) {
 	v := benchStruct{A: 7, B: "hello"}
 	b.ReportAllocs()
+	b.ResetTimer()
 	for range b.N {
 		w := render.Acquire()
 		w.WriteEscape(v)
@@ -104,6 +107,7 @@ func BenchmarkWriteEscape_Default(b *testing.B) {
 func BenchmarkWriteEscapeAttr_Default(b *testing.B) {
 	v := benchStruct{A: 7, B: "hello"}
 	b.ReportAllocs()
+	b.ResetTimer()
 	for range b.N {
 		w := render.Acquire()
 		w.WriteEscapeAttr(v)
