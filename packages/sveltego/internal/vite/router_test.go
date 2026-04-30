@@ -132,6 +132,138 @@ func TestGenerateRouter_scrollRestore(t *testing.T) {
 	}
 }
 
+// TestGenerateRouter_navigationAPI asserts the public $app/navigation
+// surface is exported from the generated router module so navigation.ts
+// can re-export it (#85).
+func TestGenerateRouter_navigationAPI(t *testing.T) {
+	t.Parallel()
+
+	src := GenerateRouter(RouterOptions{Routes: map[string]string{}})
+	for _, want := range []string{
+		"export async function goto",
+		"export async function invalidate",
+		"export async function invalidateAll",
+		"export async function preloadData",
+		"export async function preloadCode",
+		"export function pushState",
+		"export function replaceState",
+		"export function beforeNavigate",
+		"export function afterNavigate",
+		"export function onNavigate",
+		"export type Payload",
+		"export type GotoOpts",
+		"export type Navigation",
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("router missing navigation export %q", want)
+		}
+	}
+}
+
+// TestGenerateRouter_invalidateDeps verifies the dep registry plumbing
+// so invalidate(tag) can match payloads carrying ctx.Depends() output.
+func TestGenerateRouter_invalidateDeps(t *testing.T) {
+	t.Parallel()
+
+	src := GenerateRouter(RouterOptions{Routes: map[string]string{}})
+	for _, want := range []string{
+		"const depRegistry = new Map<string, Set<string>>()",
+		"function recordDeps(",
+		"deps?: string[]",
+		"if (stale.includes(activeKey))",
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("router missing dep-registry plumbing %q", want)
+		}
+	}
+}
+
+// TestGenerateRouter_prefetch verifies the data-sveltego-prefetch
+// triggers (hover, tap, viewport) and Save-Data opt-out (#40).
+func TestGenerateRouter_prefetch(t *testing.T) {
+	t.Parallel()
+
+	src := GenerateRouter(RouterOptions{Routes: map[string]string{}})
+	for _, want := range []string{
+		"function installPrefetch()",
+		"PREFETCH_HOVER_DELAY_MS = 150",
+		"a.dataset.sveltegoPrefetch",
+		"document.body.dataset.sveltegoPrefetch",
+		"document.addEventListener('mouseover'",
+		"document.addEventListener('focusin'",
+		"document.addEventListener('pointerdown'",
+		"document.addEventListener('touchstart'",
+		"new IntersectionObserver(",
+		`a[data-sveltego-prefetch="viewport"]`,
+		"saveDataEnabled()",
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("router missing prefetch plumbing %q", want)
+		}
+	}
+}
+
+// TestGenerateRouter_prefetchSpeculativeHeader pins the X-Sveltego-Preload
+// hint on prefetch __data.json fetches so server-side LoadCtx.Speculative
+// can fire (#40, follow-up to ctx.Speculative shipped in v0.5).
+func TestGenerateRouter_prefetchSpeculativeHeader(t *testing.T) {
+	t.Parallel()
+
+	src := GenerateRouter(RouterOptions{Routes: map[string]string{}})
+	for _, want := range []string{
+		"x-sveltego-preload",
+		"speculative = false",
+		"if (speculative) headers['x-sveltego-preload']",
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("router missing speculative-header plumbing %q", want)
+		}
+	}
+}
+
+// TestGenerateRouter_prefetchCacheBound asserts preloadData honors the
+// LRU bound called for in #40 acceptance criteria.
+func TestGenerateRouter_prefetchCacheBound(t *testing.T) {
+	t.Parallel()
+
+	src := GenerateRouter(RouterOptions{Routes: map[string]string{}})
+	for _, want := range []string{
+		"PREFETCH_CACHE_MAX = 30",
+		"if (cache.size >= PREFETCH_CACHE_MAX)",
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("router missing LRU bound %q", want)
+		}
+	}
+}
+
+// TestGenerateNavigationModule asserts the public navigation.ts shim
+// re-exports every $app/navigation symbol from the router module so
+// downstream code has a stable import path (#85).
+func TestGenerateNavigationModule(t *testing.T) {
+	t.Parallel()
+
+	src := GenerateNavigationModule()
+	for _, want := range []string{
+		"goto,",
+		"invalidate,",
+		"invalidateAll,",
+		"preloadData,",
+		"preloadCode,",
+		"pushState,",
+		"replaceState,",
+		"beforeNavigate,",
+		"afterNavigate,",
+		"onNavigate,",
+		"from './router'",
+		"export type { GotoOpts, Navigation }",
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("navigation.ts missing %q:\n%s", want, src)
+		}
+	}
+}
+
 // TestGenerateClientEntry_importsRouter asserts the per-route entry now
 // boots the SPA router after the initial mount.
 func TestGenerateClientEntry_importsRouter(t *testing.T) {
