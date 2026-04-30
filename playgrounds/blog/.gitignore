@@ -1,5 +1,6 @@
 .gen/
 build/
+node_modules/
 # `go build ./...` from this dir drops a binary named after cmd/app.
 /app
 /blog
