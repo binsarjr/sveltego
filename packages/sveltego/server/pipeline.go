@@ -88,6 +88,11 @@ var errServerRouteWrote = errors.New("server: server route wrote response")
 // surrounding pipeline must skip writeResponse and any error wrapping.
 var errStreamingWrote = errors.New("server: streaming response wrote")
 
+// afterDrainTimeout is the context deadline given to the After-callback
+// drain phase. Slow callbacks are cancelled rather than holding the
+// goroutine indefinitely.
+const afterDrainTimeout = 30 * time.Second
+
 // handle is the request entry point. It builds a RequestEvent, runs the
 // optional Reroute hook, then dispatches through the user's Handle (or
 // kit.IdentityHandle when none was authored). The inner resolve closure
@@ -125,16 +130,29 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 
 	res, err := s.runHandle(ev, resolve)
 	if err != nil {
-		if errors.Is(err, errServerRouteWrote) || errors.Is(err, errStreamingWrote) {
-			return
+		if !errors.Is(err, errServerRouteWrote) && !errors.Is(err, errStreamingWrote) {
+			s.handlePipelineError(w, r, ev, matched, err)
 		}
-		s.handlePipelineError(w, r, ev, matched, err)
+		// Response was already written (server route, streaming, or error
+		// page). Drain any After callbacks before releasing resources.
+		s.drainAfter(ev)
 		return
 	}
 	if res == nil {
 		return
 	}
 	s.writeResponse(w, ev, res)
+	s.drainAfter(ev)
+}
+
+// drainAfter runs all functions queued via RequestEvent.After with a
+// bounded context derived from context.Background (not the request
+// context, which is cancelled once ServeHTTP returns). Errors logged
+// here do not affect the already-sent response.
+func (s *Server) drainAfter(ev *kit.RequestEvent) {
+	ctx, cancel := context.WithTimeout(context.Background(), afterDrainTimeout)
+	defer cancel()
+	kit.DrainAfter(ctx, ev)
 }
 
 // runHandle invokes the configured Handle hook with panic recovery so a
