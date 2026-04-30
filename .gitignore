@@ -31,3 +31,8 @@ coverage*.out
 coverage*.html
 *.prof
 go.work.sum
+
+# Docs site (Vitepress)
+docs/.vitepress/dist/
+docs/.vitepress/cache/
+docs/node_modules/
