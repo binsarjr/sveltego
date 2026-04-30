@@ -1,0 +1,28 @@
+.copy-for-llm {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0 0 1rem 0;
+  flex-wrap: wrap;
+}
+
+.copy-for-llm button {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid var(--vp-c-divider);
+  background: var(--vp-c-bg-soft);
+  color: var(--vp-c-text-1);
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.copy-for-llm button:hover {
+  background: var(--vp-c-bg-mute);
+}
+
+.copy-for-llm .toast {
+  font-size: 0.8rem;
+  color: var(--vp-c-text-2);
+  align-self: center;
+}
