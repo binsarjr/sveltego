@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/binsarjr/sveltego/exports/kit"
 	"github.com/binsarjr/sveltego/internal/routescan"
 	"github.com/binsarjr/sveltego/runtime/router"
 )
@@ -41,6 +42,12 @@ type ManifestOptions struct {
 	// GenRoot is the gen-output root relative to the user module root, e.g.
 	// ".gen". Trailing slashes are stripped.
 	GenRoot string
+	// RouteOptions, when non-nil, supplies effective page options per
+	// route keyed by ScannedRoute.Pattern. Missing keys fall back to
+	// kit.DefaultPageOptions(); a nil map disables emission entirely
+	// (the manifest defaults at runtime). Build resolves the cascade
+	// ahead of time so the manifest emitter does no I/O.
+	RouteOptions map[string]kit.PageOptions
 }
 
 // GenerateManifest emits a deterministic, gofmt-clean Go source file
@@ -177,6 +184,17 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 	}
 	sort.Slice(imports, func(i, j int) bool { return imports[i].alias < imports[j].alias })
 
+	hasNonDefaultOptions := false
+	if opts.RouteOptions != nil {
+		def := kit.DefaultPageOptions()
+		for _, e := range entries {
+			if v, ok := opts.RouteOptions[e.route.Pattern]; ok && v != def {
+				hasNonDefaultOptions = true
+				break
+			}
+		}
+	}
+
 	b.Line("import (")
 	b.Indent()
 	if hasPage || hasLayout {
@@ -184,6 +202,8 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 		b.Line("")
 		b.Line(`"github.com/binsarjr/sveltego/exports/kit"`)
 		b.Line(`"github.com/binsarjr/sveltego/render"`)
+	} else if hasNonDefaultOptions {
+		b.Line(`"github.com/binsarjr/sveltego/exports/kit"`)
 	}
 	b.Line(`"github.com/binsarjr/sveltego/runtime/router"`)
 	if len(imports) > 0 {
@@ -221,7 +241,7 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 			return "", false
 		}
 		for _, e := range entries {
-			emitRouteEntry(&b, e.route, e.alias, layoutInfoFor)
+			emitRouteEntry(&b, e.route, e.alias, layoutInfoFor, opts.RouteOptions)
 		}
 		b.Dedent()
 		b.Line("}")
@@ -330,7 +350,7 @@ func emitLayoutAdapters(b *Builder, imports []layoutImport) {
 	}
 }
 
-func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutInfoFor func(string) (string, bool)) {
+func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutInfoFor func(string) (string, bool), routeOptions map[string]kit.PageOptions) {
 	b.Line("{")
 	b.Indent()
 	b.Linef("Pattern: %s,", quoteGo(r.Pattern))
@@ -383,8 +403,63 @@ func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutIn
 			b.Line("},")
 		}
 	}
+	emitOptionsField(b, r.Pattern, routeOptions)
 	b.Dedent()
 	b.Line("},")
+}
+
+// emitOptionsField writes one `Options: kit.PageOptions{...}` line per
+// route when routeOptions is non-nil. Routes without an entry default
+// to kit.DefaultPageOptions(); the default value is suppressed so the
+// generated source stays minimal for projects that declare no options.
+func emitOptionsField(b *Builder, pattern string, routeOptions map[string]kit.PageOptions) {
+	if routeOptions == nil {
+		return
+	}
+	opts, ok := routeOptions[pattern]
+	if !ok {
+		opts = kit.DefaultPageOptions()
+	}
+	if opts == (kit.DefaultPageOptions()) {
+		return
+	}
+	b.Linef("Options: %s,", formatPageOptions(opts))
+}
+
+// formatPageOptions renders a kit.PageOptions value as a Go composite
+// literal. Zero-valued fields are omitted so the output stays focused
+// on the user-meaningful overrides.
+func formatPageOptions(o kit.PageOptions) string {
+	var parts []string
+	if o.Prerender {
+		parts = append(parts, "Prerender: true")
+	}
+	if !o.SSR {
+		parts = append(parts, "SSR: false")
+	} else {
+		parts = append(parts, "SSR: true")
+	}
+	if !o.CSR {
+		parts = append(parts, "CSR: false")
+	} else {
+		parts = append(parts, "CSR: true")
+	}
+	if o.TrailingSlash != kit.TrailingSlashNever {
+		parts = append(parts, "TrailingSlash: "+trailingSlashIdent(o.TrailingSlash))
+	}
+	return "kit.PageOptions{" + strings.Join(parts, ", ") + "}"
+}
+
+func trailingSlashIdent(ts kit.TrailingSlash) string {
+	switch ts {
+	case kit.TrailingSlashAlways:
+		return "kit.TrailingSlashAlways"
+	case kit.TrailingSlashIgnore:
+		return "kit.TrailingSlashIgnore"
+	case kit.TrailingSlashDefault:
+		return "kit.TrailingSlashDefault"
+	}
+	return "kit.TrailingSlashNever"
 }
 
 func emitSegments(b *Builder, segs []router.Segment) {
