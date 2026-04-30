@@ -229,6 +229,18 @@ Generated output lives under `.gen/` (gitignored). Every `.gen/*.go` starts with
 - Author/edit issues with `gh issue create --body-file` or `gh issue edit --body-file`. **Never** inline `--body` (heredoc avoids quoting traps).
 - Definition of Done: see `.github/PULL_REQUEST_TEMPLATE.md` (RFC #102).
 
+### Merging to main
+
+PRs land via the **GitHub merge queue**. To queue a PR for merge:
+
+```bash
+gh pr merge <num> --auto --squash --delete-branch
+```
+
+Required checks: `lint-and-test (ubuntu-latest, go1.23.x)`, `changes (path-aware fan-out)`, `commit-lint`, `agents-sync (AGENTS.md drift)`. (`isolated-modules` runs on `push`/`merge_group` for extra coverage but is not a required gate.)
+
+Concurrency: PR runs cancel-in-progress; main and merge_group runs always complete. Do not use `--admin` to bypass the queue.
+
 ---
 
 ## 7. Out of scope (do not propose)
