@@ -5,6 +5,7 @@ use (
 	./benchmarks
 	./packages/adapter-auto
 	./packages/adapter-cloudflare
+	./packages/adapter-fastly
 	./packages/adapter-docker
 	./packages/adapter-lambda
 	./packages/adapter-server
