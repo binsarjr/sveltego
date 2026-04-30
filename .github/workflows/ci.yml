@@ -166,7 +166,7 @@ jobs:
           PATH="$(go env GOPATH)/bin:$PATH"
           dirs=$(go list -m -f '{{.Dir}}')
           for d in $dirs; do
-            case "$d" in *[/\\]playgrounds[/\\]basic) continue ;; esac
+            case "$d" in *[/\\]playgrounds[/\\]basic|*[/\\]playgrounds[/\\]blog|*[/\\]playgrounds[/\\]dashboard) continue ;; esac
             if [[ "$SHARED" != "true" ]]; then
               case "$d" in
                 */packages/sveltego)             [[ "$SVELTEGO" == "true" ]]            || continue ;;
@@ -211,7 +211,7 @@ jobs:
           set -euo pipefail
           dirs=$(go list -m -f '{{.Dir}}')
           for d in $dirs; do
-            case "$d" in *[/\\]playgrounds[/\\]basic) continue ;; esac
+            case "$d" in *[/\\]playgrounds[/\\]basic|*[/\\]playgrounds[/\\]blog|*[/\\]playgrounds[/\\]dashboard) continue ;; esac
             if [[ "$SHARED" != "true" ]]; then
               case "$d" in
                 */packages/sveltego)             [[ "$SVELTEGO" == "true" ]]            || continue ;;
@@ -257,7 +257,7 @@ jobs:
           mkdir -p coverage
           dirs=$(go list -m -f '{{.Dir}}')
           for d in $dirs; do
-            case "$d" in *[/\\]playgrounds[/\\]basic) continue ;; esac
+            case "$d" in *[/\\]playgrounds[/\\]basic|*[/\\]playgrounds[/\\]blog|*[/\\]playgrounds[/\\]dashboard) continue ;; esac
             if [[ "$SHARED" != "true" ]]; then
               case "$d" in
                 */packages/sveltego)             [[ "$SVELTEGO" == "true" ]]            || continue ;;
@@ -306,7 +306,7 @@ jobs:
           set -euo pipefail
           dirs=$(go list -m -f '{{.Dir}}')
           for d in $dirs; do
-            case "$d" in *[/\\]playgrounds[/\\]basic) continue ;; esac
+            case "$d" in *[/\\]playgrounds[/\\]basic|*[/\\]playgrounds[/\\]blog|*[/\\]playgrounds[/\\]dashboard) continue ;; esac
             if [[ "$SHARED" != "true" ]]; then
               case "$d" in
                 */packages/sveltego)             [[ "$SVELTEGO" == "true" ]]            || continue ;;
@@ -426,7 +426,7 @@ jobs:
           PATH="$(go env GOPATH)/bin:$PATH"
           dirs=$(go list -m -f '{{.Dir}}')
           for d in $dirs; do
-            case "$d" in *[/\\]playgrounds[/\\]basic) continue ;; esac
+            case "$d" in *[/\\]playgrounds[/\\]basic|*[/\\]playgrounds[/\\]blog|*[/\\]playgrounds[/\\]dashboard) continue ;; esac
             if [[ "$SHARED" != "true" ]]; then
               case "$d" in
                 */packages/sveltego)             [[ "$SVELTEGO" == "true" ]]            || continue ;;
@@ -471,7 +471,7 @@ jobs:
           set -euo pipefail
           dirs=$(go list -m -f '{{.Dir}}')
           for d in $dirs; do
-            case "$d" in *[/\\]playgrounds[/\\]basic) continue ;; esac
+            case "$d" in *[/\\]playgrounds[/\\]basic|*[/\\]playgrounds[/\\]blog|*[/\\]playgrounds[/\\]dashboard) continue ;; esac
             if [[ "$SHARED" != "true" ]]; then
               case "$d" in
                 */packages/sveltego)             [[ "$SVELTEGO" == "true" ]]            || continue ;;
@@ -517,7 +517,7 @@ jobs:
           mkdir -p coverage
           dirs=$(go list -m -f '{{.Dir}}')
           for d in $dirs; do
-            case "$d" in *[/\\]playgrounds[/\\]basic) continue ;; esac
+            case "$d" in *[/\\]playgrounds[/\\]basic|*[/\\]playgrounds[/\\]blog|*[/\\]playgrounds[/\\]dashboard) continue ;; esac
             if [[ "$SHARED" != "true" ]]; then
               case "$d" in
                 */packages/sveltego)             [[ "$SVELTEGO" == "true" ]]            || continue ;;
@@ -566,7 +566,7 @@ jobs:
           set -euo pipefail
           dirs=$(go list -m -f '{{.Dir}}')
           for d in $dirs; do
-            case "$d" in *[/\\]playgrounds[/\\]basic) continue ;; esac
+            case "$d" in *[/\\]playgrounds[/\\]basic|*[/\\]playgrounds[/\\]blog|*[/\\]playgrounds[/\\]dashboard) continue ;; esac
             if [[ "$SHARED" != "true" ]]; then
               case "$d" in
                 */packages/sveltego)             [[ "$SVELTEGO" == "true" ]]            || continue ;;
@@ -634,7 +634,7 @@ jobs:
           fi
           for m in $mods; do
             d=$(dirname "$m")
-            case "$d" in playgrounds/basic|*[/\\]playgrounds[/\\]basic) continue ;; esac
+            case "$d" in playgrounds/basic|playgrounds/blog|playgrounds/dashboard|*[/\\]playgrounds[/\\]basic|*[/\\]playgrounds[/\\]blog|*[/\\]playgrounds[/\\]dashboard) continue ;; esac
             echo "::group::isolated $d"
             (cd "$d" && go mod download && go build ./... && go test -race -short ./...)
             echo "::endgroup::"
