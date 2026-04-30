@@ -59,11 +59,11 @@ var Handle = kit.Sequence(authHandle, requestIDHandle, telemetryHandle)
 
 ## HandleError
 
-Called whenever `Handle`, `Load`, render, or a `+server.go` handler returns an error. Returns a `kit.SafeError` — the user-facing contract: `Code`, `Message`, `ID`. Logs the raw error; the response body never echoes internal detail.
+Called whenever `Handle`, `Load`, render, or a `server.go` handler returns an error. Returns a `kit.SafeError` — the user-facing contract: `Code`, `Message`, `ID`. Logs the raw error; the response body never echoes internal detail. When `Message` is empty, the framework substitutes `http.StatusText(Code)`.
 
 ## HandleFetch
 
-Intercepts outbound HTTP from `Load` and `+server.go`. Use it to add auth headers, redirect to local services, or apply request-scoped retries.
+Intercepts outbound HTTP from `Load` and `server.go`. Use it to add auth headers, redirect to local services, or apply request-scoped retries.
 
 `RequestEvent.Fetch(req)` dispatches through `HandleFetch`; bypass it (e.g. `http.DefaultClient.Do`) and the hook is silently skipped.
 

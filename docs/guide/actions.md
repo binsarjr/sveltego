@@ -6,7 +6,7 @@ summary: POST handlers tied to a page — default and named actions, validation,
 
 # Form actions
 
-Form actions are POST handlers attached to a page. They live in `+page.server.go` next to `Load` and run on `POST` to the page route.
+Form actions are POST handlers attached to a page. They live in `page.server.go` next to `Load` and run on `POST` to the page route.
 
 ## Shape
 

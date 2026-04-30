@@ -72,11 +72,11 @@ The shipped templates do this for you; the prompts below assume the rules are lo
 
 **Scaffold a route**
 
-> Create a `src/routes/blog/[slug]` route with `+page.svelte` and `+page.server.go`. The page shows a `Post` fetched by slug from `db.PostBySlug(ctx, slug)`. Fields: `Title`, `Body` (HTML), `PublishedAt` (`time.Time`).
+> Create a `src/routes/blog/[slug]` route with `+page.svelte` and `page.server.go`. The page shows a `Post` fetched by slug from `db.PostBySlug(ctx, slug)`. Fields: `Title`, `Body` (HTML), `PublishedAt` (`time.Time`).
 
 **Write a form action**
 
-> Add a comment form to `src/routes/blog/[slug]/+page.svelte` and an action in `+page.server.go` that validates body is non-empty, appends to `db.Comments`, and redirects back to the page on success or returns `kit.ActionFail(422, ...)` on validation failure.
+> Add a comment form to `src/routes/blog/[slug]/+page.svelte` and an action in `page.server.go` that validates body is non-empty, appends to `db.Comments`, and redirects back to the page on success or returns `kit.ActionFail(422, ...)` on validation failure.
 
 **Add a hook**
 

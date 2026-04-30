@@ -14,11 +14,27 @@ This page summarises the surface. Source is the canonical spec; godoc is generat
 
 | Type | Used in | Purpose |
 |---|---|---|
-| `RequestEvent` | hooks, `+server.go`, actions | Request-scoped state with `URL`, `Params`, `Locals`, `Cookies`. |
+| `RequestEvent` | hooks, `server.go`, actions | Request-scoped state with `URL`, `Params`, `Locals`, `Cookies`. |
 | `RenderCtx` | generated render code | SSR-time context passed into templates. |
-| `LoadCtx` | `Load` in `+page.server.go`, `+layout.server.go` | Load-time context with `Parent()` for layout chain. |
+| `LoadCtx` | `Load` in `page.server.go`, `layout.server.go` | Load-time context with `Parent()` for layout chain. |
 
 `RequestEvent.Fetch(req)` dispatches outbound HTTP through `HandleFetch`.
+
+`LoadCtx.Header()` returns a `*HeaderWriter` for setting response headers from a loader:
+
+```go
+func Load(ctx *kit.LoadCtx) (PageData, error) {
+  ctx.Header().Set("Cache-Control", "no-store")
+  ctx.Header().Add("Vary", "Accept")
+  return PageData{}, nil
+}
+```
+
+`HeaderWriter` has three methods: `Set(key, value string)` (replace all), `Add(key, value string)` (append), `Del(key string)` (remove all).
+
+`LoadCtx.RawParam(name string) (string, bool)` returns the un-decoded route parameter value (percent-encoding preserved). Use when the decoded value would lose a `%2F` slash inside a segment.
+
+`LoadCtx.Speculative() bool` returns `true` when the request carries `X-Sveltego-Preload: 1` — the client prefetch header. Use to skip expensive side-effects during preloads.
 
 ## Hooks
 
@@ -32,17 +48,37 @@ type InitFn         func(ctx context.Context) error
 
 Compose handlers with `kit.Sequence(...)`. Defaults via `kit.DefaultHooks()` and `Hooks{}.WithDefaults()`.
 
+`InitFn` returning a non-nil error aborts startup; the server emits a `503 Service Unavailable` (or `500` when the HTTP listener could not bind) while the `Init` call is pending.
+
 ## Errors and short-circuits
 
 ```go
-kit.Redirect(code int, location string) error
-kit.Error(code int, message string) error
+kit.Redirect(code int, location string, opts ...RedirectOption) error
+kit.Error(code int, message ...string) error
 kit.Fail(code int, data any) error
 ```
 
 All three implement `error` and `httpStatuser`.
 
-`SafeError{Code, Message, ID}` is the user-facing error contract returned from `HandleError`.
+`kit.RedirectReload()` is a `RedirectOption` that signals the client to do a full document reload instead of a SPA navigation:
+
+```go
+return PageData{}, kit.Redirect(303, "/login", kit.RedirectReload())
+```
+
+`SafeError{Code, Message, ID}` is the user-facing error contract returned from `HandleError`. When `Message` is empty, the framework fills it from `http.StatusText(Code)`.
+
+`kit.HTTPError` is an interface user-defined error types can implement to carry an HTTP status code directly to the pipeline without going through a sentinel:
+
+```go
+type HTTPError interface {
+  error
+  Status() int
+  Public() string
+}
+```
+
+The pipeline inspects returned errors for `HTTPError` before falling back to `HandleError`.
 
 ## Responses
 
@@ -140,11 +176,14 @@ type PageOptions struct {
   Prerender     bool
   SSR           bool
   CSR           bool
+  SSROnly       bool
   TrailingSlash TrailingSlash
 }
 ```
 
 `PageOptions.Merge(override PageOptionsOverride) PageOptions` cascades layout values into pages.
+
+`SSROnly = true` blocks the `__data.json` scrape endpoint used by the SPA client for prefetch. Use on pages where only the server-rendered HTML response is intended (e.g. print views, webhook acknowledgement pages).
 
 ## Link
 

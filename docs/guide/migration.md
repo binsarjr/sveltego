@@ -13,10 +13,10 @@ sveltego mirrors SvelteKit's *shape*, not its *implementation*. The file convent
 | SvelteKit | sveltego |
 |---|---|
 | `+page.svelte` | `+page.svelte` |
-| `+page.server.ts` | `+page.server.go` |
+| `+page.server.ts` | `page.server.go` (no `+` prefix; use `//go:build sveltego`) |
 | `+layout.svelte` | `+layout.svelte` |
-| `+layout.server.ts` | `+layout.server.go` |
-| `+server.ts` | `+server.go` |
+| `+layout.server.ts` | `layout.server.go` (no `+` prefix; use `//go:build sveltego`) |
+| `+server.ts` | `server.go` (no `+` prefix; use `//go:build sveltego`) |
 | `+error.svelte` | `+error.svelte` |
 | `hooks.server.ts` | `hooks.server.go` |
 | `[param]`, `[[opt]]`, `[...rest]`, `(group)` | identical |
