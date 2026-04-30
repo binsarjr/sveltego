@@ -1,0 +1,4 @@
+.gen/
+build/
+# `go build ./...` from this dir drops a binary named after cmd/app.
+/app
