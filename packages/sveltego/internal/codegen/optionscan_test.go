@@ -117,6 +117,27 @@ const SSR = 1
 	}
 }
 
+func TestScanPageOptions_ssrOnly(t *testing.T) {
+	t.Parallel()
+	body := `//go:build sveltego
+
+package routes
+
+const SSROnly = true
+`
+	path := writeTempServerGo(t, body)
+	got, err := scanPageOptions(path)
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if !got.HasSSROnly || !got.SSROnly {
+		t.Errorf("SSROnly not set: %+v", got)
+	}
+	if got.HasPrerender || got.HasSSR || got.HasCSR || got.HasTrailingSlash {
+		t.Errorf("only SSROnly expected, got %+v", got)
+	}
+}
+
 func TestScanPageOptions_dotImportTrailingSlash(t *testing.T) {
 	t.Parallel()
 	body := `//go:build sveltego

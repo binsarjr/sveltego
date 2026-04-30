@@ -17,7 +17,7 @@ If a per-package `CLAUDE.md` exists (e.g. `packages/sveltego/internal/codegen/CL
 
 `sveltego` is a **rewrite of SvelteKit's shape in pure Go**, not an embedding of SvelteKit-the-JS-server. Pre-alpha. The Go workspace already hosts the core (`packages/sveltego`), tooling (`packages/lsp`, `packages/mcp`, `packages/init`, `packages/create-sveltego`, `packages/enhanced-img`), five deploy adapters plus `adapter-auto`, the bench harness (`bench/`, `benchmarks/`), AI templates, and end-to-end playgrounds. MVP, v0.2, v0.4, and v1.1 milestones have shipped; v0.3, v0.5, v0.6, and v1.0 are in flight on `binsarjr/sveltego`.
 
-Hard invariants (do not reopen without new evidence — see `tasks/lessons.md` "Pivot to Go-native rewrite"):
+Hard invariants (do not reopen without new evidence — see [`tasks/lessons/2026-04-29-pivot-to-go-native-rewrite.md`](tasks/lessons/2026-04-29-pivot-to-go-native-rewrite.md)):
 
 - **No JS runtime on the server.** `.svelte` compiles to Go source via codegen (`.gen/*.go`) for SSR. Vite produces the client bundle for hydration only.
 - **Mustache expressions are Go, not JS.** `{Data.User.Name}`, `{len(Data.Posts)}`, `nil` not `null`. PascalCase fields. Validated at codegen via `go/parser.ParseExpr`.
@@ -117,11 +117,12 @@ A task is **not done** when bytes hit disk. It is done when proven correct.
 
 ### 3.6 Mistake logging
 
-- After **any user correction**, append a dated section to `tasks/lessons.md`:
-  - Date heading.
+- After **any user correction**, create a new file `tasks/lessons/YYYY-MM-DD-<topic>.md` with:
+  - `## YYYY-MM-DD — <topic>` heading.
   - "Insight" — what was wrong, with the underlying pattern named.
   - "Self-rules" — numbered, future-tense, prevent the category.
-- Never rewrite older entries. Append-only journal.
+- Add a bullet to the top of `tasks/lessons.md` index pointing at the new file.
+- Never rewrite or delete existing lesson files. Append-only journal.
 - After fixing a bug, write an autopsy: why did it happen? What category is it? Add a self-rule.
 
 ### 3.7 No over-engineering

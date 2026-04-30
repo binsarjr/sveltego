@@ -16,6 +16,7 @@ func newBuildCmd() *cobra.Command {
 	var (
 		outPath string
 		mainPkg string
+		release bool
 	)
 	cmd := &cobra.Command{
 		Use:   "build",
@@ -29,6 +30,7 @@ func newBuildCmd() *cobra.Command {
 			result, err := codegen.Build(codegen.BuildOptions{
 				ProjectRoot: root,
 				Verbose:     verbose,
+				Release:     release || os.Getenv("SVELTEGO_RELEASE") == "1",
 			})
 			if err != nil {
 				return err
@@ -67,6 +69,7 @@ func newBuildCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&outPath, "out", "build/app", "output binary path (relative to project root or absolute)")
 	cmd.Flags().StringVar(&mainPkg, "main", "./cmd/app", "main package import path or directory")
+	cmd.Flags().BoolVar(&release, "release", false, "production build: reject $lib/dev/** imports (also set by SVELTEGO_RELEASE=1)")
 	return cmd
 }
 

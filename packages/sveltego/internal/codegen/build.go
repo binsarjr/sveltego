@@ -32,10 +32,14 @@ const genFileMode = 0o600
 // BuildOptions configures [Build]. ProjectRoot must be an absolute path
 // that contains a go.mod file and a src/routes/ directory; OutDir is the
 // gen-output root relative to ProjectRoot and defaults to ".gen".
+//
+// Release, when true, activates production-build restrictions: imports of
+// $lib/dev/** are rejected as fatal errors, mirroring sveltejs/kit#13078.
 type BuildOptions struct {
 	ProjectRoot string
 	OutDir      string
 	Verbose     bool
+	Release     bool
 	Logger      *slog.Logger
 }
 
@@ -128,7 +132,7 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 		}
 		switch {
 		case route.HasPage:
-			refs, hasHead, err := emitPage(opts.ProjectRoot, outDir, modulePath, route)
+			refs, hasHead, err := emitPage(opts.ProjectRoot, outDir, modulePath, route, opts.Release)
 			if err != nil {
 				return nil, err
 			}
@@ -158,7 +162,7 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 			if i < len(route.LayoutServerFiles) {
 				serverFile = route.LayoutServerFiles[i]
 			}
-			hasHead, err := emitLayout(opts.ProjectRoot, outDir, layoutDir, pkgPath, pkgName, serverFile)
+			hasHead, err := emitLayout(opts.ProjectRoot, outDir, layoutDir, pkgPath, pkgName, serverFile, opts.Release)
 			if err != nil {
 				return nil, err
 			}
@@ -238,8 +242,9 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 // in this file, 0 otherwise — the caller aggregates across routes to
 // decide whether the missing-lib warning fires. The bool reports
 // whether the page contributed a Head method (drives manifest
-// HeadFn wiring).
-func emitPage(projectRoot, outDir, modulePath string, route routescan.ScannedRoute) (int, bool, error) {
+// HeadFn wiring). When release is true, any $lib/dev/** import is a
+// fatal error.
+func emitPage(projectRoot, outDir, modulePath string, route routescan.ScannedRoute, release bool) (int, bool, error) {
 	pageName := "+page.svelte"
 	if route.HasReset {
 		pageName = "+page@" + route.ResetTarget + ".svelte"
@@ -248,6 +253,11 @@ func emitPage(projectRoot, outDir, modulePath string, route routescan.ScannedRou
 	src, err := os.ReadFile(pagePath) //nolint:gosec // path comes from scanner walk under projectRoot
 	if err != nil {
 		return 0, false, fmt.Errorf("codegen: read %s: %w", pagePath, err)
+	}
+	if release {
+		if err := checkLibDevImports(string(src), pagePath); err != nil {
+			return 0, false, err
+		}
 	}
 	rewritten, hits := rewriteLibImports(string(src), modulePath)
 	src = []byte(rewritten)
@@ -465,8 +475,9 @@ func emitErrorPage(projectRoot, outDir, errorDir, pkgPath, pkgName string) error
 // The leading character must not be "_" because Go's build system
 // silently ignores files whose name starts with "_". serverFile, when
 // non-empty, points at a sibling layout.server.go whose Load() inline
-// struct return is used to infer LayoutData fields.
-func emitLayout(projectRoot, outDir, layoutDir, pkgPath, pkgName, serverFile string) (bool, error) {
+// struct return is used to infer LayoutData fields. When release is true,
+// any $lib/dev/** import is a fatal error.
+func emitLayout(projectRoot, outDir, layoutDir, pkgPath, pkgName, serverFile string, release bool) (bool, error) {
 	layoutPath, err := resolveLayoutSource(layoutDir)
 	if err != nil {
 		return false, err
@@ -474,6 +485,11 @@ func emitLayout(projectRoot, outDir, layoutDir, pkgPath, pkgName, serverFile str
 	src, err := os.ReadFile(layoutPath) //nolint:gosec // path comes from scanner walk under projectRoot
 	if err != nil {
 		return false, fmt.Errorf("codegen: read %s: %w", layoutPath, err)
+	}
+	if release {
+		if err := checkLibDevImports(string(src), layoutPath); err != nil {
+			return false, err
+		}
 	}
 	frag, perrs := parser.Parse(src)
 	if len(perrs) > 0 {

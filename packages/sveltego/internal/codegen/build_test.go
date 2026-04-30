@@ -466,6 +466,86 @@ func TestBuild_EmbedSkippedWhenNoAssets(t *testing.T) {
 	}
 }
 
+// TestBuild_ReleaseRejectsLibDevImport verifies that a +page.svelte
+// importing "$lib/dev/..." causes Build to return an error in release
+// mode but succeeds in dev mode.
+func TestBuild_ReleaseRejectsLibDevImport(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/app\n\ngo 1.22\n")
+	writeFile(t, filepath.Join(root, "src", "routes", "+page.svelte"),
+		`<script lang="go">
+import "$lib/dev/panel"
+</script>
+<h1>Hello</h1>
+`)
+	writeFile(t, filepath.Join(root, "src", "lib", "dev", "panel", "panel.go"),
+		"package panel\n\nfunc Show() string { return \"dev\" }\n")
+	writeFile(t, filepath.Join(root, "src", "lib", "util.go"),
+		"package lib\n")
+
+	// Dev mode: succeeds — $lib/dev imports are allowed.
+	if _, err := Build(BuildOptions{ProjectRoot: root}); err != nil {
+		t.Fatalf("dev Build: unexpected error: %v", err)
+	}
+
+	// Release mode: must fail with a meaningful message.
+	_, err := Build(BuildOptions{ProjectRoot: root, Release: true})
+	if err == nil {
+		t.Fatal("release Build: expected error on $lib/dev import, got nil")
+	}
+	if !strings.Contains(err.Error(), "$lib/dev") {
+		t.Errorf("release Build: error should mention $lib/dev, got: %v", err)
+	}
+}
+
+// TestBuild_ReleaseAllowsNonDevLibImport verifies that $lib imports that
+// are not under dev/ pass through release mode unchanged.
+func TestBuild_ReleaseAllowsNonDevLibImport(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/app\n\ngo 1.22\n")
+	writeFile(t, filepath.Join(root, "src", "routes", "+page.svelte"),
+		`<script lang="go">
+import "$lib/util"
+</script>
+<h1>Hello</h1>
+`)
+	writeFile(t, filepath.Join(root, "src", "lib", "util", "util.go"),
+		"package util\n\nfunc Name() string { return \"lib\" }\n")
+
+	if _, err := Build(BuildOptions{ProjectRoot: root, Release: true}); err != nil {
+		t.Fatalf("release Build on non-dev $lib: unexpected error: %v", err)
+	}
+}
+
+// TestCheckLibDevImports exercises the low-level helper directly.
+func TestCheckLibDevImports(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name    string
+		body    string
+		wantErr bool
+	}{
+		{"no-lib", `import "fmt"`, false},
+		{"lib-util", `import "$lib/util"`, false},
+		{"lib-bare", `import "$lib"`, false},
+		{"lib-dev-exact", `import "$lib/dev"`, true},
+		{"lib-dev-sub", `import "$lib/dev/panel"`, true},
+		{"lib-developer", `import "$lib/developer"`, false}, // must NOT match
+		{"lib-devtools", `import "$lib/devtools/x"`, false}, // must NOT match
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := checkLibDevImports(tc.body, "test.svelte")
+			if (err != nil) != tc.wantErr {
+				t.Errorf("checkLibDevImports(%q) error=%v wantErr=%v", tc.body, err, tc.wantErr)
+			}
+		})
+	}
+}
+
 func snapshotGen(t *testing.T, root string) map[string][]byte {
 	t.Helper()
 	out := map[string][]byte{}

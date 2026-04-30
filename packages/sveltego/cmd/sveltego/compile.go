@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 
@@ -9,6 +10,7 @@ import (
 )
 
 func newCompileCmd() *cobra.Command {
+	var release bool
 	cmd := &cobra.Command{
 		Use:   "compile",
 		Short: "Compile .svelte templates to Go source",
@@ -21,6 +23,7 @@ func newCompileCmd() *cobra.Command {
 			result, err := codegen.Build(codegen.BuildOptions{
 				ProjectRoot: root,
 				Verbose:     verbose,
+				Release:     release || os.Getenv("SVELTEGO_RELEASE") == "1",
 			})
 			if err != nil {
 				return err
@@ -35,5 +38,6 @@ func newCompileCmd() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&release, "release", false, "production build: reject $lib/dev/** imports (also set by SVELTEGO_RELEASE=1)")
 	return cmd
 }

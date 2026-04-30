@@ -1,0 +1,20 @@
+## 2026-04-30 — Phase 0kk: blog playground (#62) + Form/PageData gap (#143)
+
+### Insight
+
+- The blog playground (`playgrounds/blog/`) wires markdown rendering, pagination, the `[slug]` dynamic param, layout chrome, `ev.BindForm` + `kit.ActionMap` + `kit.ActionRedirect`, and `kit.Cookies`. Index works end-to-end; post-detail returns HTTP 500 because of a real codegen contract gap surfaced for the first time in this app.
+- Codegen unconditionally appends `Form any` to PageData when `HasActions=true` (`internal/codegen/codegen.go`). The render adapter strict-casts `data.(PageData)` (`internal/codegen/manifest.go`). A user `Load()` that returns the natural shape (no Form) cannot type-equal a PageData with Form, and adding `Form any` to the user's struct double-declares — there is no shape that satisfies both. `injectFormField` in `server/actions.go` already handles missing-Form via reflection, so the runtime work is done; only the codegen contract is wrong.
+- PageData inference (`internal/codegen/pagedata.go`) reads the **first** `return` composite literal whose `Type` is a `*goast.StructType`. A type-aliased `result{}` return defeats inference because `lit.Type` becomes `*goast.Ident`. Inline anonymous struct literals at every return site are mandatory until inference grows.
+- Codegen also cannot resolve user-defined named types (e.g. `[]PostSummary`) referenced in the Load return signature: the gen package imports `usersrc.routes` but the inferred field types are written verbatim into PageData, which lives in the gen package and lacks the alias. Anonymous struct fields work; named user types break the build with `undefined: PostSummary`.
+- The malformed-import-path issue (`src/routes/[slug]`) means `go list ./...` from the playground only sees `cmd/app`. That is fine for the workspace toolchain (codegen reads source via `go/parser`), but unit tests cannot live under `src/routes/[slug]/` — the package is unreachable to the Go test runner.
+- The 8-port choice (`:8080` vs basic's `:3000`) keeps both playgrounds runnable side-by-side during local development. Pick disjoint defaults across playgrounds to avoid foot-guns when a developer leaves one running.
+
+### Self-rules
+
+1. **PageData inference assumes inline anonymous struct returns at every return site.** Type-aliased struct returns (`type result = struct{...}; return result{}, nil`) silently produce empty PageData. Never use a type alias as the Load return; spell the struct literal at every return statement until pagedata inference is upgraded.
+2. **Field types in the inferred PageData must be self-contained.** Anonymous struct slice elements (`[]struct{...}`) cross the gen-package boundary; named user types (`[]PostSummary`) do not because the gen package never aliases them. Until codegen learns to forward user types, write inline anonymous structs all the way down.
+3. **Don't combine `Load() returning struct{...}` with `var Actions = kit.ActionMap{}` until #143 lands.** The codegen-emitted PageData adds `Form any` and the render adapter strict-casts; user code has no satisfying shape. Smoke routes under Actions will return 500 with `PageData type mismatch`. Document the gap; do not paper over it.
+4. **A playground that surfaces a framework gap should ship the gap-triggering source AND a follow-up issue with reproducer + acceptance criteria.** The next contributor should be able to fix the framework, point at the playground, and watch the smoke turn green. Hiding the gap costs more than documenting it.
+5. **`go run github.com/binsarjr/sveltego/cmd/sveltego compile` must run before `go list ./...` or `go test ./...` in any playground.** The mirror tree under `.gen/usersrc/` is what the workspace toolchain sees; without it the whole module cannot resolve.
+6. **Pick disjoint default ports across playgrounds.** Basic on `:3000`, blog on `:8080`. Future playgrounds: `:8081`, `:8082`, ... so a developer can run all of them in parallel without a port-clash dance.
+

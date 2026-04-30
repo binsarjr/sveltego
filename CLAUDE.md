@@ -48,7 +48,7 @@ Always read both `tasks/` files at session start before proposing changes.
 
 ## Project direction (read before planning anything)
 
-This is a **rewrite of SvelteKit's shape in pure Go**, not an embed of SvelteKit-the-JS-server. The earlier "embed JS runtime via goja/v8go/Bun" direction was rejected — see `tasks/lessons.md` "Pivot to Go-native rewrite" for the chain of reasoning. Do not reopen that decision without new evidence.
+This is a **rewrite of SvelteKit's shape in pure Go**, not an embed of SvelteKit-the-JS-server. The earlier "embed JS runtime via goja/v8go/Bun" direction was rejected — see [`tasks/lessons/2026-04-29-pivot-to-go-native-rewrite.md`](tasks/lessons/2026-04-29-pivot-to-go-native-rewrite.md) for the chain of reasoning. Do not reopen that decision without new evidence.
 
 Key invariants:
 
@@ -121,11 +121,12 @@ A task is **not done** when bytes hit disk. It is done when proven correct. Befo
 
 ### 6. Mistake logging (lessons.md)
 
-- After **any user correction**, append a dated section to `tasks/lessons.md`:
-  - Date heading.
+- After **any user correction**, create a new file `tasks/lessons/YYYY-MM-DD-<topic>.md` with:
+  - `## YYYY-MM-DD — <topic>` heading.
   - "Insight" — what was wrong, with the underlying pattern named.
   - "Self-rules" — numbered, future-tense, prevent the category.
-- Never rewrite older entries. Append-only journal.
+- Add a bullet to the top of `tasks/lessons.md` index pointing at the new file.
+- Never rewrite or delete existing lesson files. Append-only journal.
 - Read recent lessons at session start when relevant.
 
 ### 7. Don't over-engineer
@@ -155,7 +156,7 @@ A task is **not done** when bytes hit disk. It is done when proven correct. Befo
 
 - Do not hold large data in context. Save to disk, grep/jq/awk it.
 - Write intermediate results to files for multi-pass work.
-- Use `tasks/lessons.md`, `tasks/todo.md`, and per-package `CLAUDE.md` as durable memory. Not chat history.
+- Use `tasks/lessons.md` (index) + `tasks/lessons/` (per-entry files), `tasks/todo.md`, and per-package `CLAUDE.md` as durable memory. Not chat history.
 - `/tmp/` is fine for batch scripts and bodies; just remember they are ephemeral across sessions.
 
 ### 11. Tone and reporting
@@ -257,7 +258,7 @@ through `go/parser` directly. See ADR 0003 amendment (Phase 0i-fix).
 
 - The repo is on `main` only. Push directly after a clean commit; no PR flow yet.
 - Commits use a short imperative subject. Recent style: `docs: track 19 SvelteKit-parity gap issues across milestones`.
-- When adding a new lesson to `tasks/lessons.md`, append a dated section — never rewrite older entries.
+- When adding a new lesson, create `tasks/lessons/YYYY-MM-DD-<topic>.md` and prepend a bullet to the `tasks/lessons.md` index — never edit existing lesson files.
 - When the issue list expands, also update `README.md` milestones table and `tasks/todo.md` milestone counts in the same commit.
 
 ## Out of scope (do not propose)
