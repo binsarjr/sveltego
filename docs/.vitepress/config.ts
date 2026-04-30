@@ -47,6 +47,12 @@ export default defineConfig({
           ],
         },
         {
+          text: 'Integrations',
+          items: [
+            { text: 'Tailwind CSS', link: '/guide/tailwind' },
+          ],
+        },
+        {
           text: 'Migration',
           items: [
             { text: 'From SvelteKit', link: '/guide/migration' },
