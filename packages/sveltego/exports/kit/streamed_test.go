@@ -389,7 +389,7 @@ func TestStreamedSeq_CtxCancelStopsIteration(t *testing.T) {
 // TestStreamedSeq_EmptySeq resolves with zero and nil for an empty iterator.
 func TestStreamedSeq_EmptySeq(t *testing.T) {
 	t.Parallel()
-	empty := func(yield func(int, error) bool) {}
+	empty := func(_ func(int, error) bool) {}
 	s := kit.StreamedSeq(context.Background(), iter.Seq2[int, error](empty))
 	got, err := s.Wait(context.Background(), time.Second)
 	if err != nil {
