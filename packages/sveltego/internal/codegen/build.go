@@ -151,6 +151,11 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 	// clientRouteKeys collects the Vite input key for every page route.
 	var clientRouteKeys []string
 	clientKeysByPkg := make(map[string]string)
+	// clientRouterMap maps each route's canonical pattern to the path of
+	// its +page.svelte source relative to the SPA router module
+	// (.gen/client/__router/router.ts). It feeds vite.GenerateRouter so
+	// the SPA router can lazy-import the right component per navigation.
+	clientRouterMap := make(map[string]string)
 	for _, route := range scan.Routes {
 		if route.HasError {
 			if _, done := emittedErrors[route.Dir]; !done {
@@ -178,12 +183,13 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 			componentSeeds = append(componentSeeds, filepath.Join(route.Dir, pageName))
 
 			if !opts.NoClient {
-				ck, cerr := emitClientEntry(opts.ProjectRoot, outDir, routesDir, route, pageName)
+				ck, relSvelteFromRouter, cerr := emitClientEntry(opts.ProjectRoot, outDir, routesDir, route, pageName)
 				if cerr != nil {
 					return nil, cerr
 				}
 				clientRouteKeys = append(clientRouteKeys, ck)
 				clientKeysByPkg[route.PackagePath] = ck
+				clientRouterMap[route.Pattern] = relSvelteFromRouter
 			}
 		case route.HasServer:
 			if err := emitRESTRoute(opts.ProjectRoot, outDir, modulePath, route); err != nil {
@@ -278,6 +284,9 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 
 	var viteConfigPath string
 	if !opts.NoClient && len(clientRouteKeys) > 0 {
+		if err := emitClientRouter(opts.ProjectRoot, outDir, clientRouterMap); err != nil {
+			return nil, err
+		}
 		viteConfigPath = filepath.Join(opts.ProjectRoot, "vite.config.gen.js")
 		configSrc := vite.GenerateConfig(vite.ConfigOptions{
 			OutDir:       "static/_app",
@@ -384,36 +393,72 @@ func emitPage(projectRoot, outDir, modulePath string, route routescan.ScannedRou
 }
 
 // emitClientEntry writes .gen/client/<routeKey>/entry.ts for one page route.
-// routeKey is e.g. "routes/+page" or "routes/post/[id]/+page". Returns the
-// routeKey so the caller can collect them for vite.GenerateConfig.
-func emitClientEntry(projectRoot, outDir, routesDir string, route routescan.ScannedRoute, pageName string) (string, error) {
+// routeKey is e.g. "routes/+page" or "routes/post/[id]/+page". Returns
+// the routeKey, the .svelte source path relative to the SPA router
+// directory (.gen/client/__router/), and any error. The caller collects
+// the routeKey for vite.GenerateConfig and the relative source path for
+// vite.GenerateRouter so the per-app router module imports each
+// component lazily without re-deriving the path.
+func emitClientEntry(projectRoot, outDir, routesDir string, route routescan.ScannedRoute, pageName string) (string, string, error) {
 	routesParent := filepath.Dir(routesDir)
 	relDir, err := filepath.Rel(routesParent, route.Dir)
 	if err != nil {
-		return "", fmt.Errorf("codegen: client entry rel path: %w", err)
+		return "", "", fmt.Errorf("codegen: client entry rel path: %w", err)
 	}
 	routeKey := filepath.ToSlash(filepath.Join(relDir, strings.TrimSuffix(pageName, ".svelte")))
 
 	entryDir := filepath.Join(projectRoot, outDir, "client", filepath.FromSlash(routeKey))
 	if err := os.MkdirAll(entryDir, 0o755); err != nil {
-		return "", fmt.Errorf("codegen: mkdir client entry %s: %w", entryDir, err)
+		return "", "", fmt.Errorf("codegen: mkdir client entry %s: %w", entryDir, err)
 	}
 
 	entryRelFromRoot := filepath.ToSlash(filepath.Join(outDir, "client", routeKey, "entry.ts"))
 	depth := len(strings.Split(filepath.ToSlash(filepath.Dir(entryRelFromRoot)), "/"))
 	routeDirFromRoot, err := filepath.Rel(projectRoot, route.Dir)
 	if err != nil {
-		return "", fmt.Errorf("codegen: client entry svelte rel path: %w", err)
+		return "", "", fmt.Errorf("codegen: client entry svelte rel path: %w", err)
 	}
 	svelteSrc := filepath.ToSlash(routeDirFromRoot) + "/" + pageName
 	relSvelte := vite.RelativeSveltePath(svelteSrc, depth)
 
-	src := vite.GenerateClientEntry(relSvelte)
+	// The per-route entry sits at .gen/client/<routeKey>/entry.ts; the
+	// shared router module lives at .gen/client/__router/router.ts. The
+	// relative path from the entry's directory walks up to .gen/client/
+	// and into __router/router.
+	relRouter := strings.Repeat("../", depth-2) + "__router/router"
+
+	src := vite.GenerateClientEntry(relSvelte, relRouter)
 	entryAbs := filepath.Join(entryDir, "entry.ts")
 	if err := os.WriteFile(entryAbs, []byte(src), genFileMode); err != nil {
-		return "", fmt.Errorf("codegen: write client entry %s: %w", entryAbs, err)
+		return "", "", fmt.Errorf("codegen: write client entry %s: %w", entryAbs, err)
 	}
-	return routeKey, nil
+
+	// Path to the .svelte source from the SPA router directory
+	// (.gen/client/__router/) — depth from routes parent to project root
+	// is the same as for entry.ts, so router.ts at depth-3 ascends
+	// correspondingly.
+	routerDirFromRoot := filepath.ToSlash(filepath.Join(outDir, "client", "__router"))
+	routerDepth := len(strings.Split(routerDirFromRoot, "/"))
+	relSvelteFromRouter := vite.RelativeSveltePath(svelteSrc, routerDepth)
+	return routeKey, relSvelteFromRouter, nil
+}
+
+// emitClientRouter writes .gen/client/__router/router.ts — the shared
+// SPA router module imported by every per-route entry.ts. routeMap keys
+// are canonical route patterns (matching server-side router.Route.Pattern)
+// and values are paths to each route's +page.svelte source relative to
+// the router.ts file.
+func emitClientRouter(projectRoot, outDir string, routeMap map[string]string) error {
+	dir := filepath.Join(projectRoot, outDir, "client", "__router")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("codegen: mkdir client router %s: %w", dir, err)
+	}
+	src := vite.GenerateRouter(vite.RouterOptions{Routes: routeMap})
+	target := filepath.Join(dir, "router.ts")
+	if err := os.WriteFile(target, []byte(src), genFileMode); err != nil {
+		return fmt.Errorf("codegen: write client router %s: %w", target, err)
+	}
+	return nil
 }
 
 // emitEmbedStub writes <outAbs>/embed.go only when at least one of the

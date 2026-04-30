@@ -127,6 +127,11 @@ type Server struct {
 	viteManifest viteManifestMap
 	viteBase     string
 
+	// clientManifest is the SPA route table embedded in the initial SSR
+	// payload so the client SPA router can match link URLs and look up
+	// route modules without a separate manifest fetch (#37).
+	clientManifest []clientManifestEntry
+
 	// initState is initPending/initReady/initFailed; read with atomic.
 	initState atomic.Int32
 	// initDone is closed once Init completes (success or failure).
@@ -216,6 +221,7 @@ func New(cfg Config) (*Server, error) {
 		shellTail:       tail,
 		viteManifest:    vm,
 		viteBase:        viteBase,
+		clientManifest:  buildClientManifest(tree.Routes()),
 		initDone:        done,
 		initTimeout:     initTimeout,
 		initPendingHTML: initPendingHTML,

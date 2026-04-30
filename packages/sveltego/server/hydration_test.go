@@ -80,6 +80,132 @@ func TestRenderPage_payloadScriptTag(t *testing.T) {
 	}
 }
 
+// TestRenderPage_payloadIncludesManifest asserts that the SSR payload
+// carries the SPA route manifest so the client router can match link
+// URLs without a separate manifest fetch (#37).
+func TestRenderPage_payloadIncludesManifest(t *testing.T) {
+	t.Parallel()
+
+	srv := newTestServer(t, []router.Route{
+		{
+			Pattern:  "/",
+			Segments: []router.Segment{},
+			Page:     staticPage("home"),
+		},
+		{
+			Pattern: "/post/[id]",
+			Segments: []router.Segment{
+				{Kind: router.SegmentStatic, Value: "post"},
+				{Kind: router.SegmentParam, Name: "id"},
+			},
+			Page: staticPage("post"),
+		},
+		{
+			Pattern: "/docs/[...rest]",
+			Segments: []router.Segment{
+				{Kind: router.SegmentStatic, Value: "docs"},
+				{Kind: router.SegmentRest, Name: "rest"},
+			},
+			Page: staticPage("docs"),
+		},
+	})
+	ts := httptest.NewServer(srv)
+	t.Cleanup(ts.Close)
+
+	resp, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+
+	bs := string(body)
+	start := strings.Index(bs, `<script id="sveltego-data" type="application/json">`)
+	if start < 0 {
+		t.Fatalf("payload tag not found")
+	}
+	start += len(`<script id="sveltego-data" type="application/json">`)
+	end := strings.Index(bs[start:], `</script>`)
+	raw := bs[start : start+end]
+
+	var payload struct {
+		Manifest []struct {
+			Pattern  string `json:"pattern"`
+			Segments []struct {
+				Kind  uint8  `json:"kind"`
+				Name  string `json:"name"`
+				Value string `json:"value"`
+			} `json:"segments"`
+		} `json:"manifest"`
+	}
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		t.Fatalf("parse: %v; raw=%s", err, raw)
+	}
+	if len(payload.Manifest) != 3 {
+		t.Fatalf("manifest entries = %d, want 3; raw=%s", len(payload.Manifest), raw)
+	}
+	patterns := map[string]bool{}
+	for _, e := range payload.Manifest {
+		patterns[e.Pattern] = true
+	}
+	for _, want := range []string{"/", "/post/[id]", "/docs/[...rest]"} {
+		if !patterns[want] {
+			t.Errorf("manifest missing pattern %q; got %+v", want, patterns)
+		}
+	}
+}
+
+// TestDataJSON_omitsManifest asserts that __data.json responses do NOT
+// include the manifest (the client already has it from the initial paint).
+func TestDataJSON_omitsManifest(t *testing.T) {
+	t.Parallel()
+
+	srv := newTestServer(t, []router.Route{{
+		Pattern:  "/blog",
+		Segments: []router.Segment{{Kind: router.SegmentStatic, Value: "blog"}},
+		Page:     staticPage("blog"),
+		Load: func(_ *kit.LoadCtx) (any, error) {
+			return map[string]string{"k": "v"}, nil
+		},
+	}})
+	ts := httptest.NewServer(srv)
+	t.Cleanup(ts.Close)
+
+	resp, err := http.Get(ts.URL + "/blog/__data.json")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+
+	if strings.Contains(string(body), `"manifest"`) {
+		t.Errorf("__data.json should not include manifest; got: %s", body)
+	}
+}
+
+// TestBuildClientManifest_skipsServerOnly verifies routes without a Page
+// handler (e.g. pure +server.go endpoints) are excluded from the SPA
+// manifest, since the client cannot mount a component for them.
+func TestBuildClientManifest_skipsServerOnly(t *testing.T) {
+	t.Parallel()
+
+	routes := []router.Route{
+		{Pattern: "/", Segments: []router.Segment{}, Page: staticPage("home")},
+		{
+			Pattern:  "/api",
+			Segments: []router.Segment{{Kind: router.SegmentStatic, Value: "api"}},
+			Server:   router.ServerHandlers{},
+		},
+	}
+	m := buildClientManifest(routes)
+	if len(m) != 1 {
+		t.Fatalf("entries = %d, want 1 (server-only route should be skipped)", len(m))
+	}
+	if m[0].Pattern != "/" {
+		t.Errorf("pattern = %q, want /", m[0].Pattern)
+	}
+}
+
 // TestRenderPage_payloadJSONEscape asserts that script-breaking sequences
 // in data values are escaped so "</script>" can't break out of the tag (#35).
 func TestRenderPage_payloadJSONEscape(t *testing.T) {

@@ -457,6 +457,55 @@ func TestBuild_EmitsSvelteHead(t *testing.T) {
 	}
 }
 
+// TestBuild_EmitsSPARouterModule asserts that the codegen pass writes
+// the shared SPA router module at .gen/client/__router/router.ts and
+// that every per-route entry.ts imports it (#37).
+func TestBuild_EmitsSPARouterModule(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	scaffoldProject(t, root, "example.com/app")
+	if _, err := Build(BuildOptions{ProjectRoot: root}); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	routerPath := filepath.Join(root, ".gen", "client", "__router", "router.ts")
+	routerBytes, err := os.ReadFile(routerPath)
+	if err != nil {
+		t.Fatalf("router.ts not emitted: %v", err)
+	}
+	for _, want := range []string{
+		"export function startRouter",
+		"export function shouldNotIntercept",
+		`"/": () => import(`,
+		`"/[id]": () => import(`,
+	} {
+		if !bytes.Contains(routerBytes, []byte(want)) {
+			t.Errorf("router.ts missing %q:\n%s", want, routerBytes)
+		}
+	}
+
+	rootEntry := filepath.Join(root, ".gen", "client", "routes", "+page", "entry.ts")
+	rootEntryBytes, err := os.ReadFile(rootEntry)
+	if err != nil {
+		t.Fatalf("root entry.ts not emitted: %v", err)
+	}
+	if !bytes.Contains(rootEntryBytes, []byte("startRouter")) {
+		t.Errorf("root entry.ts missing startRouter import:\n%s", rootEntryBytes)
+	}
+	if !bytes.Contains(rootEntryBytes, []byte(`from "../../__router/router"`)) {
+		t.Errorf("root entry.ts router import path wrong:\n%s", rootEntryBytes)
+	}
+
+	idEntry := filepath.Join(root, ".gen", "client", "routes", "[id]", "+page", "entry.ts")
+	idEntryBytes, err := os.ReadFile(idEntry)
+	if err != nil {
+		t.Fatalf("id entry.ts not emitted: %v", err)
+	}
+	if !bytes.Contains(idEntryBytes, []byte(`from "../../../__router/router"`)) {
+		t.Errorf("id entry.ts router import path wrong:\n%s", idEntryBytes)
+	}
+}
+
 func TestBuild_EmbedSkippedWhenNoAssets(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
