@@ -205,7 +205,11 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 // this file, 0 otherwise — the caller aggregates across routes to
 // decide whether the missing-lib warning fires.
 func emitPage(projectRoot, outDir, modulePath string, route routescan.ScannedRoute) (int, error) {
-	pagePath := filepath.Join(route.Dir, "+page.svelte")
+	pageName := "+page.svelte"
+	if route.HasReset {
+		pageName = "+page@" + route.ResetTarget + ".svelte"
+	}
+	pagePath := filepath.Join(route.Dir, pageName)
 	src, err := os.ReadFile(pagePath) //nolint:gosec // path comes from scanner walk under projectRoot
 	if err != nil {
 		return 0, fmt.Errorf("codegen: read %s: %w", pagePath, err)
@@ -412,7 +416,10 @@ func dirExists(path string) bool {
 // non-empty, points at a sibling layout.server.go whose Load() inline
 // struct return is used to infer LayoutData fields.
 func emitLayout(projectRoot, outDir, layoutDir, pkgPath, pkgName, serverFile string) error {
-	layoutPath := filepath.Join(layoutDir, "+layout.svelte")
+	layoutPath, err := resolveLayoutSource(layoutDir)
+	if err != nil {
+		return err
+	}
 	src, err := os.ReadFile(layoutPath) //nolint:gosec // path comes from scanner walk under projectRoot
 	if err != nil {
 		return fmt.Errorf("codegen: read %s: %w", layoutPath, err)
@@ -462,6 +469,33 @@ func emitLayoutMirrorAndWire(projectRoot, outDir, modulePath, pkgPath, pkgName, 
 		packageName:    pkgName,
 		wireDir:        wireDir,
 	})
+}
+
+// resolveLayoutSource returns the path of the +layout.svelte (or its
+// reset variant) inside layoutDir. The plain filename takes precedence;
+// otherwise the first matching `+layout@*.svelte` entry wins. The
+// scanner already guarantees the directory contains exactly one
+// layout source, so the search is unambiguous.
+func resolveLayoutSource(layoutDir string) (string, error) {
+	plain := filepath.Join(layoutDir, "+layout.svelte")
+	if _, err := os.Stat(plain); err == nil {
+		return plain, nil
+	}
+	entries, err := os.ReadDir(layoutDir)
+	if err != nil {
+		return "", fmt.Errorf("codegen: read %s: %w", layoutDir, err)
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		base, _, ok := routescan.ParseResetFilename(e.Name())
+		if !ok || base != "+layout" {
+			continue
+		}
+		return filepath.Join(layoutDir, e.Name()), nil
+	}
+	return "", fmt.Errorf("codegen: %s contains no +layout.svelte", layoutDir)
 }
 
 // layoutPackageName extracts the directory's package name from a

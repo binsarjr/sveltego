@@ -13,16 +13,18 @@ import (
 	"github.com/binsarjr/sveltego/runtime/router"
 )
 
-// specialFiles names the seven file conventions a route directory may
+// specialFiles names the file conventions a route directory may
 // own. Presence of any one materializes a ScannedRoute. The .svelte
 // names retain the SvelteKit-style "+" prefix; the .go names drop it
 // because Go's tooling rejects the "+" character in source filenames
-// (see ADR 0003 amendment, Phase 0i-fix).
+// (see ADR 0003 amendment, Phase 0i-fix). Reset-suffixed names like
+// `+page@.svelte` and `+page@(app).svelte` are matched separately by
+// ParseResetFilename and normalized into the base (+page / +layout /
+// +error) entry plus a per-route ResetTarget.
 var specialFiles = map[string]struct{}{
 	"+page.svelte":     {},
 	"+layout.svelte":   {},
 	"+error.svelte":    {},
-	"+page@.svelte":    {},
 	"page.server.go":   {},
 	"layout.server.go": {},
 	"server.go":        {},
@@ -87,8 +89,10 @@ func walkRoutes(routesDir string) ([]ScannedRoute, []Diagnostic, error) {
 	}
 
 	type dirInfo struct {
-		path  string
-		files map[string]struct{}
+		path        string
+		files       map[string]struct{}
+		hasReset    bool
+		resetTarget string
 	}
 
 	var (
@@ -104,12 +108,17 @@ func walkRoutes(routesDir string) ([]ScannedRoute, []Diagnostic, error) {
 			if path != routesDir && strings.HasPrefix(d.Name(), ".") {
 				return fs.SkipDir
 			}
-			files, readErr := readSpecialFiles(path)
+			files, hasReset, resetTarget, readErr := readSpecialFiles(path)
 			if readErr != nil {
 				return readErr
 			}
 			if len(files) > 0 {
-				dirs = append(dirs, dirInfo{path: path, files: files})
+				dirs = append(dirs, dirInfo{
+					path:        path,
+					files:       files,
+					hasReset:    hasReset,
+					resetTarget: resetTarget,
+				})
 			}
 			return nil
 		}
@@ -136,7 +145,7 @@ func walkRoutes(routesDir string) ([]ScannedRoute, []Diagnostic, error) {
 
 	routes := make([]ScannedRoute, 0, len(dirs))
 	for _, di := range dirs {
-		route, parseDiags := buildRoute(routesDir, di.path, di.files, dirsWithLayout)
+		route, parseDiags := buildRoute(routesDir, di.path, di.files, dirsWithLayout, di.hasReset, di.resetTarget)
 		diagnostics = append(diagnostics, parseDiags...)
 		if route != nil {
 			diagnostics = append(diagnostics, validateRouteFiles(*route)...)
@@ -147,24 +156,40 @@ func walkRoutes(routesDir string) ([]ScannedRoute, []Diagnostic, error) {
 	return routes, diagnostics, nil
 }
 
-func readSpecialFiles(dir string) (map[string]struct{}, error) {
+// readSpecialFiles enumerates the special files in dir. The returned
+// map carries one entry per matched filename. Reset-suffixed names
+// (`+page@.svelte`, `+page@(group).svelte`, plus the +layout/+error
+// equivalents) are normalized to the base name so downstream code can
+// continue to consult `+page.svelte` etc; hasReset reflects whether
+// any reset variant was found and resetTarget records the parsed
+// @<target> portion (empty for root reset).
+func readSpecialFiles(dir string) (files map[string]struct{}, hasReset bool, resetTarget string, err error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", dir, err)
+		return nil, false, "", fmt.Errorf("read %s: %w", dir, err)
 	}
-	files := make(map[string]struct{})
+	files = make(map[string]struct{})
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
 		}
-		if _, ok := specialFiles[e.Name()]; ok {
-			files[e.Name()] = struct{}{}
+		name := e.Name()
+		if _, ok := specialFiles[name]; ok {
+			files[name] = struct{}{}
+			continue
 		}
+		base, target, ok := ParseResetFilename(name)
+		if !ok {
+			continue
+		}
+		files[base+".svelte"] = struct{}{}
+		hasReset = true
+		resetTarget = target
 	}
-	return files, nil
+	return files, hasReset, resetTarget, nil
 }
 
-func buildRoute(routesDir, dir string, files map[string]struct{}, dirsWithLayout map[string]struct{}) (*ScannedRoute, []Diagnostic) {
+func buildRoute(routesDir, dir string, files map[string]struct{}, dirsWithLayout map[string]struct{}, hasReset bool, resetTarget string) (*ScannedRoute, []Diagnostic) {
 	rel, err := filepath.Rel(routesDir, dir)
 	if err != nil {
 		return nil, []Diagnostic{{
@@ -209,6 +234,13 @@ func buildRoute(routesDir, dir string, files map[string]struct{}, dirsWithLayout
 	}
 
 	chain := buildLayoutChain(routesDir, dir, dirsWithLayout)
+	if hasReset {
+		truncated, truncErr := truncateChainForReset(routesDir, chain, resetTarget)
+		if truncErr != nil {
+			diagnostics = append(diagnostics, Diagnostic{Path: dir, Message: truncErr.Error()})
+		}
+		chain = truncated
+	}
 	chainPkgs := make([]string, 0, len(chain))
 	chainServers := make([]string, 0, len(chain))
 	for _, c := range chain {
@@ -238,12 +270,44 @@ func buildRoute(routesDir, dir string, files map[string]struct{}, dirsWithLayout
 		HasPage:            has(files, "+page.svelte"),
 		HasLayout:          has(files, "+layout.svelte"),
 		HasError:           has(files, "+error.svelte"),
-		HasReset:           has(files, "+page@.svelte"),
+		HasReset:           hasReset,
+		ResetTarget:        resetTarget,
 		HasPageServer:      has(files, "page.server.go"),
 		HasLayoutServer:    has(files, "layout.server.go"),
 		HasServer:          has(files, "server.go"),
 	}
 	return route, diagnostics
+}
+
+// truncateChainForReset trims a layout chain (ordered ancestor->self)
+// to the suffix that survives a layout-reset suffix. An empty
+// resetTarget yields an empty chain (root reset). A "(group)" target
+// drops every entry above the nearest matching group ancestor and
+// keeps the matched layout plus everything beneath it; it returns an
+// error when no ancestor of the route is the named group.
+func truncateChainForReset(routesDir string, chain []string, resetTarget string) ([]string, error) {
+	if resetTarget == "" {
+		return nil, nil
+	}
+	if len(chain) == 0 {
+		return nil, fmt.Errorf("layout reset %q has no ancestor layout to truncate at", resetTarget)
+	}
+	for i := len(chain) - 1; i >= 0; i-- {
+		rel, relErr := filepath.Rel(routesDir, chain[i])
+		if relErr != nil {
+			return chain, fmt.Errorf("relativize layout dir %s: %w", chain[i], relErr)
+		}
+		rel = filepath.ToSlash(rel)
+		if rel == "." {
+			continue
+		}
+		parts := strings.Split(rel, "/")
+		leaf := parts[len(parts)-1]
+		if leaf == resetTarget {
+			return chain[i:], nil
+		}
+	}
+	return chain, fmt.Errorf("layout reset %q does not match any ancestor group of this route", resetTarget)
 }
 
 // encodeLayoutPackagePath returns the .gen package path for a layout

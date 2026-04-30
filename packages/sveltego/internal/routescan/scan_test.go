@@ -201,6 +201,111 @@ func TestScanReset(t *testing.T) {
 	if len(res.Routes) != 1 || !res.Routes[0].HasReset {
 		t.Fatalf("want one route with HasReset, got %+v", res.Routes)
 	}
+	if res.Routes[0].ResetTarget != "" {
+		t.Fatalf("want empty ResetTarget for root reset, got %q", res.Routes[0].ResetTarget)
+	}
+	if !res.Routes[0].HasPage {
+		t.Fatal("want HasPage true for +page@.svelte")
+	}
+}
+
+func TestScanGroupsDeep(t *testing.T) {
+	t.Parallel()
+	res := mustScan(t, "groups-deep", "")
+	if len(res.Diagnostics) != 0 {
+		t.Fatalf("unexpected diagnostics: %v", res.Diagnostics)
+	}
+	leaf := findRoute(res.Routes, "/users")
+	if leaf == nil {
+		t.Fatalf("missing /users route, got %v", patterns(res.Routes))
+	}
+	if leaf.PackagePath != ".gen/routes/_g_app/_g_admin/users" {
+		t.Fatalf("want package .gen/routes/_g_app/_g_admin/users, got %q", leaf.PackagePath)
+	}
+	if got := len(leaf.LayoutChain); got != 3 {
+		t.Fatalf("want LayoutChain length 3 (root, app, admin), got %d (%v)", got, leaf.LayoutChain)
+	}
+	for i := 1; i < len(leaf.LayoutChain); i++ {
+		if !strings.HasPrefix(leaf.LayoutChain[i], leaf.LayoutChain[i-1]) {
+			t.Fatalf("layout chain not ancestor->self: %v", leaf.LayoutChain)
+		}
+	}
+}
+
+func TestScanLayoutResetRoot(t *testing.T) {
+	t.Parallel()
+	res := mustScan(t, "layout-reset", "")
+	embed := findRoute(res.Routes, "/level1/level2/embed")
+	if embed == nil {
+		t.Fatalf("missing /level1/level2/embed route, got %v", patterns(res.Routes))
+	}
+	if !embed.HasReset || embed.ResetTarget != "" {
+		t.Fatalf("want root reset on embed route, got HasReset=%v ResetTarget=%q", embed.HasReset, embed.ResetTarget)
+	}
+	if len(embed.LayoutChain) != 0 {
+		t.Fatalf("want empty LayoutChain after root reset, got %v", embed.LayoutChain)
+	}
+	if len(embed.LayoutPackagePaths) != 0 {
+		t.Fatalf("want empty LayoutPackagePaths after root reset, got %v", embed.LayoutPackagePaths)
+	}
+}
+
+func TestScanLayoutResetGroup(t *testing.T) {
+	t.Parallel()
+	res := mustScan(t, "layout-reset", "")
+	dash := findRoute(res.Routes, "/dash")
+	if dash == nil {
+		t.Fatalf("missing /dash route, got %v", patterns(res.Routes))
+	}
+	if !dash.HasReset || dash.ResetTarget != "(app)" {
+		t.Fatalf("want ResetTarget=(app), got HasReset=%v ResetTarget=%q", dash.HasReset, dash.ResetTarget)
+	}
+	// chain truncates at the (app) ancestor inclusive: root layout dropped,
+	// (app)/+layout.svelte kept.
+	if len(dash.LayoutChain) != 1 {
+		t.Fatalf("want LayoutChain length 1 after (app) reset, got %v", dash.LayoutChain)
+	}
+	if !strings.HasSuffix(dash.LayoutChain[0], "(app)") {
+		t.Fatalf("want chain leaf to be (app), got %v", dash.LayoutChain)
+	}
+}
+
+func TestScanGroupsConflict(t *testing.T) {
+	t.Parallel()
+	res := mustScan(t, "groups-conflict", "")
+	if got := diagsContaining(res.Diagnostics, "route conflict"); got == 0 {
+		t.Fatalf("want route-conflict diagnostic for duplicate /users across groups, got %v", res.Diagnostics)
+	}
+}
+
+func TestParseResetFilename(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		in     string
+		base   string
+		target string
+		ok     bool
+	}{
+		{"+page@.svelte", "+page", "", true},
+		{"+page@(app).svelte", "+page", "(app)", true},
+		{"+layout@.svelte", "+layout", "", true},
+		{"+layout@(admin).svelte", "+layout", "(admin)", true},
+		{"+error@.svelte", "+error", "", true},
+		{"+page.svelte", "", "", false},
+		{"+page@.html", "", "", false},
+		{"+page@(.svelte", "", "", false},
+		{"+page@(123).svelte", "", "", false},
+		{"+other@.svelte", "", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.in, func(t *testing.T) {
+			t.Parallel()
+			base, target, ok := ParseResetFilename(tc.in)
+			if ok != tc.ok || base != tc.base || target != tc.target {
+				t.Fatalf("got (%q,%q,%v), want (%q,%q,%v)", base, target, ok, tc.base, tc.target, tc.ok)
+			}
+		})
+	}
 }
 
 func TestScanRoutesSorted(t *testing.T) {

@@ -159,6 +159,42 @@ func BuildPattern(segments []router.Segment) string {
 	return b.String()
 }
 
+// ParseResetFilename splits a reset-bearing filename (e.g.
+// "+page@(app).svelte") into its base ("+page", "+layout", "+error"),
+// the @<target> suffix, and an ok flag. The base is returned without
+// the @ marker; target may be empty for root-reset names like
+// "+page@.svelte". When the filename has no @ before the extension or
+// is malformed, ok is false and the other return values are zero.
+func ParseResetFilename(name string) (base, target string, ok bool) {
+	const ext = ".svelte"
+	if !strings.HasSuffix(name, ext) {
+		return "", "", false
+	}
+	stem := name[:len(name)-len(ext)]
+	before, after, ok := strings.Cut(stem, "@")
+	if !ok {
+		return "", "", false
+	}
+	base = before
+	switch base {
+	case "+page", "+layout", "+error":
+	default:
+		return "", "", false
+	}
+	target = after
+	if target == "" {
+		return base, "", true
+	}
+	if target[0] != '(' || target[len(target)-1] != ')' {
+		return "", "", false
+	}
+	inner := target[1 : len(target)-1]
+	if inner == "" || !isGoIdent(inner) {
+		return "", "", false
+	}
+	return base, target, true
+}
+
 // encodePackageName returns the ADR 0003 encoded directory name for one
 // segment plus the original raw name. Group segments need the raw name
 // because ParseSegment drops them; for non-groups the raw name is used
