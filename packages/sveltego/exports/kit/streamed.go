@@ -3,6 +3,7 @@ package kit
 import (
 	"context"
 	"errors"
+	"iter"
 	"sync/atomic"
 	"time"
 )
@@ -172,6 +173,79 @@ func (s *Streamed[T]) Wait(ctx context.Context, timeout time.Duration) (T, error
 func (s *Streamed[T]) WaitAny(ctx context.Context, timeout time.Duration) (any, error) {
 	v, err := s.Wait(ctx, timeout)
 	return v, err
+}
+
+// StreamedSeq drains seq in a goroutine and resolves with the last value
+// yielded (and the first non-nil error encountered, if any). Iteration
+// stops early when ctx is cancelled. The goroutine starts immediately so
+// work overlaps with shell rendering.
+//
+// Each (v, nil) pair from seq overwrites the accumulated value; a non-nil
+// error terminates the drain and becomes the resolved error. When no value
+// was yielded before an error or cancellation, the zero value of T is
+// returned.
+//
+// ctx must not be nil.
+//
+// Note: the current streaming pipeline resolves Streamed[T] as a single
+// value. Full chunk-by-chunk SSE emission requires the hydration format
+// defined in issue #35.
+func StreamedSeq[T any](ctx context.Context, seq iter.Seq2[T, error]) *Streamed[T] {
+	return StreamCtx(ctx, func(c context.Context) (T, error) {
+		var (
+			last     T
+			firstErr error
+		)
+		// Call seq directly with a custom yield so we can return false to
+		// stop iteration early without the "continued after false" panic that
+		// a bare return inside for-range would cause.
+		seq(func(v T, err error) bool {
+			// Check cancellation before accepting the yielded value.
+			select {
+			case <-c.Done():
+				firstErr = c.Err()
+				return false // stop iteration
+			default:
+			}
+			if err != nil {
+				firstErr = err
+				return false // stop iteration
+			}
+			last = v
+			return true
+		})
+		return last, firstErr
+	})
+}
+
+// StreamedChan drains ch in a goroutine and resolves with the last value
+// received. Draining stops when ch is closed or ctx is cancelled.
+// The goroutine starts immediately so work overlaps with shell rendering.
+//
+// Values are accumulated in order; the resolved result is the final
+// received value. When the channel is closed before any value arrives,
+// the zero value of T is returned with a nil error.
+//
+// ctx must not be nil.
+//
+// Note: the current streaming pipeline resolves Streamed[T] as a single
+// value. Full chunk-by-chunk SSE emission requires the hydration format
+// defined in issue #35.
+func StreamedChan[T any](ctx context.Context, ch <-chan T) *Streamed[T] {
+	return StreamCtx(ctx, func(c context.Context) (T, error) {
+		var last T
+		for {
+			select {
+			case <-c.Done():
+				return last, c.Err()
+			case v, ok := <-ch:
+				if !ok {
+					return last, nil
+				}
+				last = v
+			}
+		}
+	})
 }
 
 // ctxDone returns ctx.Done() or a nil channel when ctx is nil. A nil
