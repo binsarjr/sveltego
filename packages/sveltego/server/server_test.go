@@ -96,6 +96,8 @@ func segmentsFor(pattern string) []router.Segment {
 		return []router.Segment{{Kind: router.SegmentStatic, Value: "protected"}}
 	case "/public":
 		return []router.Segment{{Kind: router.SegmentStatic, Value: "public"}}
+	case "/dashboard":
+		return []router.Segment{{Kind: router.SegmentStatic, Value: "dashboard"}}
 	}
 	panic("unknown pattern: " + pattern)
 }
@@ -958,6 +960,96 @@ func TestServeHTTP_ssrOnlyRendersHTML(t *testing.T) {
 	}
 	if !strings.Contains(string(body), "<h1>protected</h1>") {
 		t.Fatalf("body missing page content: %q", body)
+	}
+}
+
+// TestServeHTTP_localsReachableWithoutParent asserts that Locals written by
+// the Handle hook are visible to every layout and page Load in the chain
+// without any of them calling ctx.Parent(). This is the server-side
+// guarantee from sveltejs/kit#11587: Handle populates Locals once before any
+// Load runs; all Loads share the same map.
+func TestServeHTTP_localsReachableWithoutParent(t *testing.T) {
+	t.Parallel()
+
+	const wantUser = "alice"
+
+	// rootLoad reads Locals["user"] set by Handle. It deliberately never
+	// calls ctx.Parent() to prove that Locals are pre-populated.
+	rootLoad := func(ctx *kit.LoadCtx) (any, error) {
+		u, _ := ctx.Locals["user"].(string)
+		if u != wantUser {
+			return nil, fmt.Errorf("rootLoad: Locals[user] = %q, want %q", u, wantUser)
+		}
+		return u, nil
+	}
+
+	// leafLoad also reads Locals["user"] without calling ctx.Parent(),
+	// proving that even a nested layout loader receives the same map.
+	leafLoad := func(ctx *kit.LoadCtx) (any, error) {
+		u, _ := ctx.Locals["user"].(string)
+		if u != wantUser {
+			return nil, fmt.Errorf("leafLoad: Locals[user] = %q, want %q", u, wantUser)
+		}
+		return u, nil
+	}
+
+	pageLoad := func(ctx *kit.LoadCtx) (any, error) {
+		u, _ := ctx.Locals["user"].(string)
+		if u != wantUser {
+			return nil, fmt.Errorf("pageLoad: Locals[user] = %q, want %q", u, wantUser)
+		}
+		return u, nil
+	}
+
+	identityLayout := func(w *render.Writer, _ *kit.RenderCtx, _ any, children func(*render.Writer) error) error {
+		return children(w)
+	}
+
+	page := func(w *render.Writer, _ *kit.RenderCtx, data any) error {
+		s, _ := data.(string)
+		w.WriteString("<user>" + s + "</user>")
+		return nil
+	}
+
+	srv, err := New(Config{
+		Routes: []router.Route{{
+			Pattern:     "/dashboard",
+			Segments:    segmentsFor("/dashboard"),
+			Page:        page,
+			Load:        pageLoad,
+			LayoutChain: []router.LayoutHandler{identityLayout, identityLayout},
+			LayoutLoaders: []router.LayoutLoadHandler{
+				rootLoad,
+				leafLoad,
+			},
+		}},
+		Shell:  testShell,
+		Logger: quietLogger(),
+		Hooks: kit.Hooks{
+			Handle: func(ev *kit.RequestEvent, resolve kit.ResolveFn) (*kit.Response, error) {
+				ev.Locals["user"] = wantUser
+				return resolve(ev)
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ts := httptest.NewServer(srv)
+	t.Cleanup(ts.Close)
+
+	resp, err := http.Get(ts.URL + "/dashboard")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", resp.StatusCode, body)
+	}
+	if !strings.Contains(string(body), "<user>"+wantUser+"</user>") {
+		t.Fatalf("body = %q, want <user>alice</user>", body)
 	}
 }
 

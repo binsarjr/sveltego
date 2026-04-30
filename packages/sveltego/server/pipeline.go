@@ -332,6 +332,9 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 	)
 	if route.Load != nil || hasAnyLayoutLoader(route.LayoutLoaders) {
 		lctx = kit.NewLoadCtx(r, ev.Params)
+		// Share the event's Locals map so every layout and page Load in the
+		// chain reads Handle-populated values (session, user, nonce, …)
+		// without requiring a Parent() call first.
 		lctx.Locals = ev.Locals
 		lctx.Cookies = ev.Cookies
 		lctx.RawParams = ev.RawParams
