@@ -88,7 +88,7 @@ Benchmark suite vs adapter-bun with nightly regression gate. Docs site (Vitepres
 - [x] Land render + kit + codegen pipeline (#9–#15) — landed Phase 0f 2026-04-29; render `Writer` w/ sync.Pool + WriteEscape/WriteEscapeAttr; kit RenderCtx/LoadCtx/Cookies stubs; codegen text/element/mustache/if/each/script-hoist/PageData-inference; ADR 0004 amended (drop WriteAttr, lock struct-literal-only PageData)
 - [x] Land router foundation (#18 scan + emit, #19 radix matcher, #76 param matchers + built-ins, #77 optional + rest segments) — landed Phase 0g 2026-04-30; runtime/router/ + internal/routescan/ + exports/kit/params/ + internal/codegen/manifest.go; integration smoke compiles end-to-end
 - [x] Land HTTP server pipeline (#20) — landed Phase 0h 2026-04-30; `packages/sveltego/server/` exposes `New(Config) (*Server, error)`, `ListenAndServe`, `Shutdown`, `ServeHTTP`; pipeline is Match → +server.go branch / 405 / Load / Render / Response with shell template parsed once at boot; race-safe under 100×100 concurrent load; ~163 ns/op in-process p50 on M1 Pro
-- [ ] Build the rest of the MVP pipeline end-to-end (#21 CLI build, #23 hello-world, #83 $lib alias)
+- [x] Land CLI build orchestrator + `$lib` alias (#21, #83) — landed Phase 0i 2026-04-30; `internal/codegen.Build` walks `src/routes/` → `.gen/routes/.../page.gen.go` + `.gen/manifest.gen.go` + conditional `.gen/embed.go`; CLI `build`/`compile` resolve project root via go.mod walk, `build` wraps `go build -o`; `$lib` import literals rewritten using user's go.mod module path; integration test (`-tags=integration`) builds fixture binary
 - [ ] Smoke-test on hello-world example (#23)
 
 ## Open questions

@@ -57,25 +57,27 @@ func TestVersion(t *testing.T) {
 	}
 }
 
-func TestBuildStub(t *testing.T) {
+func TestBuildHelp(t *testing.T) {
 	resetLoggerOnCleanup(t)
-	_, stderr, err := runCmd(t, "build")
+	stdout, _, err := runCmd(t, "build", "--help")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if !strings.Contains(stderr, "not implemented") || !strings.Contains(stderr, "21") {
-		t.Errorf("unexpected build stub message: %q", stderr)
+	for _, sub := range []string{"--out", "--main"} {
+		if !strings.Contains(stdout, sub) {
+			t.Errorf("expected build help to mention %q, got %q", sub, stdout)
+		}
 	}
 }
 
-func TestCompileStub(t *testing.T) {
+func TestCompileHelp(t *testing.T) {
 	resetLoggerOnCleanup(t)
-	_, stderr, err := runCmd(t, "compile")
+	stdout, _, err := runCmd(t, "compile", "--help")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if !strings.Contains(stderr, "not implemented") || !strings.Contains(stderr, "21") {
-		t.Errorf("unexpected compile stub message: %q", stderr)
+	if !strings.Contains(stdout, "Compile") {
+		t.Errorf("expected compile help to mention Compile, got %q", stdout)
 	}
 }
 

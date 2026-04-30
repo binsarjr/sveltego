@@ -261,3 +261,25 @@
 5. **Bench files for Phase 0 work include the actual measured number in the file header comment.** Future readers should see the p50 without re-running. State the platform (Apple M1 Pro) and the date.
 6. **In-pool resource cycle tests assert the observable contract, not the pool internals.** `Acquire().Len() == 0` is a contract; the sync.Pool itself is unobservable.
 
+## Phase 0i — CLI build orchestrator + $lib alias (2026-04-30)
+
+### Insight
+
+- **Issue body drift, again.** Issue #21 referenced `pkg/server`, `pkg/kit`, `gen.Manifest`, `internal/codegen.Run`. None of those names landed. The current shape is `server`, `exports/kit`, `gen.Routes()` factory, and the driver itself was the deliverable for this phase. Issue #83's body assumed the user's go.mod module is literally `app`; the real implementation reads whatever path the user declared and substitutes it. Both drifts caught only because the Phase 0i brief listed them verbatim with file paths. Pattern repeats from 0g/0h: **read every API the brief references against disk before line one of code.**
+- **Stdlib-only `go.mod` parsing was the right call for MVP.** `golang.org/x/mod/modfile` is robust but adds a dep, and Phase 0i does not need replace-directive awareness or version parsing. A `bufio.Scanner` looking for `module ` on the first non-blank, non-comment line covers every well-formed go.mod and degrades gracefully on malformed input. Adding `x/mod` later is one line; removing a needless dep is harder.
+- **`$lib` rewrite at the source-text level beats AST manipulation.** The `<script lang="go">` body still has to round-trip through `go/parser` after rewriting; replacing the import literal with `regexp.ReplaceAllStringFunc` against `"\$lib(/[^"]*)?"` is one regexp and a string substitution. The trade-off is the rewriter only catches double-quoted import paths — back-tick literals and computed paths are out of scope and documented in the helper's godoc. Cheaper and more obviously correct than running an AST pass for what is fundamentally a textual rename.
+- **`cobra.Command.Flags().GetCount("verbose")` reaches the persistent flag from a subcommand.** Reusing the root's `-v` count for build-level verbose avoided redefining the same flag on the leaf and avoided a flag-name collision on `-V`. The subcommand only needs to know "is verbose at all," not the count; `count > 0` is the contract.
+- **Test for "no go.mod ancestry" needs an isolated TempDir.** macOS `t.TempDir()` lives under `/var/folders/.../T/...` which has no go.mod up the chain — safe. Linux CI runners may have a `$RUNNER_TEMP` that lives under a workspace; defensive check would be to construct an explicit ancestor without go.mod. For now we accept the platform assumption; if CI flakes we add a guard.
+- **Phase split (page emit + manifest emit + embed emit) keeps `Build` readable.** The first cut put everything inside one 200-line `Build`. Refactoring to per-step helpers (`emitPage`, `emitServerStub`, `emitEmbedStub`) made the diagnostic split, `$lib` accumulation, and verbose logging trivial to reason about. Pattern: when an orchestrator grows past ~80 LOC, the next reader will thank you for extracting the per-step helpers up front.
+
+### Self-rules
+
+1. **For every issue body older than the most recent foundation phase, re-read the API surface against disk before writing code.** Phase 0g/0h/0i all had the same drift pattern; the cost of one `grep -rn` against the package is trivial compared to a fix-up round.
+2. **Choose stdlib over `golang.org/x/mod` until you need replace/exclude/version awareness.** `bufio.Scanner` for `module ` is sufficient and the dep boundary stays clean.
+3. **Source-level rewrites for alias substitution beat AST manipulation when the body parses through `go/parser` immediately after.** Regexp scope is documented; computed paths and back-tick literals are explicitly out of scope.
+4. **Subcommand verbose flags reuse the root's persistent count, not a new bool.** `cmd.Flags().GetCount("verbose")` returns the inherited value; collision avoided.
+5. **When an orchestrator function passes 80 LOC, extract per-step helpers before adding the next branch.** `Build` is the canonical example: page emit + server stub + manifest + embed split keeps each helper under 30 LOC.
+6. **Generated files always use `0o600`.** gosec G306 rejects 0o644 in non-test code. The `genFileMode` constant documents the choice once.
+7. **Fixture projects under `cmd/sveltego/testdata/example/` use `.template` suffix for files that need substitution at copy time.** The test harness reads `__SVELTEGO__` and rewrites to the absolute sveltego module path so isolated-mode `go build` resolves imports without requiring `go.work`.
+8. **Integration tests that subprocess `go build` get the `integration` build tag.** Default `go test` stays under one second per package; CI runs the tagged set explicitly. Document the tag in the test file header.
+
