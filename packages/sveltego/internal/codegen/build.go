@@ -73,6 +73,11 @@ type BuildResult struct {
 	ClientRouteKeys []string
 	Diagnostics     []routescan.Diagnostic
 	Elapsed         time.Duration
+	// HasServiceWorker reports whether src/service-worker.ts was detected
+	// at the project root. Drives both the Vite config (extra Rollup
+	// input) and the generated manifest's HasServiceWorker constant the
+	// runtime reads to gate the registration script (#89).
+	HasServiceWorker bool
 }
 
 // Build orchestrates per-project codegen: it wipes OutDir, scans the
@@ -253,14 +258,16 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 		return nil, fmt.Errorf("codegen: locals/prerender scan: %w", err)
 	}
 	warnings = append(warnings, localsDiags...)
+	hasServiceWorker := serviceWorkerEntry(opts.ProjectRoot) != ""
 	manifestBytes, err := GenerateManifest(scan, ManifestOptions{
-		PackageName:  "gen",
-		ModulePath:   modulePath,
-		GenRoot:      outDir,
-		RouteOptions: routeOptions,
-		PageHeads:    pageHeads,
-		LayoutHeads:  layoutHeads,
-		ClientKeys:   clientKeysByPkg,
+		PackageName:      "gen",
+		ModulePath:       modulePath,
+		GenRoot:          outDir,
+		RouteOptions:     routeOptions,
+		PageHeads:        pageHeads,
+		LayoutHeads:      layoutHeads,
+		ClientKeys:       clientKeysByPkg,
+		HasServiceWorker: hasServiceWorker,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("codegen: generate manifest: %w", err)
@@ -295,6 +302,10 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 	}
 
 	var viteConfigPath string
+	swEntry := ""
+	if !opts.NoClient && hasServiceWorker {
+		swEntry = "src/service-worker.ts"
+	}
 	if !opts.NoClient && len(clientRouteKeys) > 0 {
 		if err := emitClientRouter(opts.ProjectRoot, outDir, clientRouterMap, clientSnapshotRoutes); err != nil {
 			return nil, err
@@ -309,11 +320,12 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 		}
 		viteConfigPath = filepath.Join(opts.ProjectRoot, "vite.config.gen.js")
 		configSrc := vite.GenerateConfig(vite.ConfigOptions{
-			OutDir:       "static/_app",
-			RouteKeys:    clientRouteKeys,
-			GenClientDir: filepath.Join(outDir, "client"),
-			Addons:       addons,
-			CSSEntry:     cssEntry,
+			OutDir:             "static/_app",
+			RouteKeys:          clientRouteKeys,
+			GenClientDir:       filepath.Join(outDir, "client"),
+			Addons:             addons,
+			CSSEntry:           cssEntry,
+			ServiceWorkerEntry: swEntry,
 		})
 		if werr := os.WriteFile(viteConfigPath, []byte(configSrc), 0o644); werr != nil { //nolint:gosec // world-readable JS config is intentional
 			return nil, fmt.Errorf("codegen: write vite.config.gen.js: %w", werr)
@@ -330,13 +342,26 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 	}
 
 	return &BuildResult{
-		Routes:          routeCount,
-		ManifestPath:    manifestPath,
-		ViteConfigPath:  viteConfigPath,
-		ClientRouteKeys: clientRouteKeys,
-		Diagnostics:     warnings,
-		Elapsed:         time.Since(start),
+		Routes:           routeCount,
+		ManifestPath:     manifestPath,
+		ViteConfigPath:   viteConfigPath,
+		ClientRouteKeys:  clientRouteKeys,
+		Diagnostics:      warnings,
+		Elapsed:          time.Since(start),
+		HasServiceWorker: hasServiceWorker,
 	}, nil
+}
+
+// serviceWorkerEntry returns the absolute path to src/service-worker.ts
+// when present at the project root, or "" when no service worker is
+// declared. The detection is a single os.Stat — no parsing — so the
+// only contract is the file's existence.
+func serviceWorkerEntry(projectRoot string) string {
+	path := filepath.Join(projectRoot, "src", "service-worker.ts")
+	if info, err := os.Stat(path); err == nil && !info.IsDir() {
+		return path
+	}
+	return ""
 }
 
 // emitPage parses one +page.svelte, applies $lib import rewriting on the

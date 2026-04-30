@@ -34,6 +34,13 @@ func TestGenerateConfig_Fixtures(t *testing.T) {
 				CSSEntry:  "src/app.css",
 			},
 		},
+		{
+			name: "service-worker",
+			opts: ConfigOptions{
+				RouteKeys:          []string{"routes/+page"},
+				ServiceWorkerEntry: "src/service-worker.ts",
+			},
+		},
 	}
 	for _, tc := range cases {
 		tc := tc

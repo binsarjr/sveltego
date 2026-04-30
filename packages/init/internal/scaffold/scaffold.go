@@ -35,6 +35,12 @@ type Options struct {
 	// baseline package.json with the Vite client toolchain is still
 	// emitted so `sveltego build` can drive the client bundle).
 	Tailwind TailwindFlavor
+	// ServiceWorker, when true, emits a starter src/service-worker.ts
+	// with a no-op install/activate handler the user can extend with
+	// their own caching strategy. Codegen auto-detects the file on the
+	// next build and wires the registration <script> + Vite Rollup
+	// input (#89). Default false — service workers are opt-in.
+	ServiceWorker bool
 }
 
 // Result reports what Run wrote and what it skipped.
@@ -78,6 +84,11 @@ func Run(opts Options) (Result, error) {
 	}
 	for _, f := range tailwindFiles(flavor) {
 		if err := writeFile(opts.Dir, f.path, f.body, opts.Force, &res); err != nil {
+			return res, err
+		}
+	}
+	if opts.ServiceWorker {
+		if err := writeFile(opts.Dir, "src/service-worker.ts", []byte(serviceWorkerStarter), opts.Force, &res); err != nil {
 			return res, err
 		}
 	}
@@ -217,10 +228,11 @@ func renderMainGo(module string) string {
 	b.WriteString("\t\tlog.Fatalf(\"read app.html: %v\", err)\n")
 	b.WriteString("\t}\n")
 	b.WriteString("\ts, err := server.New(server.Config{\n")
-	b.WriteString("\t\tRoutes:   gen.Routes(),\n")
-	b.WriteString("\t\tMatchers: params.DefaultMatchers(),\n")
-	b.WriteString("\t\tShell:    string(shell),\n")
-	b.WriteString("\t\tHooks:    gen.Hooks(),\n")
+	b.WriteString("\t\tRoutes:        gen.Routes(),\n")
+	b.WriteString("\t\tMatchers:      params.DefaultMatchers(),\n")
+	b.WriteString("\t\tShell:         string(shell),\n")
+	b.WriteString("\t\tHooks:         gen.Hooks(),\n")
+	b.WriteString("\t\tServiceWorker: gen.HasServiceWorker,\n")
 	b.WriteString("\t})\n")
 	b.WriteString("\tif err != nil {\n")
 	b.WriteString("\t\tlog.Fatalf(\"server.New: %v\", err)\n")
@@ -339,4 +351,40 @@ func Load(ctx *kit.LoadCtx) (PageData, error) {
 const layoutSvelteBody = `<script lang="go"></script>
 
 <slot />
+`
+
+// serviceWorkerStarter is the opt-in Service Worker scaffold written when
+// Options.ServiceWorker is true. The default behavior is intentionally
+// conservative: install/activate handlers no-op so the worker takes
+// control without breaking pages, and `fetch` falls through to the
+// network. Users plug in a caching strategy here. Codegen wires it into
+// the Vite build and emits the registration <script> automatically (#89).
+const serviceWorkerStarter = `// src/service-worker.ts — sveltego service worker scaffold.
+//
+// Sveltego auto-detects this file at build time and:
+//   - bundles it as a separate Vite Rollup input → /service-worker.js
+//   - injects an auto-registration <script> into every SSR page
+//
+// Customize the install / activate / fetch handlers below to add a
+// caching strategy. The default is a no-op pass-through so the worker
+// never breaks navigation while you iterate.
+//
+// References: https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API
+
+/// <reference lib="webworker" />
+const sw = self as unknown as ServiceWorkerGlobalScope;
+
+sw.addEventListener('install', (_event) => {
+  // Activate this worker immediately, replacing any previous version.
+  sw.skipWaiting();
+});
+
+sw.addEventListener('activate', (event) => {
+  // Take control of every open client without requiring a reload.
+  event.waitUntil(sw.clients.claim());
+});
+
+sw.addEventListener('fetch', (_event) => {
+  // Default: pass through to the network. Plug in a caching strategy here.
+});
 `

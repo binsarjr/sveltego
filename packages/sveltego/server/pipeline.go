@@ -308,7 +308,7 @@ func optionsAllowSSR(opts kit.PageOptions) bool {
 // bundle once delivered (#34). Cookies queued during Reroute / Handle
 // still flow through writeResponse.
 func (s *Server) renderEmptyShell() *kit.Response {
-	body := s.shellHead + s.shellMid + `<div id="app"></div>` + s.shellTail
+	body := s.shellHead + s.shellMid + `<div id="app"></div>` + s.serviceWorker + s.shellTail
 	headers := http.Header{}
 	headers.Set("Content-Type", "text/html; charset=utf-8")
 	headers.Set("Content-Length", strconv.Itoa(len(body)))
@@ -670,7 +670,11 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 		if lctx != nil {
 			payload.Deps = lctx.CollectDeps()
 		}
-		if err := s.renderStreaming(w, r, ev, inner, streams, status, headBytes, payload); err != nil {
+		var assetTags string
+		if route.ClientKey != "" {
+			assetTags = s.viteManifest.assetTags(route.ClientKey, s.viteBase)
+		}
+		if err := s.renderStreaming(w, r, ev, inner, streams, status, headBytes, assetTags, payload); err != nil {
 			if errors.Is(err, kit.ErrClientGone) {
 				return nil, errStreamingWrote
 			}
@@ -711,6 +715,9 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 		payload.Deps = lctx.CollectDeps()
 	}
 	emitPayloadScriptTag(buf, payload)
+	if s.serviceWorker != "" {
+		buf.WriteString(s.serviceWorker)
+	}
 	buf.WriteString(s.shellTail)
 
 	body := buf.Bytes()
@@ -858,7 +865,7 @@ func isClientGone(ctx context.Context, err error) bool {
 // cancels any pending streams, logs once at debug level, and returns
 // kit.ErrClientGone. The caller must treat that as errStreamingWrote so
 // HandleError is not invoked — a disconnect is not a server fault.
-func (s *Server) renderStreaming(w http.ResponseWriter, r *http.Request, ev *kit.RequestEvent, inner func(*render.Writer) error, streams []streamedField, status int, headBytes []byte, payload clientPayload) error {
+func (s *Server) renderStreaming(w http.ResponseWriter, r *http.Request, ev *kit.RequestEvent, inner func(*render.Writer) error, streams []streamedField, status int, headBytes []byte, assetTags string, payload clientPayload) error {
 	if ev.Cookies != nil {
 		ev.Cookies.Apply(w)
 	}
@@ -873,6 +880,9 @@ func (s *Server) renderStreaming(w http.ResponseWriter, r *http.Request, ev *kit
 	buf.WriteString(s.shellHead)
 	if len(headBytes) > 0 {
 		buf.WriteRaw(bytesAsString(headBytes))
+	}
+	if assetTags != "" {
+		buf.WriteString(assetTags)
 	}
 	buf.WriteString(s.shellMid)
 	if err := inner(buf); err != nil {
@@ -917,6 +927,9 @@ func (s *Server) renderStreaming(w http.ResponseWriter, r *http.Request, ev *kit
 		}
 	}
 
+	if s.serviceWorker != "" {
+		buf.WriteString(s.serviceWorker)
+	}
 	buf.WriteString(s.shellTail)
 	if err := buf.FlushTo(w); err != nil {
 		if isClientGone(ctx, err) {
