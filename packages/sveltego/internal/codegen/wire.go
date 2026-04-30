@@ -47,7 +47,7 @@ func mirrorUserSource(in *userSourceFile) error {
 	if err != nil {
 		return fmt.Errorf("codegen: parse %s: %w", in.UserPath, err)
 	}
-	in.HasActions = hasFunc(parsed, "Actions")
+	in.HasActions = hasActionsVar(parsed)
 
 	rewritten, err := rewritePackageClause(stripped, in.PackageName)
 	if err != nil {
@@ -123,19 +123,27 @@ func rewritePackageClause(src []byte, name string) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
-// hasFunc reports whether the parsed file declares a top-level function
-// (no receiver) named name.
-func hasFunc(f *goast.File, name string) bool {
+// hasActionsVar reports whether the parsed file declares a top-level
+// `var Actions ...` (any type or initializer). Form actions are
+// authored as `var Actions = kit.ActionMap{...}` per spec; the wire
+// emitter consults this flag to decide whether to reference the symbol
+// or emit a nil-returning stub.
+func hasActionsVar(f *goast.File) bool {
 	for _, decl := range f.Decls {
-		fn, ok := decl.(*goast.FuncDecl)
-		if !ok {
+		gd, ok := decl.(*goast.GenDecl)
+		if !ok || gd.Tok != token.VAR {
 			continue
 		}
-		if fn.Recv != nil {
-			continue
-		}
-		if fn.Name != nil && fn.Name.Name == name {
-			return true
+		for _, spec := range gd.Specs {
+			vs, ok := spec.(*goast.ValueSpec)
+			if !ok {
+				continue
+			}
+			for _, name := range vs.Names {
+				if name != nil && name.Name == "Actions" {
+					return true
+				}
+			}
 		}
 	}
 	return false
@@ -169,12 +177,12 @@ func emitWire(genRoot, modulePath string, route mirrorRoute) error {
 
 	b.Line("")
 	if route.hasActions {
-		b.Line("// Actions wraps the user-authored Actions() so the manifest can")
-		b.Line("// reference it through the gen package.")
-		b.Line("func Actions() any { return usersrc.Actions() }")
+		b.Line("// Actions wraps the user-authored `var Actions kit.ActionMap` so the")
+		b.Line("// manifest can reference it through the gen package as router.ActionsHandler.")
+		b.Line("func Actions() any { return usersrc.Actions }")
 	} else {
 		b.Line("// Actions is emitted as a nil-returning stub because the user's")
-		b.Line("// page.server.go does not declare an Actions function. The manifest")
+		b.Line("// page.server.go does not declare an Actions variable. The manifest")
 		b.Line("// references this symbol unconditionally when HasPageServer is set.")
 		b.Line("func Actions() any { return nil }")
 	}

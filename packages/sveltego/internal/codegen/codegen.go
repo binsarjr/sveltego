@@ -16,6 +16,10 @@ type Options struct {
 	// ServerFilePath optionally points at a sibling +page.server.go whose
 	// Load() inline struct return is used to infer PageData fields.
 	ServerFilePath string
+	// HasActions is true when the sibling page.server.go declares
+	// `var Actions kit.ActionMap`. The page's PageData gains a `Form any`
+	// field so action result data can be threaded through the render.
+	HasActions bool
 }
 
 // LayoutOptions configures GenerateLayout.
@@ -45,6 +49,9 @@ func Generate(frag *ast.Fragment, opts Options) ([]byte, error) {
 	pageData, err := inferPageData(opts.ServerFilePath)
 	if err != nil {
 		return nil, err
+	}
+	if opts.HasActions {
+		pageData.Fields = append(pageData.Fields, pageDataField{Name: "Form", Type: "any"})
 	}
 
 	imports := mergeImports(scripts.Imports, pageData.Imports)

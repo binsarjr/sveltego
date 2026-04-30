@@ -238,6 +238,11 @@ func emitPage(projectRoot, outDir, modulePath string, route routescan.ScannedRou
 	opts := Options{PackageName: route.PackageName}
 	if route.HasPageServer {
 		opts.ServerFilePath = filepath.Join(route.Dir, "page.server.go")
+		actionInfo, err := scanActions(opts.ServerFilePath)
+		if err != nil {
+			return 0, err
+		}
+		opts.HasActions = actionInfo.HasActions
 	}
 	out, err := Generate(frag, opts)
 	if err != nil {
