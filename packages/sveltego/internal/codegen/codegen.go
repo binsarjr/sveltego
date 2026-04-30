@@ -385,7 +385,7 @@ func emitNode(b *Builder, n ast.Node) {
 	case *ast.KeyBlock:
 		emitKeyBlock(b, v)
 	case *ast.SnippetBlock:
-		b.Linef("// TODO: snippet block %q (#14)", v.Name)
+		emitSnippetBlock(b, v)
 	case *ast.RawHTML:
 		emitRawHTML(b, v)
 	case *ast.Const:
