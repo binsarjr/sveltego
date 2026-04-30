@@ -446,6 +446,7 @@ func (p *parser) expectBlockClose(name string) {
 func (p *parser) parseScript() ast.Node {
 	open := p.advance()
 	lang := extractScriptLang(open.Value)
+	module := extractScriptModule(open.Value)
 	body := ""
 	bodyTok := p.peek()
 	if bodyTok.Kind == lexer.TokenScriptBody {
@@ -455,15 +456,20 @@ func (p *parser) parseScript() ast.Node {
 	close := p.peek()
 	if close.Kind != lexer.TokenScriptClose {
 		p.errorAt(close, "expected `</script>`, got "+describe(close))
-		return &ast.Script{P: tokPos(open), Lang: lang, Body: body}
+		return &ast.Script{P: tokPos(open), Lang: lang, Module: module, Body: body}
 	}
 	p.advance()
-	if lang != "" && lang != "go" {
+	switch {
+	case module && lang != "" && lang != "ts":
+		p.errorWithHint(open,
+			"unsupported `<script module>` lang `"+lang+"`",
+			"<script module> compiles to JS via Vite; drop `lang` or use lang=\"ts\"")
+	case !module && lang != "" && lang != "go":
 		p.errorWithHint(open,
 			"unsupported script lang `"+lang+"`",
 			"sveltego compiles Go inside <script>; remove `lang` or use lang=\"go\"")
 	}
-	return &ast.Script{P: tokPos(open), Lang: lang, Body: body}
+	return &ast.Script{P: tokPos(open), Lang: lang, Module: module, Body: body}
 }
 
 func (p *parser) parseStyle() ast.Node {
