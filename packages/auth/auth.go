@@ -21,9 +21,8 @@ type Config struct {
 	// Now returns the current time. Defaults to time.Now. Override in tests.
 	Now func() time.Time
 
-	// Storage is the persistence adapter (populated by #217–#219).
-	// Type will become a typed interface once the storage package lands.
-	Storage any
+	// Storage is the persistence adapter. auth.New panics if this is nil.
+	Storage Storage
 
 	// Mailer is the email delivery adapter (populated by the email-provider issues).
 	Mailer any
@@ -53,6 +52,9 @@ type Auth struct {
 // any zero-value fields. It returns a non-nil *Auth and nil error on
 // success; future validation (e.g. missing BaseURL) may return an error.
 func New(cfg Config) (*Auth, error) {
+	if cfg.Storage == nil {
+		panic("auth: Config.Storage must not be nil — auth without storage is meaningless")
+	}
 	if cfg.BasePath == "" {
 		cfg.BasePath = "/auth"
 	}
