@@ -82,6 +82,7 @@ This is a Go workspace (`go.work`) with one module per package:
 ```
 packages/
   sveltego/             # Core: parser, codegen, runtime, kit, router, server, CLI
+  auth/                 # First-party auth library (ADR 0006; #216–#255)
   init/                 # `sveltego init` scaffolder
   lsp/                  # Language server for `.svelte` with Go expressions
   mcp/                  # Model Context Protocol server (search_docs, lookup_api, …)
