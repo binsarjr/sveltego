@@ -163,6 +163,18 @@ func TestBuildCSPHeader_CachedAcrossCalls(t *testing.T) {
 	}
 }
 
+// TestCSPTemplate_NilReceiverBuildReturnsEmpty guards the documented nil-safe
+// behavior of CSPTemplate.Build: a nil *CSPTemplate returns "" rather than
+// panicking, so callers that conditionally build the template can always call
+// Build without a nil check.
+func TestCSPTemplate_NilReceiverBuildReturnsEmpty(t *testing.T) {
+	t.Parallel()
+	var tpl *CSPTemplate
+	if got := tpl.Build("nonce"); got != "" {
+		t.Fatalf("(*CSPTemplate)(nil).Build() = %q, want empty string", got)
+	}
+}
+
 func TestBuildCSPHeader_ZeroAllocOnCacheHit(t *testing.T) {
 	// AllocsPerRun must not run in parallel — it disables GC.
 	cfg := CSPConfig{Mode: CSPStrict, ReportTo: "alloc-test"}

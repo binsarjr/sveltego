@@ -20,6 +20,9 @@ const DefaultMaxFormMemory int64 = 32 << 20 // 32 MiB
 // and [RequestEvent.BindMultipart]. FieldErrors is keyed by the form
 // name (the `form:"..."` tag value, falling back to the lowercased
 // struct field name).
+//
+// FieldErrors is a public map; callers must not mutate it after BindForm
+// or BindMultipart returns -- the behavior of doing so is undefined.
 type BindError struct {
 	FieldErrors map[string]string
 }

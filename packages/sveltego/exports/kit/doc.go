@@ -5,4 +5,9 @@
 // the hooks pipeline (Handle, HandleError, HandleFetch, Reroute, Init),
 // and Cookies provides the request/response cookie surface with secure
 // defaults.
+//
+// URL building: the typed helpers generated under <module>/.gen/links
+// are the preferred way to build internal URLs because they fail at
+// compile time when a route is renamed. [Link] is the runtime fallback
+// for dynamic patterns that are not known at build time.
 package kit

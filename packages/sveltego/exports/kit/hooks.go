@@ -95,6 +95,10 @@ type SafeError struct {
 // pipeline branches. The string form prefers Message; absent that it
 // falls back to the canonical text for Code (or "internal server error"
 // when Code is also unset).
+//
+// Callers should always check Code != 0 before calling Error: the zero
+// value of SafeError is not a meaningful error and Error() on it returns
+// "Internal Server Error" only because Code == 0 maps to 500.
 func (s SafeError) Error() string {
 	if s.Message != "" {
 		return s.Message
@@ -196,6 +200,10 @@ func DefaultHooks() Hooks {
 // WithDefaults returns h with any nil field replaced by the matching
 // identity default. Idempotent: calling on an already-filled bundle is
 // a no-op.
+//
+// Hooks is intentionally a value type; do not share state through it.
+// Hook fields that are pointer-receiver methods on a struct carrying mutable
+// state create an implicit shared reference across all copies of Hooks.
 func (h Hooks) WithDefaults() Hooks {
 	if h.Handle == nil {
 		h.Handle = IdentityHandle
