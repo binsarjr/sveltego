@@ -1,13 +1,13 @@
 {
-  "packages/sveltego":           "0.0.0",
-  "packages/adapter-auto":       "0.0.0",
+  "packages/sveltego": "1.0.0",
+  "packages/adapter-auto": "0.0.0",
   "packages/adapter-cloudflare": "0.0.0",
-  "packages/adapter-docker":     "0.0.0",
-  "packages/adapter-lambda":     "0.0.0",
-  "packages/adapter-server":     "0.0.0",
-  "packages/adapter-static":     "0.0.0",
-  "packages/enhanced-img":       "0.0.0",
-  "packages/create-sveltego":    "0.0.0",
-  "packages/mcp":                "0.0.0",
-  "packages/lsp":                "0.0.0"
+  "packages/adapter-docker": "0.0.0",
+  "packages/adapter-lambda": "0.0.0",
+  "packages/adapter-server": "0.0.0",
+  "packages/adapter-static": "0.0.0",
+  "packages/enhanced-img": "0.0.0",
+  "packages/create-sveltego": "0.0.0",
+  "packages/mcp": "0.0.0",
+  "packages/lsp": "0.0.0"
 }
