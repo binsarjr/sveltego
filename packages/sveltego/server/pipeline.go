@@ -308,7 +308,7 @@ func optionsAllowSSR(opts kit.PageOptions) bool {
 // bundle once delivered (#34). Cookies queued during Reroute / Handle
 // still flow through writeResponse.
 func (s *Server) renderEmptyShell() *kit.Response {
-	body := s.shellHead + s.shellMid + `<div id="app"></div>` + s.shellTail
+	body := s.shellHead + s.shellMid + `<div id="app"></div>` + s.serviceWorker + s.shellTail
 	headers := http.Header{}
 	headers.Set("Content-Type", "text/html; charset=utf-8")
 	headers.Set("Content-Length", strconv.Itoa(len(body)))
@@ -715,6 +715,9 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 		payload.Deps = lctx.CollectDeps()
 	}
 	emitPayloadScriptTag(buf, payload)
+	if s.serviceWorker != "" {
+		buf.WriteString(s.serviceWorker)
+	}
 	buf.WriteString(s.shellTail)
 
 	body := buf.Bytes()
@@ -924,6 +927,9 @@ func (s *Server) renderStreaming(w http.ResponseWriter, r *http.Request, ev *kit
 		}
 	}
 
+	if s.serviceWorker != "" {
+		buf.WriteString(s.serviceWorker)
+	}
 	buf.WriteString(s.shellTail)
 	if err := buf.FlushTo(w); err != nil {
 		if isClientGone(ctx, err) {

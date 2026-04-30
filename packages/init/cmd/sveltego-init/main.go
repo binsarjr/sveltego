@@ -2,7 +2,7 @@
 //
 // Usage:
 //
-//	sveltego-init [--ai] [--force] [--non-interactive] [--module path] [--tailwind=v4|v3|none] <target-dir>
+//	sveltego-init [--ai] [--force] [--non-interactive] [--module path] [--tailwind=v4|v3|none] [--service-worker] <target-dir>
 //
 // Without --ai, the AI-assistant templates copy is prompted on a TTY and
 // defaulted to false on a piped stdin or with --non-interactive.
@@ -31,7 +31,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("sveltego-init", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: sveltego-init [--ai] [--force] [--non-interactive] [--module path] [--tailwind=v4|v3|none] <target-dir>")
+		fmt.Fprintln(stderr, "Usage: sveltego-init [--ai] [--force] [--non-interactive] [--module path] [--tailwind=v4|v3|none] [--service-worker] <target-dir>")
 		fs.PrintDefaults()
 	}
 	var (
@@ -39,6 +39,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 		force    = fs.Bool("force", false, "overwrite existing files")
 		nonInter = fs.Bool("non-interactive", false, "never prompt; default --ai to false if unset")
 		module   = fs.String("module", "", "Go module path for the generated go.mod (defaults to target dir base name)")
+		swFlag   = fs.Bool("service-worker", false, "emit a starter src/service-worker.ts (#89)")
 	)
 	tw := tailwindFlag{value: "none"}
 	fs.Var(&tw, "tailwind", "tailwind flavor: v4 (bare flag default), v3 (PostCSS), or none")
@@ -71,11 +72,12 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	}
 
 	res, err := scaffold.Run(scaffold.Options{
-		Dir:      target,
-		Module:   *module,
-		AI:       wantAI,
-		Force:    *force,
-		Tailwind: flavor,
+		Dir:           target,
+		Module:        *module,
+		AI:            wantAI,
+		Force:         *force,
+		Tailwind:      flavor,
+		ServiceWorker: *swFlag,
 	})
 	if err != nil {
 		return err

@@ -217,6 +217,44 @@ func TestGenerateManifest_RouteIDConsts(t *testing.T) {
 	}
 }
 
+// TestGenerateManifest_HasServiceWorker_True verifies that ManifestOptions.HasServiceWorker = true
+// emits `const HasServiceWorker = true` so the runtime can gate the auto-registration
+// <script> tag (#89).
+func TestGenerateManifest_HasServiceWorker_True(t *testing.T) {
+	t.Parallel()
+	scan := scanFixture(t, "simple")
+	out, err := GenerateManifest(scan, ManifestOptions{
+		PackageName:      "gen",
+		ModulePath:       "myapp",
+		GenRoot:          ".gen",
+		HasServiceWorker: true,
+	})
+	if err != nil {
+		t.Fatalf("GenerateManifest: %v", err)
+	}
+	if !bytes.Contains(out, []byte("const HasServiceWorker = true")) {
+		t.Fatalf("expected `const HasServiceWorker = true` in:\n%s", out)
+	}
+}
+
+// TestGenerateManifest_HasServiceWorker_False verifies the constant defaults to
+// false so server code can read it unconditionally without a build-tag dance.
+func TestGenerateManifest_HasServiceWorker_False(t *testing.T) {
+	t.Parallel()
+	scan := scanFixture(t, "simple")
+	out, err := GenerateManifest(scan, ManifestOptions{
+		PackageName: "gen",
+		ModulePath:  "myapp",
+		GenRoot:     ".gen",
+	})
+	if err != nil {
+		t.Fatalf("GenerateManifest: %v", err)
+	}
+	if !bytes.Contains(out, []byte("const HasServiceWorker = false")) {
+		t.Fatalf("expected `const HasServiceWorker = false` in:\n%s", out)
+	}
+}
+
 // TestRouteIDCollision verifies that emitRouteIDConsts errors when two entries
 // produce the same Go identifier. Two routes with nil Segments both lower to
 // "Index" via routeIdent, triggering the collision guard.

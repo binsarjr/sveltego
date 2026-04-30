@@ -230,6 +230,43 @@ func TestWriteAITemplates_RefusesOverwriteWithoutForce(t *testing.T) {
 	}
 }
 
+// TestRun_ServiceWorkerOptIn covers the --service-worker scaffold flag
+// from issue #89: opt-in emits src/service-worker.ts; default omits it.
+func TestRun_ServiceWorkerOptIn(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := Run(Options{Dir: dir, Module: "example.com/sw", ServiceWorker: true}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	swPath := filepath.Join(dir, "src", "service-worker.ts")
+	body, err := os.ReadFile(swPath)
+	if err != nil {
+		t.Fatalf("read service-worker.ts: %v", err)
+	}
+	for _, want := range []string{
+		"<reference lib=\"webworker\"",
+		"sw.addEventListener('install'",
+		"sw.skipWaiting()",
+		"sw.clients.claim()",
+	} {
+		if !bytes.Contains(body, []byte(want)) {
+			t.Errorf("service-worker.ts missing %q\n--- body:\n%s", want, body)
+		}
+	}
+}
+
+// TestRun_ServiceWorkerOmittedByDefault asserts the scaffold does NOT
+// write src/service-worker.ts unless ServiceWorker is set, so existing
+// users do not get a worker registered they did not opt into (#89).
+func TestRun_ServiceWorkerOmittedByDefault(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := Run(Options{Dir: dir, Module: "example.com/sw"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "src", "service-worker.ts")); err == nil {
+		t.Fatal("expected src/service-worker.ts to be absent without --service-worker")
+	}
+}
+
 func TestRun_EmptyDirRejected(t *testing.T) {
 	if _, err := Run(Options{}); err == nil {
 		t.Errorf("expected error on empty Dir")
