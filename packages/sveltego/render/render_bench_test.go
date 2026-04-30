@@ -75,3 +75,38 @@ func BenchmarkWriteJSON(b *testing.B) {
 		render.Release(w)
 	}
 }
+
+func BenchmarkWriteRawBytes(b *testing.B) {
+	payload := []byte("<title>page</title><meta name=\"x\" content=\"y\">")
+	b.ReportAllocs()
+	for range b.N {
+		w := render.Acquire()
+		w.WriteRawBytes(payload)
+		render.Release(w)
+	}
+}
+
+type benchStruct struct {
+	A int
+	B string
+}
+
+func BenchmarkWriteEscape_Default(b *testing.B) {
+	v := benchStruct{A: 7, B: "hello"}
+	b.ReportAllocs()
+	for range b.N {
+		w := render.Acquire()
+		w.WriteEscape(v)
+		render.Release(w)
+	}
+}
+
+func BenchmarkWriteEscapeAttr_Default(b *testing.B) {
+	v := benchStruct{A: 7, B: "hello"}
+	b.ReportAllocs()
+	for range b.N {
+		w := render.Acquire()
+		w.WriteEscapeAttr(v)
+		render.Release(w)
+	}
+}
