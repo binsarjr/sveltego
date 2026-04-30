@@ -215,7 +215,7 @@ func splitAndDecodeInto(p string, buf *[maxStackParams]string) ([]string, bool) 
 				buf[count] = s
 			} else {
 				if heap == nil {
-					heap = make([]string, maxStackParams, count+8)
+					heap = make([]string, maxStackParams, count*2)
 					copy(heap, buf[:])
 				}
 				heap = append(heap, s)

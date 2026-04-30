@@ -7,6 +7,7 @@
 package server
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -170,5 +171,43 @@ func BenchmarkActionNameFromQuery_Match(b *testing.B) {
 	b.ReportAllocs()
 	for range b.N {
 		_ = actionNameFromQuery(q)
+	}
+}
+
+// BenchmarkCollectStreams_NoStream measures steady-state cost for a Load
+// result with no streamed fields. After the first call seeds the type
+// cache, subsequent iterations are a sync.Map load + zero field work.
+func BenchmarkCollectStreams_NoStream(b *testing.B) {
+	type plainData struct {
+		Title string
+		Count int
+	}
+	data := plainData{Title: "hello", Count: 42}
+	_ = collectStreams(data, nil) // warm cache
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		_ = collectStreams(data, nil)
+	}
+}
+
+// BenchmarkCollectStreams_WithStream measures steady-state cost for a Load
+// result that contains a kit.Streamed field. After warmup the type cache
+// holds the field index; each iteration does one sync.Map load and one
+// direct field access — no repeated struct walk.
+func BenchmarkCollectStreams_WithStream(b *testing.B) {
+	type streamData struct {
+		Title string
+		Posts *kit.Streamed[[]string]
+	}
+	data := streamData{
+		Title: "home",
+		Posts: kit.StreamCtx(context.Background(), func(_ context.Context) ([]string, error) { return nil, nil }),
+	}
+	_ = collectStreams(data, nil) // warm cache
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		_ = collectStreams(data, nil)
 	}
 }

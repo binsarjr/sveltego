@@ -24,6 +24,10 @@ type LinkEmitOptions struct {
 // canonical SvelteKit-style pattern, the Go-ident helper name, and the
 // HTTP method label printed by `sveltego routes` ("GET" for pages and
 // servers; "POST", etc. when a +server.go advertises specific methods).
+//
+// LinkRoute is intentionally part of the public contract: the CLI (`sveltego
+// routes`), the LSP, and AI-codegen tools all consume it to enumerate
+// navigable routes. Do not unexport.
 type LinkRoute struct {
 	Pattern string
 	Helper  string

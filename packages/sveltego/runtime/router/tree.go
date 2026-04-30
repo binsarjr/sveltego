@@ -100,10 +100,13 @@ func (t *Tree) WithMatchers(m Matchers) (*Tree, error) {
 	return t, nil
 }
 
-// Routes returns the route slice owned by t. Callers must not mutate
-// the returned slice.
+// Routes returns a copy of the tree's route slice. Each call allocates
+// a new slice header and backing array; callers are free to sort or
+// truncate the result without affecting the tree.
 func (t *Tree) Routes() []Route {
-	return t.routes
+	out := make([]Route, len(t.routes))
+	copy(out, t.routes)
+	return out
 }
 
 func (t *Tree) insert(r *Route) error {
@@ -278,6 +281,11 @@ func sortAll(n *node) {
 	}
 }
 
+// routeID returns an 8-char hex tag derived from an FNV-1a 32-bit hash
+// of the route pattern. The tag is used for fast logging and manifest
+// correlation; it is NOT a collision-free identity. Two routes with
+// different patterns may produce the same ID (p ≈ N²/2³² for N routes).
+// Do not use ID as a unique key; use Pattern for that.
 func routeID(pattern string) string {
 	h := fnv.New32a()
 	_, _ = io.WriteString(h, pattern)
