@@ -1,3 +1,17 @@
+// Streaming helpers for sveltego deferred values.
+//
+// Naming convention in this file:
+//   - [Streamed][T] is the noun: the future-style value a Load function
+//     places in PageData to signal a deferred slot.
+//   - [Stream] and [StreamCtx] are constructors (verbs) that spawn a
+//     goroutine and return a *Streamed[T]. They do NOT return *Stream --
+//     the type is Streamed, the constructor is Stream.
+//   - [StreamedAny] is the type-erased view of *Streamed[T] used
+//     internally by the render pipeline.
+//
+// Prefer [StreamCtx] over [Stream] so the producer receives a cancellable
+// context and exits promptly when the request is abandoned.
+
 package kit
 
 import (

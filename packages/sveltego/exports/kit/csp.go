@@ -105,7 +105,9 @@ func NewCSPTemplate(cfg CSPConfig) *CSPTemplate {
 }
 
 // Build returns the full Content-Security-Policy header value with nonce
-// spliced into the cached script-src position.
+// spliced into the cached script-src position. A nil receiver returns the
+// empty string so callers that conditionally build the template (e.g. behind
+// a CSP mode check) can call Build without a nil guard.
 func (t *CSPTemplate) Build(nonce string) string {
 	if t == nil {
 		return ""
