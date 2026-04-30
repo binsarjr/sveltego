@@ -287,11 +287,21 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 		if err := emitClientRouter(opts.ProjectRoot, outDir, clientRouterMap); err != nil {
 			return nil, err
 		}
+		addons, derr := detectAddons(opts.ProjectRoot)
+		if derr != nil {
+			return nil, derr
+		}
+		var cssEntry string
+		if len(addons) > 0 {
+			cssEntry = resolveCSSEntry(opts.ProjectRoot)
+		}
 		viteConfigPath = filepath.Join(opts.ProjectRoot, "vite.config.gen.js")
 		configSrc := vite.GenerateConfig(vite.ConfigOptions{
 			OutDir:       "static/_app",
 			RouteKeys:    clientRouteKeys,
 			GenClientDir: filepath.Join(outDir, "client"),
+			Addons:       addons,
+			CSSEntry:     cssEntry,
 		})
 		if werr := os.WriteFile(viteConfigPath, []byte(configSrc), 0o644); werr != nil { //nolint:gosec // world-readable JS config is intentional
 			return nil, fmt.Errorf("codegen: write vite.config.gen.js: %w", werr)
