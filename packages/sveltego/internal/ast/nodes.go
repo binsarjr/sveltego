@@ -23,6 +23,7 @@ const (
 	AttrUse
 	AttrClassDirective
 	AttrStyleDirective
+	AttrLet
 )
 
 // String returns a stable name for the kind, used by golden fixtures and
@@ -43,6 +44,8 @@ func (k AttrKind) String() string {
 		return "ClassDirective"
 	case AttrStyleDirective:
 		return "StyleDirective"
+	case AttrLet:
+		return "Let"
 	default:
 		return "Unknown"
 	}

@@ -96,6 +96,8 @@ func classifyAttribute(name string) (ast.AttrKind, string) {
 		return ast.AttrClassDirective, rest
 	case "style":
 		return ast.AttrStyleDirective, rest
+	case "let":
+		return ast.AttrLet, rest
 	default:
 		return ast.AttrStatic, ""
 	}

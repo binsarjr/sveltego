@@ -7,31 +7,35 @@ import (
 )
 
 // emitElement lowers a single Element to its open-tag, child, and
-// close-tag sequence. Components and svelte:* names are deferred via TODO
-// markers; on:, bind:, use: directives are silently dropped.
+// close-tag sequence. <slot> outlets, <svelte:body|window|document>
+// no-ops, <svelte:component> dynamic dispatch, and component invocations
+// dispatch through dedicated emitters; on:, bind:, use: directives are
+// silently dropped here (lowered elsewhere).
 func emitElement(b *Builder, e *ast.Element) {
 	if e == nil {
 		return
 	}
 	if e.Name == "slot" {
-		if !b.hasChildren {
-			b.Line("// TODO: <slot /> outside layout (#49 named slots)")
+		emitSlotOutlet(b, e)
+		return
+	}
+	if isSvelteSpecialGlobal(e.Name) {
+		if b.nestDepth > 0 {
+			b.Fail(&CodegenError{
+				Pos: e.P,
+				Msg: "<" + e.Name + "> must appear at the template root, not inside another element or block",
+			})
 			return
 		}
-		b.Line("if children != nil {")
-		b.Indent()
-		b.Line("if err := children(w); err != nil {")
-		b.Indent()
-		b.Line("return err")
-		b.Dedent()
-		b.Line("}")
-		b.Dedent()
-		b.Line("}")
+		emitSvelteSpecialGlobal(b, e)
+		return
+	}
+	if e.Name == "svelte:component" {
+		emitSvelteComponent(b, e)
 		return
 	}
 	if isComponentName(e.Name) {
-		b.Linef("// TODO: component <%s> (#10 component nesting)", e.Name)
-		b.Line("_ = w")
+		emitComponentCall(b, e)
 		return
 	}
 
@@ -44,8 +48,36 @@ func emitElement(b *Builder, e *ast.Element) {
 		emitCloseTag(b, e.Name)
 		return
 	}
+	b.nestDepth++
 	emitChildren(b, e.Children)
+	b.nestDepth--
 	emitCloseTag(b, e.Name)
+}
+
+// emitSlotOutlet lowers a <slot/> outlet on the receiving (component or
+// layout) side. Layout templates carry a single anonymous `children`
+// closure; pages reject slots (placement makes no sense outside a
+// component). Component templates handle slots through the dedicated
+// component-render emitter (see GenerateComponent in slot.go) which sets
+// b.componentMode and consumes the slot directly.
+func emitSlotOutlet(b *Builder, e *ast.Element) {
+	if b.componentMode {
+		emitComponentSlotOutlet(b, e)
+		return
+	}
+	if b.hasChildren {
+		b.Line("if children != nil {")
+		b.Indent()
+		b.Line("if err := children(w); err != nil {")
+		b.Indent()
+		b.Line("return err")
+		b.Dedent()
+		b.Line("}")
+		b.Dedent()
+		b.Line("}")
+		return
+	}
+	b.Line("// TODO: <slot /> outside layout (#49 named slots)")
 }
 
 func emitOpenTag(b *Builder, e *ast.Element) {
