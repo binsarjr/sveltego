@@ -1,0 +1,48 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/binsarjr/sveltego/bench
+cpu: Apple M1 Pro
+BenchmarkServeHTTP_Hello-10      	 2178403	       609.0 ns/op	    1001 B/op	      15 allocs/op
+BenchmarkServeHTTP_Hello-10      	 1801659	       728.4 ns/op	    1001 B/op	      15 allocs/op
+BenchmarkServeHTTP_Hello-10      	 2176010	       554.8 ns/op	    1001 B/op	      15 allocs/op
+BenchmarkServeHTTP_Hello-10      	 2259288	       583.9 ns/op	    1001 B/op	      15 allocs/op
+BenchmarkServeHTTP_Hello-10      	 2167251	       589.8 ns/op	    1001 B/op	      15 allocs/op
+BenchmarkServeHTTP_Hello-10      	 1850589	       642.9 ns/op	    1001 B/op	      15 allocs/op
+BenchmarkServeHTTP_List-10       	 1000000	      1057 ns/op	    1372 B/op	      16 allocs/op
+BenchmarkServeHTTP_List-10       	 1558027	       761.9 ns/op	    1372 B/op	      16 allocs/op
+BenchmarkServeHTTP_List-10       	 1575906	       771.5 ns/op	    1372 B/op	      16 allocs/op
+BenchmarkServeHTTP_List-10       	 1461770	       798.2 ns/op	    1372 B/op	      16 allocs/op
+BenchmarkServeHTTP_List-10       	 1572361	       773.3 ns/op	    1372 B/op	      16 allocs/op
+BenchmarkServeHTTP_List-10       	 1588906	       762.2 ns/op	    1372 B/op	      16 allocs/op
+BenchmarkServeHTTP_Detail-10     	 1483280	       821.3 ns/op	    1725 B/op	      20 allocs/op
+BenchmarkServeHTTP_Detail-10     	 1510989	       811.6 ns/op	    1725 B/op	      20 allocs/op
+BenchmarkServeHTTP_Detail-10     	 1424826	       807.8 ns/op	    1725 B/op	      20 allocs/op
+BenchmarkServeHTTP_Detail-10     	 1457580	       827.9 ns/op	    1725 B/op	      20 allocs/op
+BenchmarkServeHTTP_Detail-10     	 1508510	       873.2 ns/op	    1725 B/op	      20 allocs/op
+BenchmarkServeHTTP_Detail-10     	 1497204	       806.1 ns/op	    1725 B/op	      20 allocs/op
+BenchmarkServeHTTP_Action-10     	 4356957	       266.9 ns/op	     360 B/op	       9 allocs/op
+BenchmarkServeHTTP_Action-10     	 4414004	       273.1 ns/op	     360 B/op	       9 allocs/op
+BenchmarkServeHTTP_Action-10     	 4511899	       266.6 ns/op	     360 B/op	       9 allocs/op
+BenchmarkServeHTTP_Action-10     	 4389669	       274.4 ns/op	     360 B/op	       9 allocs/op
+BenchmarkServeHTTP_Action-10     	 4456246	       270.3 ns/op	     360 B/op	       9 allocs/op
+BenchmarkServeHTTP_Action-10     	 4493785	       274.8 ns/op	     360 B/op	       9 allocs/op
+BenchmarkRouteResolution-10      	 9725983	       123.6 ns/op	     336 B/op	       2 allocs/op
+BenchmarkRouteResolution-10      	10209159	       135.3 ns/op	     336 B/op	       2 allocs/op
+BenchmarkRouteResolution-10      	 9178694	       126.3 ns/op	     336 B/op	       2 allocs/op
+BenchmarkRouteResolution-10      	 9939030	       143.9 ns/op	     336 B/op	       2 allocs/op
+BenchmarkRouteResolution-10      	 8772145	       128.3 ns/op	     336 B/op	       2 allocs/op
+BenchmarkRouteResolution-10      	 8664056	       179.7 ns/op	     336 B/op	       2 allocs/op
+BenchmarkRenderWriter-10         	73877977	        16.09 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRenderWriter-10         	77177032	        15.79 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRenderWriter-10         	76920818	        15.73 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRenderWriter-10         	77168968	        15.91 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRenderWriter-10         	77252593	        15.71 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRenderWriter-10         	75274044	        15.84 ns/op	       0 B/op	       0 allocs/op
+BenchmarkManifestColdStart-10    	  610640	      1828 ns/op	    6306 B/op	      21 allocs/op
+BenchmarkManifestColdStart-10    	  873735	      1703 ns/op	    6306 B/op	      21 allocs/op
+BenchmarkManifestColdStart-10    	  766798	      1561 ns/op	    6306 B/op	      21 allocs/op
+BenchmarkManifestColdStart-10    	  788696	      1397 ns/op	    6306 B/op	      21 allocs/op
+BenchmarkManifestColdStart-10    	  742993	      1873 ns/op	    6306 B/op	      21 allocs/op
+BenchmarkManifestColdStart-10    	  769333	      1417 ns/op	    6306 B/op	      21 allocs/op
+PASS
+ok  	github.com/binsarjr/sveltego/bench	67.187s
