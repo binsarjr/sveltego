@@ -248,10 +248,19 @@ func (s *Server) resolve(w http.ResponseWriter, r *http.Request, ev *kit.Request
 		}
 		return s.renderDataJSON(r, ev, route, nil)
 	}
+	if rejected := s.applyCSRF(r, ev, route); rejected != nil {
+		if isEnhanceRequest(r) {
+			return enhanceForbiddenResponse(), nil
+		}
+		return rejected, nil
+	}
 	if r.Method == http.MethodPost {
 		res, fd, err := s.dispatchAction(r, ev, route)
 		if err != nil {
 			return nil, err
+		}
+		if isEnhanceRequest(r) {
+			return enhanceResponse(res, fd), nil
 		}
 		if res != nil {
 			return res, nil
