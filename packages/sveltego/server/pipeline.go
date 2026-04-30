@@ -49,13 +49,24 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 	buf := render.Acquire()
 	defer render.Release(buf)
 
-	buf.WriteString(s.shellHead)
-	buf.WriteString(s.shellMid)
 	rctx := kit.NewRenderCtx(r, w, params)
 	if cookies != nil {
 		rctx.Cookies = cookies
 	}
-	if err := route.Page(buf, rctx, data); err != nil {
+	inner := func(buf *render.Writer) error {
+		return route.Page(buf, rctx, data)
+	}
+	for i := len(route.LayoutChain) - 1; i >= 0; i-- {
+		layout := route.LayoutChain[i]
+		next := inner
+		inner = func(buf *render.Writer) error {
+			return layout(buf, rctx, nil, next)
+		}
+	}
+
+	buf.WriteString(s.shellHead)
+	buf.WriteString(s.shellMid)
+	if err := inner(buf); err != nil {
 		s.handleRenderError(w, r, err)
 		return
 	}

@@ -1,0 +1,1 @@
+<aside>team</aside><slot />

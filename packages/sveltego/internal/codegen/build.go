@@ -113,6 +113,7 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 	libDir := filepath.Join(opts.ProjectRoot, "lib")
 	libRefs := 0
 	routeCount := 0
+	emittedLayouts := make(map[string]struct{})
 	for _, route := range scan.Routes {
 		switch {
 		case route.HasPage:
@@ -132,6 +133,17 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 			if err := emitMirrorAndWire(opts.ProjectRoot, outDir, modulePath, route); err != nil {
 				return nil, err
 			}
+		}
+		for i, layoutDir := range route.LayoutChain {
+			if _, done := emittedLayouts[layoutDir]; done {
+				continue
+			}
+			pkgPath := route.LayoutPackagePaths[i]
+			pkgName := layoutPackageName(pkgPath)
+			if err := emitLayout(opts.ProjectRoot, outDir, layoutDir, pkgPath, pkgName); err != nil {
+				return nil, err
+			}
+			emittedLayouts[layoutDir] = struct{}{}
 		}
 	}
 	libExists := dirExists(libDir)
@@ -380,4 +392,46 @@ func dirExists(path string) bool {
 		return false
 	}
 	return info.IsDir()
+}
+
+// emitLayout parses one +layout.svelte and writes the generated
+// layout.gen.go into the encoded layout package directory. Layout files
+// share the directory with any +page.svelte / wire.gen.go for the same
+// dir; the distinct filename keeps them in separate generated artifacts.
+// The leading character must not be "_" because Go's build system
+// silently ignores files whose name starts with "_".
+func emitLayout(projectRoot, outDir, layoutDir, pkgPath, pkgName string) error {
+	layoutPath := filepath.Join(layoutDir, "+layout.svelte")
+	src, err := os.ReadFile(layoutPath) //nolint:gosec // path comes from scanner walk under projectRoot
+	if err != nil {
+		return fmt.Errorf("codegen: read %s: %w", layoutPath, err)
+	}
+	frag, perrs := parser.Parse(src)
+	if len(perrs) > 0 {
+		return fmt.Errorf("codegen: parse %s: %w", layoutPath, perrs)
+	}
+	out, err := GenerateLayout(frag, LayoutOptions{PackageName: pkgName})
+	if err != nil {
+		return fmt.Errorf("codegen: generate %s: %w", layoutPath, err)
+	}
+	relPkg := strings.TrimPrefix(pkgPath, ".gen/")
+	target := filepath.Join(projectRoot, outDir, filepath.FromSlash(relPkg), "layout.gen.go")
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return fmt.Errorf("codegen: mkdir %s: %w", filepath.Dir(target), err)
+	}
+	if err := os.WriteFile(target, out, genFileMode); err != nil {
+		return fmt.Errorf("codegen: write %s: %w", target, err)
+	}
+	return nil
+}
+
+// layoutPackageName extracts the directory's package name from a
+// .gen/routes/... package path. Mirrors how routescan derives PackageName.
+func layoutPackageName(pkgPath string) string {
+	rel := strings.TrimPrefix(pkgPath, ".gen/")
+	if rel == "" || rel == "routes" {
+		return "routes"
+	}
+	parts := strings.Split(rel, "/")
+	return parts[len(parts)-1]
 }

@@ -13,6 +13,22 @@ func emitElement(b *Builder, e *ast.Element) {
 	if e == nil {
 		return
 	}
+	if e.Name == "slot" {
+		if !b.hasChildren {
+			b.Line("// TODO: <slot /> outside layout (#49 named slots)")
+			return
+		}
+		b.Line("if children != nil {")
+		b.Indent()
+		b.Line("if err := children(w); err != nil {")
+		b.Indent()
+		b.Line("return err")
+		b.Dedent()
+		b.Line("}")
+		b.Dedent()
+		b.Line("}")
+		return
+	}
 	if isComponentName(e.Name) {
 		b.Linef("// TODO: component <%s> (#10 component nesting)", e.Name)
 		b.Line("_ = w")

@@ -9,20 +9,26 @@ import "github.com/binsarjr/sveltego/runtime/router"
 // LayoutChain is ordered ancestor -> self: the first entry is the topmost
 // directory under RoutesDir that owns a +layout.svelte; the last entry is
 // the route's own directory when the route also owns a layout.
+//
+// LayoutPackagePaths runs in lockstep with LayoutChain and holds each
+// layout dir's encoded gen-tree package path (e.g. ".gen/routes",
+// ".gen/routes/_g_app"). It enables the manifest emitter to import the
+// generated layout package without re-deriving the encoding.
 type ScannedRoute struct {
-	Pattern         string
-	Segments        []router.Segment
-	Dir             string
-	PackageName     string
-	PackagePath     string
-	HasPage         bool
-	HasLayout       bool
-	HasError        bool
-	HasReset        bool
-	HasPageServer   bool
-	HasLayoutServer bool
-	HasServer       bool
-	LayoutChain     []string
+	Pattern            string
+	Segments           []router.Segment
+	Dir                string
+	PackageName        string
+	PackagePath        string
+	HasPage            bool
+	HasLayout          bool
+	HasError           bool
+	HasReset           bool
+	HasPageServer      bool
+	HasLayoutServer    bool
+	HasServer          bool
+	LayoutChain        []string
+	LayoutPackagePaths []string
 }
 
 // DiscoveredMatcher names a Go file under src/params/ that exports

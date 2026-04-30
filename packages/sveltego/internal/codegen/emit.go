@@ -20,6 +20,10 @@ type Builder struct {
 	buf    strings.Builder
 	indent int
 	err    error
+	// hasChildren is true when the enclosing Render method declares the
+	// `children func(*render.Writer) error` parameter (layout templates).
+	// emitElement consults this flag when lowering <slot />.
+	hasChildren bool
 }
 
 // Line appends s as one indented source line.

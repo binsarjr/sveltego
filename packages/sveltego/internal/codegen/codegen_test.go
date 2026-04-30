@@ -168,7 +168,13 @@ func TestFixtures(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if d.IsDir() || !strings.HasSuffix(path, ".svelte") {
+		if d.IsDir() {
+			if d.Name() == "layout" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".svelte") {
 			return nil
 		}
 		matches = append(matches, path)

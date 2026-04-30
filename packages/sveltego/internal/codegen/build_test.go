@@ -243,6 +243,65 @@ import "$lib/db"
 	}
 }
 
+func TestBuild_EmitsLayoutChain(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/app\n\ngo 1.22\n")
+	writeFile(t, filepath.Join(root, "src", "routes", "+layout.svelte"),
+		`<header>root</header><slot />`+"\n")
+	writeFile(t, filepath.Join(root, "src", "routes", "dash", "+layout.svelte"),
+		`<nav>dash</nav><slot />`+"\n")
+	writeFile(t, filepath.Join(root, "src", "routes", "dash", "+page.svelte"),
+		`<h1>Dash</h1>`+"\n")
+
+	if _, err := Build(BuildOptions{ProjectRoot: root}); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	rootLayout := filepath.Join(root, ".gen", "routes", "layout.gen.go")
+	dashLayout := filepath.Join(root, ".gen", "routes", "dash", "layout.gen.go")
+	dashPage := filepath.Join(root, ".gen", "routes", "dash", "page.gen.go")
+	manifest := filepath.Join(root, ".gen", "manifest.gen.go")
+	for _, p := range []string{rootLayout, dashLayout, dashPage, manifest} {
+		if _, err := os.Stat(p); err != nil {
+			t.Errorf("expected %s to exist: %v", p, err)
+		}
+	}
+
+	rootBytes, err := os.ReadFile(rootLayout)
+	if err != nil {
+		t.Fatalf("read root layout: %v", err)
+	}
+	for _, want := range []string{
+		"type Layout struct{}",
+		"type LayoutData = struct{}",
+		"children func(*render.Writer) error",
+		"if children != nil",
+	} {
+		if !bytes.Contains(rootBytes, []byte(want)) {
+			t.Errorf("root layout missing %q:\n%s", want, rootBytes)
+		}
+	}
+
+	manifestBytes, err := os.ReadFile(manifest)
+	if err != nil {
+		t.Fatalf("read manifest: %v", err)
+	}
+	for _, want := range []string{
+		`render__layout__page_routes`,
+		`render__layout__page_routes_dash`,
+		`LayoutChain: []router.LayoutHandler{`,
+	} {
+		if !bytes.Contains(manifestBytes, []byte(want)) {
+			t.Errorf("manifest missing %q:\n%s", want, manifestBytes)
+		}
+	}
+
+	for _, p := range []string{rootLayout, dashLayout, dashPage, manifest} {
+		assertParsesAsGo(t, p)
+	}
+}
+
 func TestBuild_EmbedSkippedWhenNoAssets(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

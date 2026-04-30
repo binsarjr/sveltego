@@ -1,0 +1,1 @@
+<nav>dash</nav><slot />
