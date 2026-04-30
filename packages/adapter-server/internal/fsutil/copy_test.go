@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -34,8 +35,10 @@ func TestCopyFileHappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat dst: %v", err)
 	}
-	if info.Mode().Perm() != 0o600 {
-		t.Fatalf("dst perm = %o, want 0o600", info.Mode().Perm())
+	if runtime.GOOS != "windows" {
+		if got := info.Mode().Perm(); got != 0o600 {
+			t.Errorf("Mode().Perm() = %v, want 0o600", got)
+		}
 	}
 }
 
