@@ -1,0 +1,1 @@
+{#await x +}{:then v}<p>{v}</p>{/await}

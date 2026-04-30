@@ -199,6 +199,86 @@ func TestGenerateLayout_RejectsRootConst(t *testing.T) {
 	}
 }
 
+func TestGenerate_AwaitPendingDiagnostic(t *testing.T) {
+	frag := &ast.Fragment{
+		Children: []ast.Node{
+			&ast.AwaitBlock{
+				P:       ast.Pos{Line: 4, Col: 2},
+				Expr:    "fetch()",
+				Pending: []ast.Node{&ast.Text{Value: "loading"}},
+				Then:    []ast.Node{&ast.Text{Value: "ok"}},
+				ThenVar: "v",
+			},
+		},
+	}
+	_, err := Generate(frag, Options{PackageName: "page"})
+	if err == nil {
+		t.Fatal("expected diagnostic, got nil")
+	}
+	var ce *CodegenError
+	if !errors.As(err, &ce) {
+		t.Fatalf("got %T, want *CodegenError", err)
+	}
+	if ce.Pos.Line != 4 || ce.Pos.Col != 2 {
+		t.Errorf("pos = %v, want 4:2", ce.Pos)
+	}
+	if !strings.Contains(ce.Msg, "pending branch unsupported") {
+		t.Errorf("msg = %q, want substring %q", ce.Msg, "pending branch unsupported")
+	}
+}
+
+func TestGenerate_AwaitWhitespacePendingAccepted(t *testing.T) {
+	frag := &ast.Fragment{
+		Children: []ast.Node{
+			&ast.AwaitBlock{
+				P:       ast.Pos{Line: 1, Col: 1},
+				Expr:    "fetch()",
+				Pending: []ast.Node{&ast.Text{Value: "  \n\t"}},
+				Then:    []ast.Node{&ast.Text{Value: "ok"}},
+				ThenVar: "v",
+			},
+		},
+	}
+	if _, err := Generate(frag, Options{PackageName: "page"}); err != nil {
+		t.Fatalf("whitespace pending should be tolerated, got %v", err)
+	}
+}
+
+func TestGenerate_AwaitRequiresThenOrCatch(t *testing.T) {
+	frag := &ast.Fragment{
+		Children: []ast.Node{
+			&ast.AwaitBlock{P: ast.Pos{Line: 1, Col: 1}, Expr: "fetch()"},
+		},
+	}
+	_, err := Generate(frag, Options{PackageName: "page"})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	var ce *CodegenError
+	if !errors.As(err, &ce) || !strings.Contains(ce.Msg, "requires at least") {
+		t.Fatalf("got %v, want CodegenError with 'requires at least'", err)
+	}
+}
+
+func TestGenerate_KeyCounterIncrements(t *testing.T) {
+	frag := &ast.Fragment{
+		Children: []ast.Node{
+			&ast.KeyBlock{P: ast.Pos{Line: 1, Col: 1}, Key: "A", Body: []ast.Node{&ast.Text{Value: "x"}}},
+			&ast.KeyBlock{P: ast.Pos{Line: 1, Col: 1}, Key: "B", Body: []ast.Node{&ast.Text{Value: "y"}}},
+		},
+	}
+	out, err := Generate(frag, Options{PackageName: "page"})
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	src := string(out)
+	for _, want := range []string{"sgkey:0:A", "/sgkey:0", "sgkey:1:B", "/sgkey:1"} {
+		if !strings.Contains(src, want) {
+			t.Errorf("missing %q in:\n%s", want, src)
+		}
+	}
+}
+
 func TestFixtures(t *testing.T) {
 	root := "testdata/codegen"
 	var matches []string

@@ -1,0 +1,1 @@
+{#await maybe()}{:catch err}<p>{err.Error()}</p>{/await}

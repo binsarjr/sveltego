@@ -1,0 +1,1 @@
+{#await fetch()}loading{:then v}<span>{v}</span>{/await}

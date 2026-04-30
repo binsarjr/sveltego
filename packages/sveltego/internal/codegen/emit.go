@@ -24,6 +24,10 @@ type Builder struct {
 	// `children func(*render.Writer) error` parameter (layout templates).
 	// emitElement consults this flag when lowering <slot />.
 	hasChildren bool
+	// keyCounter assigns stable per-template indices to {#key} blocks so
+	// the SSR anchor comments line up with the client-side hydration
+	// metadata table.
+	keyCounter int
 }
 
 // Line appends s as one indented source line.
