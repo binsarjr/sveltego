@@ -61,6 +61,11 @@ type BuildOptions struct {
 // emitted page or server stub; ManifestPath is the absolute path to the
 // generated manifest. Diagnostics holds non-fatal scanner warnings — fatal
 // diagnostics return through the error channel instead.
+//
+// Note: Diagnostics is typed as []routescan.Diagnostic, which lives in an
+// internal package. Build is currently experimental; if it is ever promoted
+// to stable, Diagnostic must be re-exported or wrapped so that callers
+// outside this module can refer to the type without import tricks.
 type BuildResult struct {
 	Routes       int
 	ManifestPath string
