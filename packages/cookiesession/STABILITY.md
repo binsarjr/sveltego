@@ -15,6 +15,17 @@ Tiers per [RFC #97](https://github.com/binsarjr/sveltego/issues/97). Pre-`v0.1` 
 - `cookiesession.Secret` — struct; ID+Key fields stable.
 - `cookiesession.Session[T]` — generic struct; methods stable for #199 (Handle middleware).
 - `cookiesession.Options` — configuration struct for Session creation.
+- `cookiesession.Handle[T]` — middleware factory; signature may change if Options pattern unifies in v0.6.
+- `cookiesession.From[T]` — RequestEvent accessor; stable shape for #199.
+- `cookiesession.FromCtx[T]` — LoadCtx accessor; stable shape for #199.
+- `cookiesession.MustFrom[T]` — panicking accessor; stable shape for #199.
+- `cookiesession.CookieOption` — functional option type; may grow new constructors.
+- `cookiesession.WithMaxAge` — CookieOption; stable.
+- `cookiesession.WithSecure` — CookieOption; stable.
+- `cookiesession.WithHTTPOnly` — CookieOption; stable.
+- `cookiesession.WithSameSite` — CookieOption; stable.
+- `cookiesession.WithDomain` — CookieOption; stable.
+- `cookiesession.WithPath` — CookieOption; stable.
 
 ## Deprecated
 

@@ -20,6 +20,7 @@ use (
 	./packages/sveltego
 	./playgrounds/basic
 	./playgrounds/blog
+	./playgrounds/cookiesession-counter
 	./playgrounds/dashboard
 	./templates/ai
 	./test-utils
