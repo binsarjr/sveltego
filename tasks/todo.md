@@ -87,7 +87,8 @@ Benchmark suite vs adapter-bun with nightly regression gate. Docs site (Vitepres
 - [x] Land parser foundation (#7 lexer + #8 AST/parser) — landed Phase 0e 2026-04-29; split layout `internal/lexer/`, `internal/ast/`, `internal/parser/`; multi-error model supersedes ADR 0001 sub-decision Q1
 - [x] Land render + kit + codegen pipeline (#9–#15) — landed Phase 0f 2026-04-29; render `Writer` w/ sync.Pool + WriteEscape/WriteEscapeAttr; kit RenderCtx/LoadCtx/Cookies stubs; codegen text/element/mustache/if/each/script-hoist/PageData-inference; ADR 0004 amended (drop WriteAttr, lock struct-literal-only PageData)
 - [x] Land router foundation (#18 scan + emit, #19 radix matcher, #76 param matchers + built-ins, #77 optional + rest segments) — landed Phase 0g 2026-04-30; runtime/router/ + internal/routescan/ + exports/kit/params/ + internal/codegen/manifest.go; integration smoke compiles end-to-end
-- [ ] Build the rest of the MVP pipeline end-to-end (#20 HTTP pipeline, #21 CLI build, #23 hello-world, #83 $lib alias)
+- [x] Land HTTP server pipeline (#20) — landed Phase 0h 2026-04-30; `packages/sveltego/server/` exposes `New(Config) (*Server, error)`, `ListenAndServe`, `Shutdown`, `ServeHTTP`; pipeline is Match → +server.go branch / 405 / Load / Render / Response with shell template parsed once at boot; race-safe under 100×100 concurrent load; ~163 ns/op in-process p50 on M1 Pro
+- [ ] Build the rest of the MVP pipeline end-to-end (#21 CLI build, #23 hello-world, #83 $lib alias)
 - [ ] Smoke-test on hello-world example (#23)
 
 ## Open questions
