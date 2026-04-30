@@ -1,12 +1,15 @@
-# CI budget split (Phase 0p):
+# CI budget split (Phase 0p + merge queue):
 #
 # - PR runs (lite): 1 OS × 1 Go (ubuntu-latest, 1.23.x) + changes +
 #   commit-lint + agents-sync. Roughly 4 jobs per push.
+# - merge_group runs: same lite matrix + isolated-modules (no playground-smoke).
+#   CI runs once on the merged candidate; cancel-in-progress is disabled so
+#   the queue run always completes.
 # - Push to main (full): 3 OS × 2 Go matrix + isolated-modules +
 #   playground-smoke + agents-sync + changes. Full coverage at merge.
 # - Docs-only diffs (`**.md`, `tasks/**`, `docs/**`) skip CI entirely
 #   via paths-ignore.
-# - Concurrency cancels stale runs on the same ref.
+# - Concurrency: PR runs cancel-in-progress; main and merge_group runs do not.
 name: ci
 
 on:
@@ -25,10 +28,11 @@ on:
       - 'tasks/decisions/**'
       - 'docs/**'
       - '.github/ISSUE_TEMPLATE/**'
+  merge_group:
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   changes:
@@ -77,10 +81,10 @@ jobs:
               - '.github/workflows/**'
               - 'test-utils/**'
 
-  # Lite matrix on PRs: ubuntu-latest, go1.23.x. ~1 job.
+  # Lite matrix on PRs and merge_group: ubuntu-latest, go1.23.x. ~1 job.
   lint-and-test-pr:
     name: lint-and-test (${{ matrix.os }}, go${{ matrix.go }})
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     needs: changes
     strategy:
       fail-fast: false
@@ -605,11 +609,11 @@ jobs:
           directory: coverage
           fail_ci_if_error: false
 
-  # Push-to-main only: catches per-module isolation breakage that the
+  # Push-to-main and merge_group: catches per-module isolation breakage that the
   # workspace path can mask. Skipped on PRs to keep PR runs lean.
   isolated-modules:
     name: isolated-modules (GOWORK=off)
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     env:
       GOWORK: off

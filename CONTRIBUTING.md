@@ -352,7 +352,52 @@ auto-synced from `AGENTS.md`; do not edit them directly.
 If a per-package `CLAUDE.md` disagrees with this file, the package file
 wins for that package only. Cross-cutting rules live here.
 
-## 16. References
+## 16. Merging to main
+
+PRs land via the **GitHub merge queue**. The queue batches entries, runs CI
+on the merged candidate, and lands the commit only when all required checks
+pass. This eliminates the cancel-in-progress churn that would otherwise kill
+main CI runs every time a PR merged.
+
+### To queue a PR
+
+```bash
+gh pr merge <num> --auto --squash --delete-branch
+```
+
+`--auto` queues the PR; the merge queue handles the rest. Do not use
+`--admin` to bypass the queue — eat your own dogfood.
+
+### Required checks (must all be green before the queue merges)
+
+| Check name | Job |
+|---|---|
+| `lint-and-test (ubuntu-latest, go1.23.x)` | Lite lint + test + build matrix |
+| `changes (path-aware fan-out)` | Path-filter fan-out |
+| `commit-lint` | Conventional Commits validation |
+| `agents-sync (AGENTS.md drift)` | AI doc sync drift check |
+
+`isolated-modules` runs on `push` and `merge_group` for extra coverage but
+is not a required gate (it would block PRs since it doesn't run on
+`pull_request`).
+
+### Concurrency rules
+
+- **PR runs**: `cancel-in-progress: true` — stale branch runs are cancelled.
+- **main push runs**: `cancel-in-progress: false` — post-merge runs always complete.
+- **merge_group runs**: `cancel-in-progress: false` — queue runs always complete.
+
+### Enabling merge queue in GitHub UI (one-time manual step)
+
+The merge queue rule type is not yet available via the REST rulesets API for
+this account. Enable it manually:
+
+> Repo Settings → Branches → `main` protection rule → "Require merge queue"
+> → Enable → Merge method: Squash → Save changes.
+>
+> This is required to activate `gh pr merge --auto` queue behavior.
+
+## 17. References
 
 Foundation RFCs on `github.com/binsarjr/sveltego`:
 
