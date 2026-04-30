@@ -45,6 +45,13 @@ func (ts TrailingSlash) String() string {
 // route, so the pipeline does not re-walk the layout chain at request
 // time.
 //
+// Prerender selects build-time HTML generation. PrerenderAuto, when
+// true, switches the build to generate static HTML only when the route
+// has no dynamic params and no server load — otherwise the route renders
+// at request time. PrerenderProtected (#187) instructs the prerender
+// pipeline to still emit the static HTML, but the runtime mux gates it
+// behind the configured PrerenderAuthGate before serving.
+//
 // ImageWidths configures the variant widths produced by the build-time
 // image pipeline for <Image src="..."> elements (#92). Empty applies the
 // framework default (320, 640, 1280); the field is global rather than
@@ -53,13 +60,15 @@ func (ts TrailingSlash) String() string {
 // root's default value is consulted; per-route overrides are ignored
 // because the pool is not partitioned by route.
 type PageOptions struct {
-	Prerender     bool
-	SSR           bool
-	CSR           bool
-	SSROnly       bool
-	CSRF          bool
-	TrailingSlash TrailingSlash
-	ImageWidths   []int
+	Prerender          bool
+	PrerenderAuto      bool
+	PrerenderProtected bool
+	SSR                bool
+	CSR                bool
+	SSROnly            bool
+	CSRF               bool
+	TrailingSlash      TrailingSlash
+	ImageWidths        []int
 }
 
 // DefaultPageOptions returns the framework defaults: SSR, CSR, and CSRF
@@ -80,6 +89,8 @@ func DefaultPageOptions() PageOptions {
 // rejects in == comparisons.
 func (base PageOptions) Equal(other PageOptions) bool {
 	if base.Prerender != other.Prerender ||
+		base.PrerenderAuto != other.PrerenderAuto ||
+		base.PrerenderProtected != other.PrerenderProtected ||
 		base.SSR != other.SSR ||
 		base.CSR != other.CSR ||
 		base.SSROnly != other.SSROnly ||
@@ -108,6 +119,12 @@ func (base PageOptions) Merge(override PageOptionsOverride) PageOptions {
 	if override.HasPrerender {
 		out.Prerender = override.Prerender
 	}
+	if override.HasPrerenderAuto {
+		out.PrerenderAuto = override.PrerenderAuto
+	}
+	if override.HasPrerenderProtected {
+		out.PrerenderProtected = override.PrerenderProtected
+	}
 	if override.HasSSR {
 		out.SSR = override.SSR
 	}
@@ -130,22 +147,27 @@ func (base PageOptions) Merge(override PageOptionsOverride) PageOptions {
 // options. Each Has* flag records whether the corresponding constant was
 // declared so layouts and pages can express "inherit" by omission.
 type PageOptionsOverride struct {
-	Prerender        bool
-	HasPrerender     bool
-	SSR              bool
-	HasSSR           bool
-	CSR              bool
-	HasCSR           bool
-	SSROnly          bool
-	HasSSROnly       bool
-	CSRF             bool
-	HasCSRF          bool
-	TrailingSlash    TrailingSlash
-	HasTrailingSlash bool
+	Prerender             bool
+	HasPrerender          bool
+	PrerenderAuto         bool
+	HasPrerenderAuto      bool
+	PrerenderProtected    bool
+	HasPrerenderProtected bool
+	SSR                   bool
+	HasSSR                bool
+	CSR                   bool
+	HasCSR                bool
+	SSROnly               bool
+	HasSSROnly            bool
+	CSRF                  bool
+	HasCSRF               bool
+	TrailingSlash         TrailingSlash
+	HasTrailingSlash      bool
 }
 
 // Any reports whether at least one option is declared. Codegen uses this
 // to skip cascade resolution when the file declares no options at all.
 func (o PageOptionsOverride) Any() bool {
-	return o.HasPrerender || o.HasSSR || o.HasCSR || o.HasSSROnly || o.HasCSRF || o.HasTrailingSlash
+	return o.HasPrerender || o.HasPrerenderAuto || o.HasPrerenderProtected ||
+		o.HasSSR || o.HasCSR || o.HasSSROnly || o.HasCSRF || o.HasTrailingSlash
 }

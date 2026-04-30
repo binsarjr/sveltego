@@ -138,6 +138,82 @@ const SSROnly = true
 	}
 }
 
+func TestScanPageOptions_prerenderAutoAndProtected(t *testing.T) {
+	t.Parallel()
+	body := `//go:build sveltego
+
+package routes
+
+const (
+	Prerender          = true
+	PrerenderAuto      = true
+	PrerenderProtected = true
+)
+`
+	path := writeTempServerGo(t, body)
+	got, err := scanPageOptions(path)
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if !got.HasPrerender || !got.Prerender {
+		t.Errorf("Prerender missed: %+v", got)
+	}
+	if !got.HasPrerenderAuto || !got.PrerenderAuto {
+		t.Errorf("PrerenderAuto missed: %+v", got)
+	}
+	if !got.HasPrerenderProtected || !got.PrerenderProtected {
+		t.Errorf("PrerenderProtected missed: %+v", got)
+	}
+}
+
+func TestScanPrerenderFromSvelte(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		body string
+		want kit.PageOptionsOverride
+	}{
+		{
+			"true",
+			`<svelte:options prerender />`,
+			kit.PageOptionsOverride{HasPrerender: true, Prerender: true},
+		},
+		{
+			"auto",
+			`<svelte:options prerender="auto" />`,
+			kit.PageOptionsOverride{HasPrerenderAuto: true, PrerenderAuto: true, HasPrerender: true, Prerender: true},
+		},
+		{
+			"protected",
+			`<svelte:options prerender="protected" />`,
+			kit.PageOptionsOverride{HasPrerender: true, Prerender: true, HasPrerenderProtected: true, PrerenderProtected: true},
+		},
+		{
+			"absent",
+			`<h1>nothing</h1>`,
+			kit.PageOptionsOverride{},
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			p := filepath.Join(dir, "+page.svelte")
+			if err := os.WriteFile(p, []byte(tc.body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			got, err := scanPrerenderFromSvelte(p)
+			if err != nil {
+				t.Fatalf("scan: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("got %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestScanPageOptions_dotImportTrailingSlash(t *testing.T) {
 	t.Parallel()
 	body := `//go:build sveltego
