@@ -13,11 +13,23 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unsafe"
 
 	"github.com/binsarjr/sveltego/exports/kit"
 	"github.com/binsarjr/sveltego/render"
 	"github.com/binsarjr/sveltego/runtime/router"
 )
+
+// bytesAsString aliases p as a string without copying. Safe only when
+// the caller guarantees p is not mutated for the lifetime of the
+// returned string. Used to feed []byte into render.Writer.WriteRaw,
+// which only appends bytes (no retention).
+func bytesAsString(p []byte) string {
+	if len(p) == 0 {
+		return ""
+	}
+	return unsafe.String(&p[0], len(p))
+}
 
 // nonceBytes is the entropy source for a CSP nonce. 16 bytes (128 bits)
 // matches the OWASP recommendation; base64-encoded that becomes a
@@ -94,9 +106,21 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 		ev.MatchPath = rewritten
 	}
 
-	var matched *router.Route
+	// pageBuf carries the pooled render.Writer ownership across the
+	// Handle hook. renderPage hands the buffer's underlying bytes to
+	// kit.Response.Body without copying, so the writer must outlive
+	// writeResponse. Released here once the response is fully flushed.
+	var (
+		matched *router.Route
+		pageBuf *render.Writer
+	)
+	defer func() {
+		if pageBuf != nil {
+			render.Release(pageBuf)
+		}
+	}()
 	resolve := func(ev *kit.RequestEvent) (*kit.Response, error) {
-		return s.resolve(w, r, ev, &matched)
+		return s.resolve(w, r, ev, &matched, &pageBuf)
 	}
 
 	res, err := s.runHandle(ev, resolve)
@@ -132,7 +156,9 @@ func (s *Server) runHandle(ev *kit.RequestEvent, resolve kit.ResolveFn) (res *ki
 // resolve runs the SvelteKit-shaped match → load → render path and
 // returns either a buffered Response (page routes) or errServerRouteWrote
 // (server routes wrote directly via the user's http.HandlerFunc).
-func (s *Server) resolve(w http.ResponseWriter, r *http.Request, ev *kit.RequestEvent, matched **router.Route) (*kit.Response, error) {
+// pageBuf receives the pooled render.Writer when renderPage produces a
+// buffered Response so the caller can release it after writeResponse.
+func (s *Server) resolve(w http.ResponseWriter, r *http.Request, ev *kit.RequestEvent, matched **router.Route, pageBuf **render.Writer) (*kit.Response, error) {
 	matchPath := ev.MatchPath
 	if matchPath == "" {
 		matchPath = ev.URL.Path
@@ -194,7 +220,7 @@ func (s *Server) resolve(w http.ResponseWriter, r *http.Request, ev *kit.Request
 	if !optionsAllowSSR(route.Options) {
 		return s.renderEmptyShell(), nil
 	}
-	return s.renderPage(w, r, ev, route, form)
+	return s.renderPage(w, r, ev, route, form, pageBuf)
 }
 
 // optionsAllowSSR returns true unless the route declared SSR=false. The
@@ -280,7 +306,11 @@ func canonicalRedirect(u *url.URL, path string) string {
 // directly to w and returns errStreamingWrote so writeResponse is
 // skipped. When form is non-nil the page's PageData.Form field is set
 // from form.data and the response status follows form.code.
-func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.RequestEvent, route *router.Route, form *formData) (*kit.Response, error) {
+//
+// The buffered-response path stores its pooled render.Writer in *pageBuf
+// (when non-nil) and aliases buf.Bytes() into Response.Body. The caller
+// owns the writer and must release it after writeResponse runs.
+func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.RequestEvent, route *router.Route, form *formData, pageBuf **render.Writer) (*kit.Response, error) {
 	var (
 		data        any
 		layoutDatas []any
@@ -358,11 +388,16 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 	}
 
 	buf := render.Acquire()
-	defer render.Release(buf)
+	released := false
+	defer func() {
+		if !released {
+			render.Release(buf)
+		}
+	}()
 
 	buf.WriteString(s.shellHead)
 	if len(headBytes) > 0 {
-		buf.WriteRaw(string(headBytes))
+		buf.WriteRaw(bytesAsString(headBytes))
 	}
 	buf.WriteString(s.shellMid)
 	if err := inner(buf); err != nil {
@@ -370,15 +405,28 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 	}
 	buf.WriteString(s.shellTail)
 
-	body := make([]byte, buf.Len())
-	copy(body, buf.Bytes())
-
+	body := buf.Bytes()
 	headers := http.Header{}
 	headers.Set("Content-Type", "text/html; charset=utf-8")
 	headers.Set("Content-Length", strconv.Itoa(len(body)))
 	status := http.StatusOK
 	if form != nil && form.code != 0 {
 		status = form.code
+	}
+	if pageBuf != nil {
+		// Release any prior buffer the caller stashed (legitimate when
+		// Handle invokes resolve more than once).
+		if prev := *pageBuf; prev != nil {
+			render.Release(prev)
+		}
+		*pageBuf = buf
+		released = true
+	} else {
+		// Fallback: caller didn't supply ownership — copy out so the
+		// buffer can be returned to the pool here.
+		owned := make([]byte, len(body))
+		copy(owned, body)
+		body = owned
 	}
 	return &kit.Response{
 		Status:  status,
@@ -455,7 +503,7 @@ func (s *Server) renderStreaming(w http.ResponseWriter, r *http.Request, ev *kit
 
 	buf.WriteString(s.shellHead)
 	if len(headBytes) > 0 {
-		buf.WriteRaw(string(headBytes))
+		buf.WriteRaw(bytesAsString(headBytes))
 	}
 	buf.WriteString(s.shellMid)
 	if err := inner(buf); err != nil {
@@ -498,7 +546,7 @@ func emitResolveScript(ctx context.Context, buf *render.Writer, id uint64, strea
 			buf.WriteString(`}`)
 		} else {
 			buf.WriteString(`{"data":`)
-			buf.WriteString(string(escapeScriptJSON(encoded)))
+			writeEscapedScriptJSON(buf, encoded)
 			buf.WriteString(`}`)
 		}
 	}
@@ -514,27 +562,49 @@ func writeJSONString(buf *render.Writer, s string) {
 		buf.WriteString(`""`)
 		return
 	}
-	buf.WriteString(string(escapeScriptJSON(encoded)))
+	writeEscapedScriptJSON(buf, encoded)
 }
 
-// escapeScriptJSON neutralizes "</" and "<!--" sequences inside a JSON
-// payload so an attacker-controlled string can't terminate the enclosing
-// <script> tag or open an HTML comment. Other "<" characters pass through
-// because they're already inside a JSON string literal that the browser's
-// JS parser treats as ordinary text.
-func escapeScriptJSON(p []byte) []byte {
-	if len(p) == 0 {
-		return p
+// writeEscapedScriptJSON appends p to buf, neutralizing "</" and "<!--"
+// sequences so an attacker-controlled string can't terminate the
+// enclosing <script> tag or open an HTML comment. The fast path writes
+// p verbatim when no escape-trigger byte appears; the slow path rewrites
+// only the offending bytes via a single rebuilt slice. Other "<"
+// characters pass through because they're already inside a JSON string
+// literal that the browser's JS parser treats as ordinary text.
+func writeEscapedScriptJSON(buf *render.Writer, p []byte) {
+	i := indexScriptSpecial(p)
+	if i < 0 {
+		buf.WriteRaw(bytesAsString(p))
+		return
 	}
-	out := make([]byte, 0, len(p))
-	for i := 0; i < len(p); i++ {
-		if p[i] == '<' && i+1 < len(p) && (p[i+1] == '/' || p[i+1] == '!') {
-			out = append(out, '\\', 'u', '0', '0', '3', 'c')
-			continue
+	buf.WriteRaw(bytesAsString(p[:i]))
+	const escape = `<`
+	tail := p[i:]
+	start := 0
+	for j := 0; j+1 < len(tail); j++ {
+		if tail[j] == '<' && (tail[j+1] == '/' || tail[j+1] == '!') {
+			if j > start {
+				buf.WriteRaw(bytesAsString(tail[start:j]))
+			}
+			buf.WriteString(escape)
+			start = j + 1
 		}
-		out = append(out, p[i])
 	}
-	return out
+	if start < len(tail) {
+		buf.WriteRaw(bytesAsString(tail[start:]))
+	}
+}
+
+// indexScriptSpecial returns the index of the first byte that triggers
+// script-context escaping, or -1 when p is clean.
+func indexScriptSpecial(p []byte) int {
+	for i := 0; i+1 < len(p); i++ {
+		if p[i] == '<' && (p[i+1] == '/' || p[i+1] == '!') {
+			return i
+		}
+	}
+	return -1
 }
 
 // writeResponse flushes a Response built by Handle (or its short-circuit

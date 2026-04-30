@@ -2,7 +2,6 @@ package server
 
 import (
 	"bytes"
-	"strings"
 
 	"github.com/binsarjr/sveltego/exports/kit"
 	"github.com/binsarjr/sveltego/render"
@@ -93,52 +92,76 @@ type titleSpan struct {
 
 // findTitleSpans locates every `<title...>...</title>` span in src. The
 // scan is case-insensitive and treats malformed input (open without
-// close) as the absence of a span at that position.
+// close) as the absence of a span at that position. The scan walks src
+// in place: no string conversion, no full lowercase copy, zero
+// allocation on the no-title fast path.
 func findTitleSpans(src []byte) []titleSpan {
-	var out []titleSpan
-	lower := strings.ToLower(string(src))
+	var (
+		out     []titleSpan
+		titleLC = []byte("title")
+		closeLC = []byte("</title>")
+	)
 	cursor := 0
-	for cursor < len(lower) {
-		open := indexAt(lower, "<title", cursor)
-		if open < 0 {
+	for cursor < len(src) {
+		lt := bytes.IndexByte(src[cursor:], '<')
+		if lt < 0 {
 			break
 		}
-		// Verify the next char is `>`, whitespace, or `/` so we don't
-		// match `<titlefoo>`. EOF after the prefix counts as no match.
-		after := open + len("<title")
-		if after >= len(lower) {
+		open := cursor + lt
+		after := open + 1 + len(titleLC) // position of the byte after "<title"
+		if after >= len(src) {
 			break
 		}
-		c := lower[after]
+		if !bytes.EqualFold(src[open+1:after], titleLC) {
+			cursor = open + 1
+			continue
+		}
+		c := src[after]
 		if c != '>' && c != ' ' && c != '\t' && c != '\n' && c != '\r' && c != '/' {
 			cursor = after
 			continue
 		}
-		gt := indexAt(lower, ">", after)
+		gt := bytes.IndexByte(src[after:], '>')
 		if gt < 0 {
 			break
 		}
-		closeAt := indexAt(lower, "</title>", gt+1)
-		if closeAt < 0 {
+		closeStart := indexFold(src, closeLC, after+gt+1)
+		if closeStart < 0 {
 			break
 		}
-		end := closeAt + len("</title>")
+		end := closeStart + len(closeLC)
 		out = append(out, titleSpan{start: open, end: end})
 		cursor = end
 	}
 	return out
 }
 
-func indexAt(s, needle string, from int) int {
+// indexFold returns the index of the first case-insensitive match of
+// needle in src starting at from, or -1 if absent. needle's first byte
+// must be a literal (non-letter) anchor for a cheap IndexByte scan; the
+// remaining bytes are compared with bytes.EqualFold.
+func indexFold(src, needle []byte, from int) int {
 	if from < 0 {
 		from = 0
 	}
-	if from >= len(s) {
+	if len(needle) == 0 || from+len(needle) > len(src) {
 		return -1
 	}
-	idx := strings.Index(s[from:], needle)
-	if idx < 0 {
-		return -1
+	anchor := needle[0]
+	rest := needle[1:]
+	for i := from; i+len(needle) <= len(src); {
+		idx := bytes.IndexByte(src[i:], anchor)
+		if idx < 0 {
+			return -1
+		}
+		j := i + idx
+		if j+len(needle) > len(src) {
+			return -1
+		}
+		if bytes.EqualFold(src[j+1:j+len(needle)], rest) {
+			return j
+		}
+		i = j + 1
 	}
-	return from + idx
+	return -1
 }

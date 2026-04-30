@@ -110,15 +110,17 @@ func (errUnknownActionResult) Error() string {
 // `?/submit`), not as a value, so url.ParseQuery sees it as the empty
 // value of `/submit`. The default action key is "default".
 func actionNameFromQuery(raw string) string {
-	if raw == "" {
-		return "default"
-	}
-	for _, part := range strings.Split(raw, "&") {
-		if !strings.HasPrefix(part, "/") {
+	for raw != "" {
+		var part string
+		if i := strings.IndexByte(raw, '&'); i >= 0 {
+			part, raw = raw[:i], raw[i+1:]
+		} else {
+			part, raw = raw, ""
+		}
+		if len(part) == 0 || part[0] != '/' {
 			continue
 		}
-		// strip optional `=` suffix
-		name := strings.TrimPrefix(part, "/")
+		name := part[1:]
 		if i := strings.IndexByte(name, '='); i >= 0 {
 			name = name[:i]
 		}

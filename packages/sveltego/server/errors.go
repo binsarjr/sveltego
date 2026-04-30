@@ -167,9 +167,7 @@ func (s *Server) renderErrorBoundary(w http.ResponseWriter, r *http.Request, ev 
 	}
 	buf.WriteString(s.shellTail)
 
-	body := make([]byte, buf.Len())
-	copy(body, buf.Bytes())
-
+	body := buf.Bytes()
 	if ev != nil && ev.Cookies != nil {
 		ev.Cookies.Apply(w)
 	}
