@@ -74,7 +74,7 @@ func Routes() []router.Route {
 			LayoutLoaders: []router.LayoutLoadHandler{
 				loadLayout__page_routes,
 			},
-			Options: kit.PageOptions{SSR: true, CSR: true, TrailingSlash: kit.TrailingSlashAlways},
+			Options: kit.PageOptions{SSR: true, CSR: true, CSRF: true, TrailingSlash: kit.TrailingSlashAlways},
 		},
 		{
 			Pattern: `/dash/billing`,
@@ -91,7 +91,7 @@ func Routes() []router.Route {
 			LayoutLoaders: []router.LayoutLoadHandler{
 				loadLayout__page_routes,
 			},
-			Options: kit.PageOptions{Prerender: true, SSR: true, CSR: true, SSROnly: true, TrailingSlash: kit.TrailingSlashIgnore},
+			Options: kit.PageOptions{Prerender: true, SSR: true, CSR: true, SSROnly: true, CSRF: true, TrailingSlash: kit.TrailingSlashIgnore},
 		},
 	}
 }

@@ -53,9 +53,49 @@ func emitElement(b *Builder, e *ast.Element) {
 		return
 	}
 	b.nestDepth++
+	if shouldInjectCSRF(e) {
+		emitCSRFHiddenInput(b)
+	}
 	emitChildren(b, e.Children)
 	b.nestDepth--
 	emitCloseTag(b, e.Name)
+}
+
+// shouldInjectCSRF returns true when codegen must emit a hidden CSRF
+// input as the first child of e. The rule mirrors SvelteKit: any
+// <form method="POST"> (case-insensitive) gets the input unless the
+// element opts out via a nocsrf attribute.
+func shouldInjectCSRF(e *ast.Element) bool {
+	if e == nil || !strings.EqualFold(e.Name, "form") {
+		return false
+	}
+	hasPostMethod := false
+	for i := range e.Attributes {
+		a := &e.Attributes[i]
+		if a.Kind != ast.AttrStatic {
+			continue
+		}
+		if strings.EqualFold(a.Name, "nocsrf") {
+			return false
+		}
+		if !strings.EqualFold(a.Name, "method") {
+			continue
+		}
+		if v, ok := a.Value.(*ast.StaticValue); ok && strings.EqualFold(v.Value, "post") {
+			hasPostMethod = true
+		}
+	}
+	return hasPostMethod
+}
+
+// emitCSRFHiddenInput emits the hidden _csrf_token input bound to
+// ctx.CSRFToken(). Empty tokens (CSRF disabled) cause an empty value
+// attribute, which is harmless because the server skips validation when
+// the route opted out.
+func emitCSRFHiddenInput(b *Builder) {
+	b.Linef("w.WriteString(%s)", quoteGo(`<input type="hidden" name="_csrf_token" value="`))
+	b.Line("w.WriteEscapeAttr(ctx.CSRFToken())")
+	b.Linef("w.WriteString(%s)", quoteGo(`">`))
 }
 
 // emitSlotOutlet lowers a <slot/> outlet on the receiving (component or
@@ -226,6 +266,11 @@ func partitionAttrs(attrs []ast.Attribute) attrPartition {
 			if expr := dynamicExpr(a.Value); expr != "" {
 				p.styleDirs = append(p.styleDirs, directive{Modifier: a.Modifier, Expr: expr})
 			}
+			continue
+		}
+		if a.Kind == ast.AttrStatic && strings.EqualFold(a.Name, "nocsrf") {
+			// nocsrf is a sveltego-only opt-out marker; strip it from the
+			// rendered HTML so it doesn't leak into the user's DOM.
 			continue
 		}
 		if a.Name == "class" && a.Kind == ast.AttrStatic && !p.hasStaticClass {

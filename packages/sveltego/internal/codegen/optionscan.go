@@ -21,6 +21,7 @@ var optionConstNames = map[string]struct{}{
 	"SSR":           {},
 	"CSR":           {},
 	"SSROnly":       {},
+	"CSRF":          {},
 	"TrailingSlash": {},
 }
 
@@ -108,6 +109,13 @@ func assignOption(out *kit.PageOptionsOverride, name string, expr goast.Expr, pa
 		}
 		out.SSROnly = v
 		out.HasSSROnly = true
+	case "CSRF":
+		v, err := evalBool(expr)
+		if err != nil {
+			return fmt.Errorf("codegen: %s: CSRF: %w", path, err)
+		}
+		out.CSRF = v
+		out.HasCSRF = true
 	case "TrailingSlash":
 		v, err := evalTrailingSlash(expr)
 		if err != nil {

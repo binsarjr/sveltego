@@ -443,6 +443,11 @@ func emitClientEntry(projectRoot, outDir, routesDir string, route routescan.Scan
 		return "", "", fmt.Errorf("codegen: write client entry %s: %w", entryAbs, err)
 	}
 
+	enhanceAbs := filepath.Join(entryDir, "enhance.ts")
+	if err := os.WriteFile(enhanceAbs, []byte(vite.GenerateEnhanceRuntime()), genFileMode); err != nil {
+		return "", "", fmt.Errorf("codegen: write enhance runtime %s: %w", enhanceAbs, err)
+	}
+
 	// Path to the .svelte source from the SPA router directory
 	// (.gen/client/__router/) — depth from routes parent to project root
 	// is the same as for entry.ts, so router.ts at depth-3 ascends
