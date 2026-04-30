@@ -43,6 +43,13 @@ type Builder struct {
 	// Names are normalized: empty/"default" both map to "Default"; named
 	// slots map to PascalCase identifiers.
 	slots []slotOutlet
+	// provenance, when true, causes emitNode to prefix each span with a
+	// // gen: source=... kind=... comment so LLMs and humans can trace the
+	// generated code back to its .svelte source line.
+	provenance bool
+	// srcPath is the relative .svelte source path written into span
+	// comments. Set once from Options.Filename before the first emit.
+	srcPath string
 }
 
 // Line appends s as one indented source line.
