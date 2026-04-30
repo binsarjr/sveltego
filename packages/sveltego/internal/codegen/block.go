@@ -1,6 +1,10 @@
 package codegen
 
-import "github.com/binsarjr/sveltego/internal/ast"
+import (
+	"fmt"
+
+	"github.com/binsarjr/sveltego/internal/ast"
+)
 
 // emitIfBlock lowers {#if cond} ... {:else if c2} ... {:else} ... {/if} to
 // a Go if/else if/else chain.
@@ -92,4 +96,114 @@ func emitEachBlock(b *Builder, n *ast.EachBlock) {
 	emitChildren(b, n.Body)
 	b.Dedent()
 	b.Line("}")
+}
+
+// emitKeyBlock lowers {#key expr} ... {/key} to a pair of HTML comment
+// anchors wrapping the body. SSR has no remount semantics; the anchors
+// carry a per-template index plus the source expression so client-side
+// hydration metadata can locate the boundary and decide whether to remount
+// when the value changes (see #35).
+func emitKeyBlock(b *Builder, n *ast.KeyBlock) {
+	if n == nil {
+		return
+	}
+	if err := validateExpr(n.Key, n.P); err != nil {
+		b.Fail(err)
+		return
+	}
+	idx := b.keyCounter
+	b.keyCounter++
+	open := fmt.Sprintf("<!--sgkey:%d:%s-->", idx, n.Key)
+	closeMarker := fmt.Sprintf("<!--/sgkey:%d-->", idx)
+	b.Linef("w.WriteString(%s)", quoteGo(open))
+	emitChildren(b, n.Body)
+	b.Linef("w.WriteString(%s)", quoteGo(closeMarker))
+}
+
+// emitAwaitBlock lowers {#await fn() then x} ... {:catch err} ... {/await}
+// to a synchronous call against a `func() (T, error)`. The then-branch
+// renders on success; the catch-branch on error. Without a catch branch,
+// the error returns from Render so the error boundary (#28) handles it.
+//
+// SSR has no streaming pending state — when the source carries a pending
+// branch (`{#await fn()} ... {:then x} ...`), codegen surfaces a
+// diagnostic. Streaming is #64.
+func emitAwaitBlock(b *Builder, n *ast.AwaitBlock) {
+	if n == nil {
+		return
+	}
+	if err := validateExpr(n.Expr, n.P); err != nil {
+		b.Fail(err)
+		return
+	}
+	if hasNonEmptyBody(n.Pending) {
+		b.Fail(&CodegenError{
+			Pos: n.P,
+			Msg: "{#await} pending branch unsupported under non-streaming SSR; use {:then} only or wait for streaming (#64)",
+		})
+		return
+	}
+	if len(n.Then) == 0 && len(n.Catch) == 0 {
+		b.Fail(&CodegenError{
+			Pos: n.P,
+			Msg: "{#await} requires at least a {:then} or {:catch} branch under non-streaming SSR",
+		})
+		return
+	}
+
+	thenVar := n.ThenVar
+	if thenVar == "" || len(n.Then) == 0 {
+		thenVar = "_"
+	}
+	b.Line("{")
+	b.Indent()
+	b.Linef("%s, _err := %s", thenVar, n.Expr)
+	b.Line("if _err != nil {")
+	b.Indent()
+	if len(n.Catch) > 0 {
+		if n.CatchVar != "" {
+			b.Linef("%s := _err", n.CatchVar)
+		}
+		emitChildren(b, n.Catch)
+	} else {
+		b.Line("return _err")
+	}
+	b.Dedent()
+	if len(n.Then) > 0 {
+		b.Line("} else {")
+		b.Indent()
+		emitChildren(b, n.Then)
+		b.Dedent()
+	}
+	b.Line("}")
+	b.Dedent()
+	b.Line("}")
+}
+
+// hasNonEmptyBody reports whether children carry any node beyond pure
+// whitespace text. Pending branches consisting of stray newlines between
+// {#await} and {:then} are common in source formatting and should not
+// trigger the no-streaming diagnostic.
+func hasNonEmptyBody(children []ast.Node) bool {
+	for _, c := range children {
+		if t, ok := c.(*ast.Text); ok {
+			if isWhitespace(t.Value) {
+				continue
+			}
+		}
+		return true
+	}
+	return false
+}
+
+func isWhitespace(s string) bool {
+	for i := range len(s) {
+		switch s[i] {
+		case ' ', '\t', '\n', '\r':
+			continue
+		default:
+			return false
+		}
+	}
+	return true
 }
