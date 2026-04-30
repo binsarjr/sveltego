@@ -1,6 +1,8 @@
 package server
 
 import (
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +13,12 @@ import (
 	"github.com/binsarjr/sveltego/render"
 	"github.com/binsarjr/sveltego/runtime/router"
 )
+
+type notFoundErr struct{ Resource string }
+
+func (e *notFoundErr) Error() string  { return "not found: " + e.Resource }
+func (e *notFoundErr) Status() int    { return http.StatusNotFound }
+func (e *notFoundErr) Public() string { return e.Resource + " does not exist" }
 
 func TestPipeline_LoadReturnsRedirect_303WithLocation(t *testing.T) {
 	t.Parallel()
@@ -233,5 +241,143 @@ func TestPipeline_PlainRedirect_NoReloadHeader(t *testing.T) {
 	}
 	if got := resp.Header.Get("X-Sveltego-Reload"); got != "" {
 		t.Errorf("X-Sveltego-Reload = %q, want empty for plain Redirect", got)
+	}
+}
+
+func TestPipeline_UserHTTPError_RendersStatus(t *testing.T) {
+	t.Parallel()
+
+	routes := []router.Route{{
+		Pattern:  "/",
+		Segments: segmentsFor("/"),
+		Load: func(_ *kit.LoadCtx) (any, error) {
+			return nil, &notFoundErr{Resource: "post"}
+		},
+		Page: func(w *render.Writer, _ *kit.RenderCtx, _ any) error {
+			w.WriteString("<p>should not render</p>")
+			return nil
+		},
+		Error: errorBoundary("user-http-error"),
+	}}
+	srv := newTestServer(t, routes)
+	ts := httptest.NewServer(srv)
+	t.Cleanup(ts.Close)
+
+	resp, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	t.Cleanup(func() { resp.Body.Close() })
+	body, _ := io.ReadAll(resp.Body)
+	s := string(body)
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", resp.StatusCode)
+	}
+	if strings.Contains(s, "should not render") {
+		t.Errorf("page content leaked into error response: %s", s)
+	}
+	if !strings.Contains(s, "code=404") {
+		t.Errorf("error boundary missing code=404: %s", s)
+	}
+	if !strings.Contains(s, "post does not exist") {
+		t.Errorf("error boundary missing public message: %s", s)
+	}
+}
+
+func TestPipeline_UserHTTPError_WrappedDetected(t *testing.T) {
+	t.Parallel()
+
+	routes := []router.Route{{
+		Pattern:  "/",
+		Segments: segmentsFor("/"),
+		Load: func(_ *kit.LoadCtx) (any, error) {
+			return nil, fmt.Errorf("load: %w", &notFoundErr{Resource: "article"})
+		},
+		Page: func(w *render.Writer, _ *kit.RenderCtx, _ any) error {
+			w.WriteString("nope")
+			return nil
+		},
+		Error: errorBoundary("wrapped"),
+	}}
+	srv := newTestServer(t, routes)
+	ts := httptest.NewServer(srv)
+	t.Cleanup(ts.Close)
+
+	resp, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	t.Cleanup(func() { resp.Body.Close() })
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want 404 through wrapping", resp.StatusCode)
+	}
+	if !strings.Contains(string(body), "code=404") {
+		t.Errorf("error boundary missing code=404: %s", body)
+	}
+}
+
+func TestPipeline_PlainError_DefaultsTo500(t *testing.T) {
+	t.Parallel()
+
+	routes := []router.Route{{
+		Pattern:  "/",
+		Segments: segmentsFor("/"),
+		Load: func(_ *kit.LoadCtx) (any, error) {
+			return nil, errors.New("something internal")
+		},
+		Page: func(w *render.Writer, _ *kit.RenderCtx, _ any) error {
+			w.WriteString("nope")
+			return nil
+		},
+	}}
+	srv := newTestServer(t, routes)
+	ts := httptest.NewServer(srv)
+	t.Cleanup(ts.Close)
+
+	resp, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	t.Cleanup(func() { resp.Body.Close() })
+	_, _ = io.Copy(io.Discard, resp.Body)
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500 for plain errors", resp.StatusCode)
+	}
+}
+
+func TestPipeline_ExistingKitError_Regression(t *testing.T) {
+	t.Parallel()
+
+	routes := []router.Route{{
+		Pattern:  "/",
+		Segments: segmentsFor("/"),
+		Load: func(_ *kit.LoadCtx) (any, error) {
+			return nil, kit.Error(403, "forbidden")
+		},
+		Page: func(w *render.Writer, _ *kit.RenderCtx, _ any) error {
+			w.WriteString("nope")
+			return nil
+		},
+	}}
+	srv := newTestServer(t, routes)
+	ts := httptest.NewServer(srv)
+	t.Cleanup(ts.Close)
+
+	resp, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	t.Cleanup(func() { resp.Body.Close() })
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("status = %d, want 403 (kit.Error regression)", resp.StatusCode)
+	}
+	if !strings.Contains(string(body), "forbidden") {
+		t.Errorf("body missing message: %s", body)
 	}
 }

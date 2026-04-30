@@ -100,3 +100,27 @@ func Error(code int, message ...string) error {
 func Fail(code int, data any) error {
 	return &FailErr{Code: code, Data: data}
 }
+
+// HTTPError is implemented by user-defined error types that want to carry
+// their own HTTP status code and a safe public message into the pipeline.
+// When the pipeline encounters an error satisfying this interface (via
+// errors.As), it converts it to a kit.Error automatically — so handlers
+// can return rich domain errors directly without manual rewrapping.
+//
+// Example:
+//
+//	type NotFoundError struct{ ID string }
+//
+//	func (e *NotFoundError) Error() string  { return "not found: " + e.ID }
+//	func (e *NotFoundError) Status() int    { return http.StatusNotFound }
+//	func (e *NotFoundError) Public() string { return "The requested item does not exist." }
+//
+//	// In Load:
+//	return nil, &NotFoundError{ID: id}  // pipeline renders +error.svelte with 404
+type HTTPError interface {
+	error
+	// Status returns the HTTP status code for this error (e.g. 404, 409).
+	Status() int
+	// Public returns a message safe to expose to end users.
+	Public() string
+}
