@@ -1,6 +1,14 @@
-# Bench (Phase 0p): runs only on push-to-main (gate regressions at merge),
-# nightly schedule, and manual dispatch. PR triggers removed to cut spend
-# — feature PRs that touch hot paths can request bench via workflow_dispatch.
+# Bench (Phase 0p, extended Phase 0mm): runs only on push-to-main (gate
+# regressions at merge), nightly schedule, and manual dispatch. PR
+# triggers removed to cut spend — feature PRs that touch hot paths can
+# request bench via workflow_dispatch.
+#
+# Two suites are gated, each as its own workspace module:
+#
+#   - benchmarks/...  per-package guards from RFC #105
+#   - bench/...       full-pipeline SSR scenarios from #60 / Phase 0mm
+#
+# Each suite runs HEAD~1 then HEAD, and bench-compare gates the diff.
 name: bench
 
 on:
@@ -9,6 +17,7 @@ on:
     paths:
       - '**.go'
       - 'benchmarks/**'
+      - 'bench/**'
       - '.github/workflows/bench.yml'
   schedule:
     - cron: '0 3 * * *'
@@ -42,7 +51,7 @@ jobs:
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
           (cd benchmarks/cmd/bench-compare && go install)
 
-      - name: Bench base (HEAD~1)
+      - name: Bench base (HEAD~1) — benchmarks
         # On main pushes, compare HEAD against the previous commit on main.
         # On schedule/dispatch, compare HEAD against HEAD~1 to detect drift
         # between scheduled runs.
@@ -51,21 +60,59 @@ jobs:
           go test -bench=. -benchmem -count=3 -run=^$ -benchtime=1x ./benchmarks/... \
             | tee /tmp/base.txt
 
-      - name: Bench head (${{ github.sha }})
+      - name: Bench head (${{ github.sha }}) — benchmarks
         run: |
           git checkout "${{ github.sha }}"
           go test -bench=. -benchmem -count=3 -run=^$ -benchtime=1x ./benchmarks/... \
             | tee /tmp/head.txt
 
-      - name: Run bench-compare gate
+      - name: Run bench-compare gate — benchmarks
         run: |
           set +e
           bench-compare -base /tmp/base.txt -head /tmp/head.txt | tee /tmp/bench.txt
           echo $? > /tmp/bench.exit
           set -e
 
-      - name: Print bench report
+      - name: Print bench report — benchmarks
         run: cat /tmp/bench.txt
 
+      - name: Bench base (HEAD~1) — bench/ SSR suite
+        # If the directory is missing on HEAD~1 (Phase 0mm landed at HEAD),
+        # the step records an empty baseline so the gate degrades to a
+        # no-regression check rather than failing on absent fixtures.
+        run: |
+          git checkout HEAD~1
+          if [ -d bench ]; then
+            go test -bench=. -benchmem -count=3 -run='^$' -benchtime=1x ./bench/... \
+              | tee /tmp/base-ssr.txt
+          else
+            echo "bench/ absent at HEAD~1; emitting empty baseline" | tee /tmp/base-ssr.txt
+          fi
+
+      - name: Bench head (${{ github.sha }}) — bench/ SSR suite
+        run: |
+          git checkout "${{ github.sha }}"
+          go test -bench=. -benchmem -count=3 -run='^$' -benchtime=1x ./bench/... \
+            | tee /tmp/head-ssr.txt
+
+      - name: Run bench-compare gate — bench/ SSR suite
+        run: |
+          set +e
+          if grep -q 'BenchmarkServeHTTP' /tmp/base-ssr.txt; then
+            bench-compare -base /tmp/base-ssr.txt -head /tmp/head-ssr.txt | tee /tmp/bench-ssr.txt
+            echo $? > /tmp/bench-ssr.exit
+          else
+            echo "bench/ SSR baseline not present on HEAD~1; gate skipped for this run" | tee /tmp/bench-ssr.txt
+            echo 0 > /tmp/bench-ssr.exit
+          fi
+          set -e
+
+      - name: Print bench report — bench/ SSR suite
+        run: cat /tmp/bench-ssr.txt
+
       - name: Enforce gate
-        run: exit "$(cat /tmp/bench.exit)"
+        run: |
+          rc1="$(cat /tmp/bench.exit)"
+          rc2="$(cat /tmp/bench-ssr.exit)"
+          if [ "$rc1" -ne 0 ]; then exit "$rc1"; fi
+          exit "$rc2"
