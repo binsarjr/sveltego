@@ -1,0 +1,4 @@
+2:3 warning a11y/img-alt: <img> requires an `alt` attribute (use alt="" for decorative images)
+3:3 warning a11y/anchor-has-content: <a> needs visible text or an `aria-label`
+4:3 warning a11y/button-has-content: <button> needs visible text or an `aria-label`
+5:3 warning a11y/label-has-associated-control: <input> needs an associated <label> or `aria-label`
