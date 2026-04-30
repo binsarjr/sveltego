@@ -213,7 +213,7 @@ func TestBuildRejectsPrivateEnvInTemplate(t *testing.T) {
 
 	_, err := Build(BuildOptions{
 		ProjectRoot: root,
-		EnvLookup:   func(key string) (string, bool) { return "postgres://x", true },
+		EnvLookup:   func(_ string) (string, bool) { return "postgres://x", true },
 	})
 	if err == nil {
 		t.Fatal("expected private-env diagnostic, got nil")
