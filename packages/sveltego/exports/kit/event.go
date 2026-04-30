@@ -31,6 +31,12 @@ type RequestEvent struct {
 	// including on error paths. Lazily initialized by ResponseHeader().
 	responseHeader http.Header
 
+	// RawParams holds the un-decoded route parameter values exactly as
+	// they appear in the request path (e.g. "hello%20world" rather than
+	// "hello world"). Populated by the pipeline after a successful route
+	// match; nil before matching runs.
+	RawParams map[string]string
+
 	// fetcher is the chained HandleFetch implementation. nil means
 	// "use http.DefaultClient.Do".
 	fetcher HandleFetchFn

@@ -34,12 +34,22 @@ func (hw *HeaderWriter) Del(key string) {
 // RenderCtx is the request-scoped context handed to generated Render
 // methods across the SSR lifecycle (Load, Render, Hooks).
 type RenderCtx struct {
-	Locals  map[string]any
-	URL     *url.URL
-	Params  map[string]string
-	Cookies *Cookies
-	Request *http.Request
-	Writer  http.ResponseWriter
+	Locals    map[string]any
+	URL       *url.URL
+	Params    map[string]string
+	RawParams map[string]string
+	Cookies   *Cookies
+	Request   *http.Request
+	Writer    http.ResponseWriter
+}
+
+// RawParam returns the un-decoded route parameter value for name exactly
+// as it appears in the request path (e.g. "hello%20world" rather than
+// "hello world"). Returns ("", false) when name is not a capture in the
+// matched route.
+func (c *RenderCtx) RawParam(name string) (string, bool) {
+	v, ok := c.RawParams[name]
+	return v, ok
 }
 
 // LoadCtx is the request-scoped context handed to user-written Load
@@ -49,13 +59,30 @@ type RenderCtx struct {
 // pushes each layout result before invoking the next layer's Load. User
 // code reads only the immediate parent through [LoadCtx.Parent].
 type LoadCtx struct {
-	Locals  map[string]any
-	URL     *url.URL
-	Params  map[string]string
-	Cookies *Cookies
-	Request *http.Request
-	parents []any
-	headers http.Header
+	Locals    map[string]any
+	URL       *url.URL
+	Params    map[string]string
+	RawParams map[string]string
+	Cookies   *Cookies
+	Request   *http.Request
+	parents   []any
+	headers   http.Header
+}
+
+// Param returns the URL-decoded route parameter value for name and
+// whether name is a capture in the matched route.
+func (c *LoadCtx) Param(name string) (string, bool) {
+	v, ok := c.Params[name]
+	return v, ok
+}
+
+// RawParam returns the un-decoded route parameter value for name exactly
+// as it appears in the request path (e.g. "hello%20world" rather than
+// "hello world"). Returns ("", false) when name is not a capture in the
+// matched route.
+func (c *LoadCtx) RawParam(name string) (string, bool) {
+	v, ok := c.RawParams[name]
+	return v, ok
 }
 
 // Parent returns the immediate parent layout's loaded data, or nil when
