@@ -165,6 +165,62 @@ func TestScanErrorBoundary(t *testing.T) {
 	}
 }
 
+func TestScanErrorChainNearest(t *testing.T) {
+	t.Parallel()
+	res := mustScan(t, "error-chain", "")
+	if len(res.Diagnostics) != 0 {
+		t.Fatalf("unexpected diagnostics: %v", res.Diagnostics)
+	}
+
+	root := findRoute(res.Routes, "/")
+	if root == nil {
+		t.Fatal("missing / route")
+	}
+	if !strings.HasSuffix(root.ErrorBoundaryDir, "/routes") {
+		t.Fatalf("root boundary dir = %q, want suffix /routes", root.ErrorBoundaryDir)
+	}
+	if root.ErrorBoundaryPackagePath != ".gen/routes" {
+		t.Fatalf("root boundary pkg = %q", root.ErrorBoundaryPackagePath)
+	}
+	if root.ErrorBoundaryLayoutDepth != 1 {
+		t.Fatalf("root boundary depth = %d, want 1", root.ErrorBoundaryLayoutDepth)
+	}
+
+	admin := findRoute(res.Routes, "/admin")
+	if admin == nil {
+		t.Fatal("missing /admin route")
+	}
+	if !strings.HasSuffix(admin.ErrorBoundaryDir, "/admin") {
+		t.Fatalf("admin boundary dir = %q, want suffix /admin", admin.ErrorBoundaryDir)
+	}
+	if admin.ErrorBoundaryLayoutDepth != 2 {
+		t.Fatalf("admin boundary depth = %d, want 2", admin.ErrorBoundaryLayoutDepth)
+	}
+
+	users := findRoute(res.Routes, "/admin/users")
+	if users == nil {
+		t.Fatal("missing /admin/users route")
+	}
+	if !strings.HasSuffix(users.ErrorBoundaryDir, "/admin") {
+		t.Fatalf("users boundary dir = %q, want suffix /admin", users.ErrorBoundaryDir)
+	}
+	if users.ErrorBoundaryLayoutDepth != 2 {
+		t.Fatalf("users boundary depth = %d, want 2", users.ErrorBoundaryLayoutDepth)
+	}
+}
+
+func TestScanNoErrorBoundary(t *testing.T) {
+	t.Parallel()
+	res := mustScan(t, "simple", "")
+	if len(res.Routes) != 1 {
+		t.Fatalf("want one route, got %d", len(res.Routes))
+	}
+	r := res.Routes[0]
+	if r.ErrorBoundaryDir != "" || r.ErrorBoundaryPackagePath != "" || r.ErrorBoundaryLayoutDepth != 0 {
+		t.Fatalf("expected no boundary, got %+v", r)
+	}
+}
+
 func TestScanLayoutChain(t *testing.T) {
 	t.Parallel()
 	res := mustScan(t, "layout-chain", "")

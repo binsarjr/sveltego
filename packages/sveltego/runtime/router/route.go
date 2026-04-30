@@ -16,6 +16,11 @@ type PageHandler func(w *render.Writer, ctx *kit.RenderCtx, data any) error
 // the slot lowering through it.
 type LayoutHandler func(w *render.Writer, ctx *kit.RenderCtx, data any, children func(*render.Writer) error) error
 
+// ErrorHandler renders a +error.svelte. It receives the SafeError produced
+// by HandleError and writes the error template into w. The pipeline wraps
+// the call in any outer layouts that survive the boundary.
+type ErrorHandler func(w *render.Writer, ctx *kit.RenderCtx, safe kit.SafeError) error
+
 // ServerHandlers maps HTTP methods to handlers emitted from +server.go.
 type ServerHandlers map[string]http.HandlerFunc
 
@@ -65,4 +70,12 @@ type Route struct {
 	// PageOptions value. The pipeline reads SSR/CSR/TrailingSlash
 	// directly from this field; no per-request layout walk is needed.
 	Options kit.PageOptions
+	// Error renders the +error.svelte covering this route. nil when no
+	// boundary applies; the pipeline falls back to a minimal hardcoded
+	// HTML response in that case.
+	Error ErrorHandler
+	// ErrorLayoutDepth is the count of LayoutChain entries that wrap
+	// Error when the boundary fires. Entries past this prefix are
+	// inside the broken subtree and are skipped.
+	ErrorLayoutDepth int
 }

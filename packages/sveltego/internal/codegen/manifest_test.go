@@ -20,6 +20,7 @@ var manifestFixtures = []string{
 	"optional",
 	"rest",
 	"layout-chain",
+	"error-chain",
 }
 
 // pageOptionsFixture lives under testdata/page-options/ rather than

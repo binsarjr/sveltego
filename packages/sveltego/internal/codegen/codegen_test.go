@@ -207,7 +207,7 @@ func TestFixtures(t *testing.T) {
 			return err
 		}
 		if d.IsDir() {
-			if d.Name() == "layout" {
+			if d.Name() == "layout" || d.Name() == "errorpage" {
 				return filepath.SkipDir
 			}
 			return nil

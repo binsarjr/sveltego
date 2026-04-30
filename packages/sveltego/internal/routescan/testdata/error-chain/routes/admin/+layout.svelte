@@ -1,0 +1,1 @@
+<nav>admin</nav><slot />

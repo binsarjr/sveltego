@@ -41,6 +41,19 @@ type ScannedRoute struct {
 	// the group whose +layout.svelte the chain truncates at, inclusive.
 	// Meaningful only when HasReset is true.
 	ResetTarget string
+	// ErrorBoundaryDir is the absolute path of the nearest ancestor (or
+	// self) directory that owns a +error.svelte. Empty when no error
+	// boundary covers this route.
+	ErrorBoundaryDir string
+	// ErrorBoundaryPackagePath is the .gen package path for
+	// ErrorBoundaryDir, mirroring how layout package paths are encoded.
+	// Empty when ErrorBoundaryDir is empty.
+	ErrorBoundaryPackagePath string
+	// ErrorBoundaryLayoutDepth is the count of LayoutChain entries that
+	// remain when rendering the boundary: layouts at-or-above the
+	// boundary's directory wrap the error template; layouts strictly
+	// below the boundary abort. Zero when no boundary applies.
+	ErrorBoundaryLayoutDepth int
 }
 
 // DiscoveredMatcher names a Go file under src/params/ that exports

@@ -4,9 +4,12 @@ import (
 	"errors"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/binsarjr/sveltego/exports/kit"
+	"github.com/binsarjr/sveltego/render"
+	"github.com/binsarjr/sveltego/runtime/router"
 )
 
 // Log keys are named constants so sloglint's no-raw-keys rule passes
@@ -40,7 +43,7 @@ func (s *Server) methodNotAllowed(w http.ResponseWriter, r *http.Request, allowe
 // everything else falls through to the user's HandleError hook (or the
 // kit identity default) which produces a SafeError consumed by the
 // generic writer.
-func (s *Server) handlePipelineError(w http.ResponseWriter, r *http.Request, ev *kit.RequestEvent, err error) {
+func (s *Server) handlePipelineError(w http.ResponseWriter, r *http.Request, ev *kit.RequestEvent, route *router.Route, err error) {
 	var redir *kit.RedirectErr
 	if errors.As(err, &redir) {
 		s.Logger.Info("server: pipeline redirect",
@@ -82,7 +85,7 @@ func (s *Server) handlePipelineError(w http.ResponseWriter, r *http.Request, ev 
 	// pass — it's already user-shaped.
 	var safeDirect kit.SafeError
 	if errors.As(err, &safeDirect) {
-		s.writeSafeError(w, r, safeDirect, err)
+		s.respondWithError(w, r, ev, route, safeDirect, err)
 		return
 	}
 
@@ -100,7 +103,92 @@ func (s *Server) handlePipelineError(w http.ResponseWriter, r *http.Request, ev 
 			safe.Message = http.StatusText(safe.Code)
 		}
 	}
-	s.writeSafeError(w, r, safe, err)
+	s.respondWithError(w, r, ev, route, safe, err)
+}
+
+// respondWithError dispatches a SafeError to the route's +error.svelte
+// boundary when one applies; otherwise it falls back to the plain-text
+// writer that has handled error responses since Phase 0h.
+func (s *Server) respondWithError(w http.ResponseWriter, r *http.Request, ev *kit.RequestEvent, route *router.Route, safe kit.SafeError, original error) {
+	if route == nil || route.Error == nil {
+		s.writeSafeError(w, r, safe, original)
+		return
+	}
+	if err := s.renderErrorBoundary(w, r, ev, route, safe, original); err != nil {
+		s.Logger.Error("server: error boundary render failed",
+			logKeyMethod, r.Method,
+			logKeyPath, r.URL.Path,
+			logKeyError, err.Error())
+		s.writeSafeError(w, r, safe, original)
+	}
+}
+
+// renderErrorBoundary composes the outer-layout chain (LayoutChain[:depth])
+// around the route's Error handler and writes the resulting HTML response.
+// The status code mirrors safe.HTTPStatus(); cookies queued on ev are
+// flushed before the write.
+func (s *Server) renderErrorBoundary(w http.ResponseWriter, r *http.Request, ev *kit.RequestEvent, route *router.Route, safe kit.SafeError, original error) error {
+	depth := route.ErrorLayoutDepth
+	if depth > len(route.LayoutChain) {
+		depth = len(route.LayoutChain)
+	}
+
+	buf := render.Acquire()
+	defer render.Release(buf)
+
+	var rctx *kit.RenderCtx
+	if ev != nil {
+		rctx = &kit.RenderCtx{
+			Locals:  ev.Locals,
+			URL:     ev.URL,
+			Params:  ev.Params,
+			Cookies: ev.Cookies,
+			Request: r,
+		}
+	} else {
+		rctx = &kit.RenderCtx{Request: r}
+	}
+
+	inner := func(buf *render.Writer) error {
+		return route.Error(buf, rctx, safe)
+	}
+	for i := depth - 1; i >= 0; i-- {
+		layout := route.LayoutChain[i]
+		next := inner
+		inner = func(buf *render.Writer) error {
+			return layout(buf, rctx, nil, next)
+		}
+	}
+
+	buf.WriteString(s.shellHead)
+	buf.WriteString(s.shellMid)
+	if err := inner(buf); err != nil {
+		return err
+	}
+	buf.WriteString(s.shellTail)
+
+	body := make([]byte, buf.Len())
+	copy(body, buf.Bytes())
+
+	if ev != nil && ev.Cookies != nil {
+		ev.Cookies.Apply(w)
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+	status := safe.HTTPStatus()
+	w.WriteHeader(status)
+	_, _ = w.Write(body)
+
+	logger := s.Logger.Error
+	if status >= 400 && status < 500 {
+		logger = s.Logger.Info
+	}
+	logger("server: pipeline error",
+		logKeyMethod, r.Method,
+		logKeyPath, r.URL.Path,
+		logKeyStatus, status,
+		logKeyError, original.Error())
+	return nil
 }
 
 // writeSafeError flushes a SafeError to the response and logs it once.
