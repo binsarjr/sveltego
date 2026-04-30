@@ -185,6 +185,16 @@ func (s *Server) resolve(w http.ResponseWriter, r *http.Request, ev *kit.Request
 	if matchPath == "" {
 		matchPath = ev.URL.Path
 	}
+	// For __data.json requests, strip the virtual suffix before tree
+	// matching so /blog/__data.json resolves to the same route as /blog.
+	// We strip for any method here; method enforcement happens later in
+	// renderDataJSON (GET only) or when POST is rejected with 405.
+	if isDataJSONPath(r.URL.Path) {
+		matchPath = strings.TrimSuffix(matchPath, "/__data.json")
+		if matchPath == "" {
+			matchPath = "/"
+		}
+	}
 	matchedPath := matchPath
 	route, params, ok := s.tree.Match(matchPath)
 	if !ok {
@@ -232,6 +242,12 @@ func (s *Server) resolve(w http.ResponseWriter, r *http.Request, ev *kit.Request
 		return nil, kit.SafeError{Code: http.StatusNotFound, Message: http.StatusText(http.StatusNotFound)}
 	}
 	var form *formData
+	if isDataJSONPath(r.URL.Path) {
+		if route.Options.SSROnly {
+			return nil, kit.SafeError{Code: http.StatusNotFound, Message: http.StatusText(http.StatusNotFound)}
+		}
+		return s.renderDataJSON(r, ev, route, nil)
+	}
 	if r.Method == http.MethodPost {
 		res, fd, err := s.dispatchAction(r, ev, route)
 		if err != nil {
@@ -242,13 +258,17 @@ func (s *Server) resolve(w http.ResponseWriter, r *http.Request, ev *kit.Request
 		}
 		form = fd
 	}
-	if isDataJSONRequest(r) && route.Options.SSROnly {
-		return nil, kit.SafeError{Code: http.StatusNotFound, Message: http.StatusText(http.StatusNotFound)}
-	}
 	if !optionsAllowSSR(route.Options) {
 		return s.renderEmptyShell(), nil
 	}
 	return s.renderPage(w, r, ev, route, form, pageBuf)
+}
+
+// isDataJSONPath reports whether the URL path is a __data.json endpoint,
+// regardless of method. Used to decide whether to strip the suffix before
+// route matching.
+func isDataJSONPath(path string) bool {
+	return strings.HasSuffix(path, "/__data.json")
 }
 
 // isDataJSONRequest reports whether r is a direct XHR-style fetch of a
@@ -256,7 +276,7 @@ func (s *Server) resolve(w http.ResponseWriter, r *http.Request, ev *kit.Request
 // requests to invalidate page data without a full navigation; SSROnly
 // routes must reject them so callers fall back to a full document fetch.
 func isDataJSONRequest(r *http.Request) bool {
-	return r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/__data.json")
+	return r.Method == http.MethodGet && isDataJSONPath(r.URL.Path)
 }
 
 // optionsAllowSSR returns true unless the route declared SSR=false. The
@@ -288,6 +308,151 @@ func (s *Server) renderEmptyShell() *kit.Response {
 		Headers: headers,
 		Body:    []byte(body),
 	}
+}
+
+// clientPayload is the JSON blob injected into SSR HTML and returned by
+// the __data.json endpoint. The shape mirrors SvelteKit's inline payload
+// convention, scoped to the sveltego namespace.
+//
+// Data holds the page data returned by Load() (and each layout loader in
+// outer→inner order when LayoutData is non-nil). Form carries ActionData
+// from a POST action on the same request. RouteID is the canonical route
+// pattern used by the client router to look up the component. URL is the
+// full request URL string.
+type clientPayload struct {
+	RouteID    string `json:"routeId"`
+	Data       any    `json:"data"`
+	LayoutData []any  `json:"layoutData,omitempty"`
+	Form       any    `json:"form"`
+	URL        string `json:"url"`
+}
+
+// marshalPayload encodes p as JSON and escapes sequences that would break
+// a <script> tag context: "</" and "<!--". The escaping matches the
+// writeEscapedScriptJSON approach used for streaming resolve scripts.
+func marshalPayload(p clientPayload) ([]byte, error) {
+	raw, err := json.Marshal(p)
+	if err != nil {
+		return nil, err
+	}
+	// Fast-path: nothing to escape.
+	if indexScriptSpecial(raw) < 0 {
+		return raw, nil
+	}
+	// Slow-path: rebuild with "</" → "</" and "<!--" → "<!--".
+	var out []byte
+	i := 0
+	for i < len(raw) {
+		if i+1 < len(raw) && raw[i] == '<' && (raw[i+1] == '/' || raw[i+1] == '!') {
+			out = append(out, raw[:i]...)
+			out = append(out, '\\', 'u', '0', '0', '3', 'c')
+			raw = raw[i+1:]
+			i = 0
+			continue
+		}
+		i++
+	}
+	out = append(out, raw...)
+	return out, nil
+}
+
+// buildClientPayload assembles a clientPayload from the data gathered
+// during the load chain. formData is nil unless the request was a POST
+// that ran an action. route.Pattern is used as RouteID.
+func buildClientPayload(r *http.Request, route *router.Route, data any, layoutDatas []any, form *formData) clientPayload {
+	p := clientPayload{
+		RouteID: route.Pattern,
+		Data:    data,
+		URL:     r.URL.String(),
+	}
+	if len(layoutDatas) > 0 {
+		// Copy only non-nil entries so the client doesn't receive sparse nils.
+		lds := make([]any, 0, len(layoutDatas))
+		for _, ld := range layoutDatas {
+			lds = append(lds, ld)
+		}
+		p.LayoutData = lds
+	}
+	if form != nil {
+		p.Form = form.data
+	}
+	return p
+}
+
+// emitPayloadScriptTag writes the hydration payload as a JSON <script>
+// tag into buf. Uses id "sveltego-data" so client entry.ts can read it
+// via document.getElementById("sveltego-data").
+func emitPayloadScriptTag(buf *render.Writer, p clientPayload) {
+	encoded, err := marshalPayload(p)
+	if err != nil {
+		// Emit an empty payload rather than omitting the tag; the client
+		// will mount with nil data rather than crashing on a missing element.
+		buf.WriteString(`<script id="sveltego-data" type="application/json">{}</script>`)
+		return
+	}
+	buf.WriteString(`<script id="sveltego-data" type="application/json">`)
+	buf.WriteRaw(bytesAsString(encoded))
+	buf.WriteString(`</script>`)
+}
+
+// renderDataJSON runs the full load chain for route and returns a JSON
+// response carrying the clientPayload. It is called when the request
+// path ends in /__data.json (#38). Hooks (Handle, HandleError) already
+// wrap this call via the normal resolve path.
+func (s *Server) renderDataJSON(r *http.Request, ev *kit.RequestEvent, route *router.Route, form *formData) (*kit.Response, error) {
+	if r.Method != http.MethodGet {
+		return &kit.Response{
+			Status:  http.StatusMethodNotAllowed,
+			Headers: http.Header{"Allow": []string{http.MethodGet}},
+			Body:    []byte("method not allowed"),
+		}, nil
+	}
+	var (
+		data        any
+		layoutDatas []any
+	)
+	if route.Load != nil || hasAnyLayoutLoader(route.LayoutLoaders) {
+		lctx := kit.NewLoadCtx(r, ev.Params)
+		lctx.Locals = ev.Locals
+		lctx.Cookies = ev.Cookies
+		lctx.RawParams = ev.RawParams
+		layoutDatas = make([]any, len(route.LayoutChain))
+		for i, layoutLoad := range route.LayoutLoaders {
+			if layoutLoad == nil {
+				continue
+			}
+			d, err := layoutLoad(lctx)
+			if err != nil {
+				return nil, err
+			}
+			layoutDatas[i] = d
+			lctx.PushParent(d)
+		}
+		if route.Load != nil {
+			d, err := route.Load(lctx)
+			if err != nil {
+				return nil, err
+			}
+			data = d
+		}
+	}
+	if form != nil {
+		data = injectFormField(data, form.data)
+	}
+	payload := buildClientPayload(r, route, data, layoutDatas, form)
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("server: marshal __data.json: %w", err)
+	}
+	headers := http.Header{}
+	headers.Set("Content-Type", "application/json")
+	headers.Set("Content-Length", strconv.Itoa(len(body)))
+	headers.Set("X-Sveltego-Data", "1")
+	return &kit.Response{
+		Status:  http.StatusOK,
+		Headers: headers,
+		Body:    body,
+	}, nil
 }
 
 // togglePathSlash flips path's trailing slash. "/" returns "/"; "/x"
@@ -469,6 +634,8 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 	if err := inner(buf); err != nil {
 		return nil, err
 	}
+	payload := buildClientPayload(r, route, data, layoutDatas, form)
+	emitPayloadScriptTag(buf, payload)
 	buf.WriteString(s.shellTail)
 
 	body := buf.Bytes()
