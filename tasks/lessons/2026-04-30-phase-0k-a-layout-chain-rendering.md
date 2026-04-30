@@ -1,0 +1,19 @@
+## Phase 0k-A — layout chain rendering (2026-04-30)
+
+### Insight
+
+- **Go's build system silently excludes filenames starting with `_`.** A first emit of `_layout.gen.go` compiled stand-alone via `go build ./.gen/routes/` because Go was already in the directory and didn't apply the underscore filter, but `go list ./.gen/routes` returned `[page.gen.go wire.gen.go]` — the file was simply ignored as if missing. The manifest in the parent package then failed with "undefined: page_routes.Layout" even though the symbol clearly existed in the underscore-prefixed file. Lesson: any `_`-prefixed name is invisible to the toolchain regardless of build tags. The fix was renaming to `layout.gen.go`.
+- **Breaking changes to runtime types (`router.Route.LayoutChain` from `[]*Route` to `[]LayoutHandler`) are cheap pre-stable but demand grep across the entire repo.** The old field was unused, so the change was source-compatible with every consumer — but only because no one had wired it. Future changes to stable runtime types need full reference enumeration before flipping. The `[]*Route` shape was a Phase 0h placeholder; documenting the eventual handler shape from day one would have prevented this churn.
+- **Slot lowering depends on whether the enclosing emitter is a Page or a Layout.** A naïve `<slot />` → `children(w)` lowering fails to compile inside a Page (no `children` parameter). The minimum-cost solution is a Builder flag (`hasChildren`) that the slot emitter consults; layouts set it true, pages leave it false and emit a TODO comment. Thread emitter context through the Builder, not through every emit function signature.
+- **Layout adapter emission and route adapter emission share the alias pool.** A layout dir that also owns a +page.svelte resolves to the same gen package; both adapters import it via the same alias. Tracking aliases per-package (rather than per-route or per-layout) yields a single import line. Emitting two distinct aliases for the same package would compile but produce duplicate import lines and break gofumpt's import grouping.
+- **Layout pipeline composition reverses the chain: outer wraps inner, inner is innermost.** Iteration runs `for i := len(chain)-1; i >= 0; i--` to build closures from inside out. The resulting `inner` closure, when called, runs the outermost layout, which calls its `children`, which is the next-out layout, and so on until the page. Order of iteration matches the chain encoding (ancestor → self) but inverts during composition.
+
+### Self-rules
+
+1. **Generated filenames must not start with `_`.** Go's build tooling ignores them silently — no warning, no error, just a missing symbol downstream. Use `layout.gen.go`, `wire.gen.go`, etc. The same rule applies to `.`-prefixed names. Prefer descriptive prefixes (`layout_`, `page_`) over leading separators.
+2. **Verify generator output via `go list -f '{{.GoFiles}}'` on the emitted package.** A successful `go build ./<pkg>/` is not proof of a complete file set; the toolchain may have silently filtered files. `go list` reports the canonical accepted set and surfaces invisible files immediately.
+3. **Every emit step that produces a file gets a `go list` smoke in its build test.** Cheap insurance against filename rules (`_`, `.`, `testdata/`), build-tag exclusions, and casing mismatches that produce a "missing symbol" error far away from the real cause.
+4. **When a Builder needs context-dependent behavior (e.g., slot lowering varies by Page vs Layout), thread the flag through the Builder struct, not through every emit function signature.** The flag is set once at the top of the generator; emit code paths read it without modification.
+5. **Pre-stable runtime type changes must enumerate every reference site before flipping.** The change is cheap source-wise but a missed consumer is a silent runtime bug. `grep -rn '<TypeName>' packages/` plus a clean compile across all `go.work` modules is the minimum bar.
+
+
