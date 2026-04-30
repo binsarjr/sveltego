@@ -85,14 +85,16 @@ func TestCronTask_stopsOnShutdown(t *testing.T) {
 		t.Fatalf("Shutdown: %v", err)
 	}
 
-	after := count.Load()
-	// Give goroutines a short window to exit.
-	time.Sleep(80 * time.Millisecond)
-	final := count.Load()
+	// Give goroutines time to exit. Use two observations to confirm the
+	// counter has actually stopped rather than just paused.
+	time.Sleep(200 * time.Millisecond)
+	snap1 := count.Load()
+	time.Sleep(100 * time.Millisecond)
+	snap2 := count.Load()
 
-	// Counter must not keep climbing after shutdown.
-	if final > after+1 {
-		t.Fatalf("cron kept running after shutdown: count went from %d to %d", after, final)
+	// Counter must be stable after the drain window.
+	if snap2 != snap1 {
+		t.Fatalf("cron kept running after shutdown: count %d → %d", snap1, snap2)
 	}
 }
 
