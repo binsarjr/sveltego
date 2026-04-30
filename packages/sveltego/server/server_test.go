@@ -793,6 +793,131 @@ func TestServer_gracefulShutdown(t *testing.T) {
 	}
 }
 
+// TestInitPending verifies that a request arriving while Init is still
+// running waits up to InitTimeout and then receives 503 with the pending
+// fallback body.
+func TestInitPending(t *testing.T) {
+	t.Parallel()
+
+	ready := make(chan struct{})
+	hooks := kit.Hooks{
+		Init: func(_ context.Context) error {
+			<-ready // block until the test releases it
+			return nil
+		},
+	}
+	srv, err := New(Config{
+		Routes:          []router.Route{{Pattern: "/", Segments: segmentsFor("/"), Page: staticPage("home")}},
+		Shell:           testShell,
+		Logger:          quietLogger(),
+		Hooks:           hooks,
+		InitTimeout:     50 * time.Millisecond,
+		InitPendingHTML: "<p>pending</p>",
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	srv.RunInitAsync(context.Background())
+
+	ts := httptest.NewServer(srv)
+	t.Cleanup(ts.Close)
+	t.Cleanup(func() { close(ready) })
+
+	resp, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want 503", resp.StatusCode)
+	}
+	if !strings.Contains(string(body), "pending") {
+		t.Errorf("body = %q, want pending HTML", body)
+	}
+}
+
+// TestInitError verifies that after Init returns an error every subsequent
+// request receives 500 with the error fallback body.
+func TestInitError(t *testing.T) {
+	t.Parallel()
+
+	hooks := kit.Hooks{
+		Init: func(_ context.Context) error { return errors.New("startup broken") },
+	}
+	srv, err := New(Config{
+		Routes:        []router.Route{{Pattern: "/", Segments: segmentsFor("/"), Page: staticPage("home")}},
+		Shell:         testShell,
+		Logger:        quietLogger(),
+		Hooks:         hooks,
+		InitErrorHTML: "<p>init error</p>",
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if initErr := srv.Init(context.Background()); initErr == nil {
+		t.Fatal("expected Init to return an error")
+	}
+
+	ts := httptest.NewServer(srv)
+	t.Cleanup(ts.Close)
+
+	resp, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", resp.StatusCode)
+	}
+	if !strings.Contains(string(body), "init error") {
+		t.Errorf("body = %q, want init error HTML", body)
+	}
+}
+
+// TestInitSuccess verifies that after Init completes without error the
+// normal pipeline runs and requests receive 200 with the page body.
+func TestInitSuccess(t *testing.T) {
+	t.Parallel()
+
+	hooks := kit.Hooks{
+		Init: func(_ context.Context) error { return nil },
+	}
+	srv, err := New(Config{
+		Routes: []router.Route{{Pattern: "/", Segments: segmentsFor("/"), Page: staticPage("<h1>ok</h1>")}},
+		Shell:  testShell,
+		Logger: quietLogger(),
+		Hooks:  hooks,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if err := srv.Init(context.Background()); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+
+	ts := httptest.NewServer(srv)
+	t.Cleanup(ts.Close)
+
+	resp, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200", resp.StatusCode)
+	}
+	if !strings.Contains(string(body), "<h1>ok</h1>") {
+		t.Errorf("body = %q, want page content", body)
+	}
+}
+
 func TestServer_methodsOf(t *testing.T) {
 	t.Parallel()
 	got := methodsOf(router.ServerHandlers{
