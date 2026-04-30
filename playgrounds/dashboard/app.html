@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>sveltego dashboard</title>
+%sveltego.head%
+<style>
+body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1rem;color:#1a1a1a}
+nav{display:flex;gap:1rem;padding:.5rem 0;border-bottom:1px solid #ddd;margin-bottom:1rem}
+nav a{color:#0366d6;text-decoration:none}
+nav a:hover{text-decoration:underline}
+form{margin:1rem 0}
+input[type=text],input[type=password]{padding:.4rem .5rem;border:1px solid #ccc;border-radius:.25rem;font:inherit}
+button{padding:.4rem .8rem;border:1px solid #0366d6;background:#0366d6;color:#fff;border-radius:.25rem;cursor:pointer;font:inherit}
+button.secondary{background:#fff;color:#0366d6}
+button.danger{background:#d73a49;border-color:#d73a49}
+.error{color:#d73a49;margin:.5rem 0}
+table{width:100%;border-collapse:collapse;margin:1rem 0}
+th,td{padding:.5rem;border-bottom:1px solid #eee;text-align:left}
+.chart{border:1px dashed #ccc;padding:1rem;background:#fafafa;margin:1rem 0;font-family:ui-monospace,monospace}
+.bar{display:inline-block;height:1rem;background:#0366d6;margin-right:.25rem;vertical-align:middle}
+</style>
+</head>
+<body>
+%sveltego.body%
+</body>
+</html>
