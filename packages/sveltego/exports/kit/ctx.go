@@ -32,7 +32,7 @@ func NewRenderCtx(r *http.Request, w http.ResponseWriter, params map[string]stri
 	ctx := &RenderCtx{
 		Locals:  map[string]any{},
 		Params:  params,
-		Cookies: &Cookies{},
+		Cookies: NewCookies(r),
 		Request: r,
 		Writer:  w,
 	}
@@ -48,7 +48,7 @@ func NewLoadCtx(r *http.Request, params map[string]string) *LoadCtx {
 	ctx := &LoadCtx{
 		Locals:  map[string]any{},
 		Params:  params,
-		Cookies: &Cookies{},
+		Cookies: NewCookies(r),
 		Request: r,
 	}
 	if r != nil {
