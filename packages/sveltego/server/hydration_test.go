@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -544,5 +545,96 @@ func TestDataJSON_postMethodNotAllowed(t *testing.T) {
 
 	if resp.StatusCode != http.StatusMethodNotAllowed {
 		t.Errorf("POST __data.json status = %d, want 405", resp.StatusCode)
+	}
+}
+
+// streamingHydrationData is a Load result with a Streamed field, exercising
+// the streaming render path for hydration-payload tests.
+type streamingHydrationData struct {
+	Title string                  `json:"title"`
+	Posts *kit.Streamed[[]string] `json:"-"`
+}
+
+// TestStreaming_emitsHydrationPayload asserts that the streaming render
+// path emits the <script id="sveltego-data"> hydration tag with the
+// correct routeId, data, and Deps fields. Without this tag the client
+// hydrates with an empty payload and the page boots with no state.
+func TestStreaming_emitsHydrationPayload(t *testing.T) {
+	t.Parallel()
+
+	srv := newTestServer(t, []router.Route{{
+		Pattern:  "/streamed",
+		Segments: []router.Segment{{Kind: router.SegmentStatic, Value: "streamed"}},
+		Page: func(w *render.Writer, _ *kit.RenderCtx, _ any) error {
+			w.WriteString(`<h1>shell</h1>`)
+			return nil
+		},
+		Load: func(lctx *kit.LoadCtx) (any, error) {
+			lctx.Depends("posts:list")
+			return streamingHydrationData{
+				Title: "Hello",
+				Posts: kit.StreamCtx(lctx.Request.Context(), func(_ context.Context) ([]string, error) {
+					return []string{"a", "b"}, nil
+				}),
+			}, nil
+		},
+	}})
+	ts := httptest.NewServer(srv)
+	t.Cleanup(ts.Close)
+
+	resp, err := http.Get(ts.URL + "/streamed")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", resp.StatusCode, body)
+	}
+	bs := string(body)
+	if !strings.Contains(bs, `<script id="sveltego-data" type="application/json">`) {
+		t.Fatalf("streaming body missing hydration payload tag; got:\n%s", bs)
+	}
+	if !strings.Contains(bs, `__sveltego__resolve(`) {
+		t.Fatalf("streaming body missing resolve script; got:\n%s", bs)
+	}
+
+	start := strings.Index(bs, `<script id="sveltego-data" type="application/json">`)
+	start += len(`<script id="sveltego-data" type="application/json">`)
+	end := strings.Index(bs[start:], `</script>`)
+	if end < 0 {
+		t.Fatalf("payload tag not closed")
+	}
+	raw := bs[start : start+end]
+
+	var payload struct {
+		RouteID string          `json:"routeId"`
+		Data    json.RawMessage `json:"data"`
+		Deps    []string        `json:"deps"`
+	}
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		t.Fatalf("parse payload: %v; raw=%s", err, raw)
+	}
+	if payload.RouteID != "/streamed" {
+		t.Errorf("routeId = %q, want /streamed", payload.RouteID)
+	}
+	if len(payload.Deps) != 1 || payload.Deps[0] != "posts:list" {
+		t.Errorf("deps = %v, want [posts:list]", payload.Deps)
+	}
+	var pd streamingHydrationData
+	if err := json.Unmarshal(payload.Data, &pd); err != nil {
+		t.Fatalf("parse data: %v; raw=%s", err, payload.Data)
+	}
+	if pd.Title != "Hello" {
+		t.Errorf("data.title = %q, want Hello", pd.Title)
+	}
+
+	// Payload tag must precede the resolve script so the client has state
+	// before any out-of-order patches arrive.
+	payloadIdx := strings.Index(bs, `<script id="sveltego-data"`)
+	resolveIdx := strings.Index(bs, `__sveltego__resolve(`)
+	if payloadIdx < 0 || resolveIdx < 0 || payloadIdx > resolveIdx {
+		t.Errorf("payload tag must come before resolve script; payload=%d resolve=%d", payloadIdx, resolveIdx)
 	}
 }

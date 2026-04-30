@@ -124,7 +124,27 @@ function defaultApply(result: EnhanceEnvelope, form: HTMLFormElement) {
       w.form = result.data ?? null;
       break;
     case 'redirect':
-      if (result.location) window.location.href = result.location;
+      if (result.location) {
+        const router = (window as any).__sveltego_router__ as
+          | { goto?: (href: string) => Promise<void>; matchManifest?: (p: string) => unknown }
+          | undefined;
+        try {
+          const target = new URL(result.location, window.location.href);
+          const internal = target.origin === window.location.origin;
+          if (
+            internal &&
+            router?.matchManifest &&
+            router.matchManifest(target.pathname) &&
+            router.goto
+          ) {
+            void router.goto(target.href);
+            break;
+          }
+        } catch (_e) {
+          // Malformed Location -> fall through to full nav.
+        }
+        window.location.href = result.location;
+      }
       break;
     case 'error':
       // Surface as a console error; user code can override via callback.

@@ -665,7 +665,12 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 				w.Header()[k] = vs
 			}
 		}
-		if err := s.renderStreaming(w, r, ev, inner, streams, status, headBytes); err != nil {
+		payload := buildClientPayload(r, route, data, layoutDatas, form)
+		payload.Manifest = s.clientManifest
+		if lctx != nil {
+			payload.Deps = lctx.CollectDeps()
+		}
+		if err := s.renderStreaming(w, r, ev, inner, streams, status, headBytes, payload); err != nil {
 			if errors.Is(err, kit.ErrClientGone) {
 				return nil, errStreamingWrote
 			}
@@ -853,7 +858,7 @@ func isClientGone(ctx context.Context, err error) bool {
 // cancels any pending streams, logs once at debug level, and returns
 // kit.ErrClientGone. The caller must treat that as errStreamingWrote so
 // HandleError is not invoked — a disconnect is not a server fault.
-func (s *Server) renderStreaming(w http.ResponseWriter, r *http.Request, ev *kit.RequestEvent, inner func(*render.Writer) error, streams []streamedField, status int, headBytes []byte) error {
+func (s *Server) renderStreaming(w http.ResponseWriter, r *http.Request, ev *kit.RequestEvent, inner func(*render.Writer) error, streams []streamedField, status int, headBytes []byte, payload clientPayload) error {
 	if ev.Cookies != nil {
 		ev.Cookies.Apply(w)
 	}
@@ -873,6 +878,7 @@ func (s *Server) renderStreaming(w http.ResponseWriter, r *http.Request, ev *kit
 	if err := inner(buf); err != nil {
 		return err
 	}
+	emitPayloadScriptTag(buf, payload)
 
 	ctx := r.Context()
 

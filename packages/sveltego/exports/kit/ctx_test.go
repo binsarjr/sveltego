@@ -224,3 +224,30 @@ func TestLoadCtx_Depends_RecordsTags(t *testing.T) {
 		}
 	}
 }
+
+// TestLoadCtx_OnLeave_NoOpOnServer pins the server-side contract from
+// #172: OnLeave is registered for surface symmetry but must never invoke
+// the callback during the request lifetime. Cleanup belongs to the
+// client SPA router; on the server, defer is the right tool.
+func TestLoadCtx_OnLeave_NoOpOnServer(t *testing.T) {
+	t.Parallel()
+	ctx := kit.NewLoadCtx(httptest.NewRequest(http.MethodGet, "/", nil), nil)
+	called := false
+	ctx.OnLeave(func() { called = true })
+	if called {
+		t.Fatal("OnLeave callback fired on server; want no-op")
+	}
+}
+
+// TestLoadCtx_OnLeave_NilCallbackSafe confirms the no-op tolerates a nil
+// callback — useful when user code conditionally registers a cleanup.
+func TestLoadCtx_OnLeave_NilCallbackSafe(t *testing.T) {
+	t.Parallel()
+	ctx := kit.NewLoadCtx(httptest.NewRequest(http.MethodGet, "/", nil), nil)
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("OnLeave(nil) panicked: %v", r)
+		}
+	}()
+	ctx.OnLeave(nil)
+}
