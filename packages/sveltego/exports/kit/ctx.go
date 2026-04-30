@@ -56,10 +56,19 @@ func (c *RenderCtx) RawParam(name string) (string, bool) {
 // LoadCtx is the request-scoped context handed to user-written Load
 // functions in +page.server.go and +layout.server.go.
 //
+// Locals is the same map the Handle hook populated before any Load runs;
+// reading it never requires calling [LoadCtx.Parent]. Values set by a
+// parent layout's Load are only available after [LoadCtx.Parent] returns
+// that layout's data — but values written by Handle (session, user,
+// nonce, …) are always present immediately.
+//
 // parents stores layout Load() returns in outer→inner order; the pipeline
 // pushes each layout result before invoking the next layer's Load. User
 // code reads only the immediate parent through [LoadCtx.Parent].
 type LoadCtx struct {
+	// Locals is the shared per-request bag populated by Handle before any
+	// Load runs. All layout and page Loads in the chain read the same map
+	// without waiting for a parent Load to complete.
 	Locals    map[string]any
 	URL       *url.URL
 	Params    map[string]string
@@ -165,7 +174,9 @@ func NewRenderCtx(r *http.Request, w http.ResponseWriter, params map[string]stri
 }
 
 // NewLoadCtx builds a LoadCtx for the given request and route params.
-// Locals and Cookies are initialized non-nil.
+// Locals and Cookies are initialized non-nil. The server pipeline replaces
+// Locals with the shared [RequestEvent.Locals] map so Handle-populated
+// values are visible to every Load without requiring a [LoadCtx.Parent] call.
 func NewLoadCtx(r *http.Request, params map[string]string) *LoadCtx {
 	ctx := &LoadCtx{
 		Locals:  map[string]any{},
