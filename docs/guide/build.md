@@ -54,14 +54,15 @@ Layout values cascade to descendants; page values override the cascade. The mani
 
 ## Tooling commands
 
-| Command | Purpose |
-|---|---|
-| `sveltego build` | Full codegen + go build. |
-| `sveltego compile` | Codegen only. |
-| `sveltego dev` | Watch + regenerate. |
-| `sveltego check` | Validate without writing output. |
-| `sveltego routes` | Print the route table. |
-| `sveltego version` | Print version. |
+| Command | Purpose | Status |
+|---|---|---|
+| `sveltego build` | Full codegen + Vite + `go build`. | Shipped. |
+| `sveltego compile` | Codegen only (no `go build`). | Shipped. |
+| `sveltego routes` | Print the resolved route table. | Shipped. |
+| `sveltego version` | Print version. | Shipped. |
+| `sveltego dev` | Watch + regenerate + HMR proxy. | Stub — deferred to v0.3 ([#42](https://github.com/binsarjr/sveltego/issues/42)). |
+| `sveltego check` | Validate without writing output. | Stub — milestone TBD. |
+| `sveltego-init` | Scaffold a new project (separate binary under `packages/init`). | Shipped (with [#356](https://github.com/binsarjr/sveltego/issues/356) gap). |
 
 ## Determinism
 

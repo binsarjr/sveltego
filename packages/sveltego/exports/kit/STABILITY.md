@@ -81,6 +81,9 @@ Tiers per [RFC #97](https://github.com/binsarjr/sveltego/issues/97).
 - `kit.Link` — builds a URL from a pattern and params map
 - `kit.ErrLinkPattern` — sentinel for malformed link patterns
 - `kit.ErrLinkParam` — sentinel for missing link params
+- `kit.Asset` — resolves a static asset path to its hashed URL
+- `kit.RegisterAssets` — installs the source-path → hashed-URL table consumed by `Asset`
+- `kit.DefaultAssetsImmutablePrefix` — URL prefix under which fingerprinted assets are served
 - `kit.RobotsBuilder` — builder for robots.txt output
 - `kit.NewRobots` — constructor
 - `kit.ChangeFreq` — enumeration of sitemap change frequencies

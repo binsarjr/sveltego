@@ -258,6 +258,10 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 		return nil, fmt.Errorf("codegen: write manifest: %w", err)
 	}
 
+	if err := emitAssetsManifest(opts.ProjectRoot, outDir, "gen"); err != nil {
+		return nil, err
+	}
+
 	hookSet, err := scanHooksServer(opts.ProjectRoot)
 	if err != nil {
 		return nil, err

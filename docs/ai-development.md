@@ -31,13 +31,13 @@ The `sveltego mcp` command lands with #71. Until then, the Copy-for-LLM buttons 
 
 ### Cursor
 
-Drop `.cursorrules` from `sveltego init --ai` into your project root. Cursor reads it automatically and applies it to every chat.
+Drop `.cursorrules` from `sveltego-init --ai` into your project root. Cursor reads it automatically and applies it to every chat.
 
 For MCP: Cursor Settings → MCP → add `sveltego mcp`.
 
 ### GitHub Copilot
 
-`sveltego init --ai` writes `.github/copilot-instructions.md`. Copilot Chat picks it up automatically; Copilot inline completion uses it as additional context where supported.
+`sveltego-init --ai` writes `.github/copilot-instructions.md`. Copilot Chat picks it up automatically; Copilot inline completion uses it as additional context where supported.
 
 ### Continue
 
@@ -53,10 +53,12 @@ Continue resolves `AGENTS.md` as the master rules file; the project keeps `.curs
 ## Project templates
 
 ```sh
-sveltego init --ai
+sveltego-init --ai ./my-app
 ```
 
-Adds `AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.github/copilot-instructions.md`. AGENTS.md is the master; the other three are generated from it. Edit AGENTS.md and re-run the sync to update the rest.
+Adds `AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.github/copilot-instructions.md` to the scaffold. `AGENTS.md` is the master; the other three are generated from it via `scripts/sync-ai-docs.sh`. Edit `AGENTS.md` and re-run the sync to update the rest.
+
+To copy AI templates into an existing project (without scaffolding a new tree), use the same binary against the existing dir — non-template files are not touched, conflicts skip-by-default.
 
 ## Prompting tips
 
