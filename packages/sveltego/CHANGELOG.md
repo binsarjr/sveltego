@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.0](https://github.com/binsarjr/sveltego/compare/sveltego/v1.0.0...sveltego/v1.1.0) (2026-04-30)
+
+
+### Features
+
+* **codegen,server:** layout chain rendering ([#112](https://github.com/binsarjr/sveltego/issues/112)) ([91aa785](https://github.com/binsarjr/sveltego/commit/91aa785d3ec05225fa58cdb7b44b900a3c4643eb))
+* **kit:** Redirect/Fail/Error sentinel helpers ([#115](https://github.com/binsarjr/sveltego/issues/115)) ([4b206fa](https://github.com/binsarjr/sveltego/commit/4b206fa7c343ddbfdbd8386f399b2af8e2228d37)), closes [#33](https://github.com/binsarjr/sveltego/issues/33)
+
 ## 1.0.0 (2026-04-30)
 
 

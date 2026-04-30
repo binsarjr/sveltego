@@ -1,5 +1,5 @@
 {
-  "packages/sveltego": "1.0.0",
+  "packages/sveltego": "1.1.0",
   "packages/adapter-auto": "0.0.0",
   "packages/adapter-cloudflare": "0.0.0",
   "packages/adapter-docker": "0.0.0",
