@@ -189,6 +189,54 @@ func TestGenerateManifest_LayoutHead(t *testing.T) {
 	}
 }
 
+// TestGenerateManifest_RouteIDConsts verifies that the manifest contains the
+// expected RouteID constants for the nested fixture.
+func TestGenerateManifest_RouteIDConsts(t *testing.T) {
+	t.Parallel()
+	scan := scanFixture(t, "nested")
+	out, err := GenerateManifest(scan, ManifestOptions{
+		PackageName: "gen",
+		ModulePath:  "myapp",
+		GenRoot:     ".gen",
+	})
+	if err != nil {
+		t.Fatalf("GenerateManifest: %v", err)
+	}
+	s := string(out)
+	for _, want := range []string{
+		"RouteIDIndex",
+		"RouteIDAbout",
+		"RouteIDPostsSlug",
+		`RouteIDIndex     = ` + "`/`",
+		`RouteIDAbout     = ` + "`/about`",
+		`RouteIDPostsSlug = ` + "`/posts/[slug]`",
+	} {
+		if !bytes.Contains(out, []byte(want)) {
+			t.Errorf("missing %q in:\n%s", want, s)
+		}
+	}
+}
+
+// TestRouteIDCollision verifies that emitRouteIDConsts errors when two entries
+// produce the same Go identifier. Two routes with nil Segments both lower to
+// "Index" via routeIdent, triggering the collision guard.
+func TestRouteIDCollision(t *testing.T) {
+	t.Parallel()
+	// Both entries have nil Segments → routeIdent returns "Index" for both.
+	entries := []entry{
+		{route: routescan.ScannedRoute{Pattern: "/", HasPage: true}, alias: "a"},
+		{route: routescan.ScannedRoute{Pattern: "/mirror", HasPage: true}, alias: "b"},
+	}
+	var b Builder
+	err := emitRouteIDConsts(&b, entries)
+	if err == nil {
+		t.Fatal("expected collision error, got nil")
+	}
+	if !bytes.Contains([]byte(err.Error()), []byte("RouteID collision")) {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
 func scanFixture(t *testing.T, name string) *routescan.ScanResult {
 	t.Helper()
 	abs, err := filepath.Abs(filepath.Join("..", "routescan", "testdata", name))

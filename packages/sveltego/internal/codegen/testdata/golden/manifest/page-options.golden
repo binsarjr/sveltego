@@ -12,6 +12,13 @@ import (
 	page_routes_dash_billing "myapp/.gen/routes/dash/billing"
 )
 
+// Route ID constants for type-safe linking. Pass to kit.Link instead of a
+// raw string so route renames surface as compile errors.
+const (
+	RouteIDIndex       = `/`
+	RouteIDDashBilling = `/dash/billing`
+)
+
 // render__page_routes adapts page_routes.Page{}.Render to router.PageHandler.
 func render__page_routes(w *render.Writer, ctx *kit.RenderCtx, data any) error {
 	var typed page_routes.PageData

@@ -272,6 +272,12 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 	b.Line(")")
 	b.Line("")
 
+	// Emit one RouteID<Slug> constant per linkable route so user code can
+	// reference routes without magic strings.
+	if err := emitRouteIDConsts(&b, entries); err != nil {
+		return nil, err
+	}
+
 	// Per-route Render adapters: widen Page{}.Render's typed PageData
 	// parameter to the `any`-shaped router.PageHandler. Type assertion
 	// happens inside the adapter so a dispatcher mismatch fails fast
@@ -329,6 +335,44 @@ func packageAlias(packagePath string) string {
 	}
 	parts := strings.Split(rel, "/")
 	return "page_" + strings.Join(parts, "_")
+}
+
+// emitRouteIDConsts writes one `RouteID<Slug>` string constant per
+// linkable route (HasPage or HasServer), sorted by pattern. The constant
+// value is the SvelteKit-style canonical pattern ("/posts/[slug]") so
+// user code can pass it directly to kit.Link without a magic string.
+// Collision detection returns an error when two routes produce the same
+// Go identifier; the build gate catches this at codegen time rather than
+// silently shadowing a constant.
+func emitRouteIDConsts(b *Builder, entries []entry) error {
+	if len(entries) == 0 {
+		return nil
+	}
+	// Detect identifier collisions before emitting anything.
+	seen := make(map[string]string, len(entries))
+	for _, e := range entries {
+		ident := "RouteID" + routeIdent(e.route.Segments)
+		if prev, ok := seen[ident]; ok {
+			return fmt.Errorf(
+				"codegen: RouteID collision: %q and %q both map to %s",
+				prev, e.route.Pattern, ident,
+			)
+		}
+		seen[ident] = e.route.Pattern
+	}
+
+	b.Line("// Route ID constants for type-safe linking. Pass to kit.Link instead of a")
+	b.Line("// raw string so route renames surface as compile errors.")
+	b.Line("const (")
+	b.Indent()
+	for _, e := range entries {
+		ident := "RouteID" + routeIdent(e.route.Segments)
+		b.Linef("%s = %s", ident, quoteGo(e.route.Pattern))
+	}
+	b.Dedent()
+	b.Line(")")
+	b.Line("")
+	return nil
 }
 
 // emitRenderAdapters writes one `render__<alias>` function per Page

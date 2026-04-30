@@ -13,6 +13,14 @@ import (
 	page_routes_admin_users "myapp/.gen/routes/admin/users"
 )
 
+// Route ID constants for type-safe linking. Pass to kit.Link instead of a
+// raw string so route renames surface as compile errors.
+const (
+	RouteIDIndex      = `/`
+	RouteIDAdmin      = `/admin`
+	RouteIDAdminUsers = `/admin/users`
+)
+
 // render__page_routes adapts page_routes.Page{}.Render to router.PageHandler.
 func render__page_routes(w *render.Writer, ctx *kit.RenderCtx, data any) error {
 	var typed page_routes.PageData
