@@ -89,26 +89,20 @@ func emitOpenTag(b *Builder, e *ast.Element) {
 	head.WriteByte('<')
 	head.WriteString(e.Name)
 
-	staticClass, hasStaticClass := extractStaticClass(e.Attributes)
-	classDirectives := collectClassDirectives(e.Attributes)
-	wantClassWrap := len(classDirectives) > 0
-	styleDirectives := collectStyleDirectives(e.Attributes)
+	parts := partitionAttrs(e.Attributes)
+	wantClassWrap := len(parts.classDirs) > 0
 
-	for i := range e.Attributes {
-		a := &e.Attributes[i]
-		if shouldSkipAttr(a, wantClassWrap) {
-			continue
-		}
+	for _, a := range parts.emit {
 		emitAttribute(b, &head, a)
 	}
 
 	if wantClassWrap {
 		head.WriteString(` class="`)
-		if hasStaticClass {
-			head.WriteString(staticClass)
+		if parts.hasStaticClass {
+			head.WriteString(parts.staticClass)
 		}
 		flushHead(b, &head)
-		for _, d := range classDirectives {
+		for _, d := range parts.classDirs {
 			b.Linef("if %s {", d.Expr)
 			b.Indent()
 			b.Linef("w.WriteString(%s)", quoteGo(" "+d.Modifier))
@@ -118,10 +112,10 @@ func emitOpenTag(b *Builder, e *ast.Element) {
 		head.WriteString(`"`)
 	}
 
-	if len(styleDirectives) > 0 {
+	if len(parts.styleDirs) > 0 {
 		head.WriteString(` style="`)
 		flushHead(b, &head)
-		for _, d := range styleDirectives {
+		for _, d := range parts.styleDirs {
 			b.Linef("if %s != \"\" {", d.Expr)
 			b.Indent()
 			b.Linef("w.WriteString(%s)", quoteGo(d.Modifier+":"))
@@ -205,36 +199,50 @@ type directive struct {
 	Expr     string
 }
 
-func collectClassDirectives(attrs []ast.Attribute) []directive {
-	var out []directive
-	for i := range attrs {
-		a := &attrs[i]
-		if a.Kind != ast.AttrClassDirective {
-			continue
-		}
-		expr := dynamicExpr(a.Value)
-		if expr == "" {
-			continue
-		}
-		out = append(out, directive{Modifier: a.Modifier, Expr: expr})
-	}
-	return out
+// attrPartition bins an element's attribute list into the slices and
+// flags emitOpenTag needs in a single pass. emit holds attributes
+// destined for the head buffer in source order, with class:/style:
+// directives stripped.
+type attrPartition struct {
+	emit           []*ast.Attribute
+	classDirs      []directive
+	styleDirs      []directive
+	staticClass    string
+	hasStaticClass bool
 }
 
-func collectStyleDirectives(attrs []ast.Attribute) []directive {
-	var out []directive
+func partitionAttrs(attrs []ast.Attribute) attrPartition {
+	p := attrPartition{emit: make([]*ast.Attribute, 0, len(attrs))}
+	staticClassIdx := -1
 	for i := range attrs {
 		a := &attrs[i]
-		if a.Kind != ast.AttrStyleDirective {
+		switch a.Kind {
+		case ast.AttrClassDirective:
+			if expr := dynamicExpr(a.Value); expr != "" {
+				p.classDirs = append(p.classDirs, directive{Modifier: a.Modifier, Expr: expr})
+			}
+			continue
+		case ast.AttrStyleDirective:
+			if expr := dynamicExpr(a.Value); expr != "" {
+				p.styleDirs = append(p.styleDirs, directive{Modifier: a.Modifier, Expr: expr})
+			}
 			continue
 		}
-		expr := dynamicExpr(a.Value)
-		if expr == "" {
-			continue
+		if a.Name == "class" && a.Kind == ast.AttrStatic && !p.hasStaticClass {
+			if s, ok := a.Value.(*ast.StaticValue); ok {
+				p.staticClass = s.Value
+				p.hasStaticClass = true
+				staticClassIdx = len(p.emit)
+			}
 		}
-		out = append(out, directive{Modifier: a.Modifier, Expr: expr})
+		p.emit = append(p.emit, a)
 	}
-	return out
+	// When class directives wrap the class attribute, the literal class=
+	// emit is folded into the wrapper; drop it from the head pass.
+	if len(p.classDirs) > 0 && staticClassIdx >= 0 {
+		p.emit = append(p.emit[:staticClassIdx], p.emit[staticClassIdx+1:]...)
+	}
+	return p
 }
 
 func dynamicExpr(v ast.AttributeValue) string {
@@ -243,40 +251,6 @@ func dynamicExpr(v ast.AttributeValue) string {
 		return ""
 	}
 	return d.Expr
-}
-
-// extractStaticClass returns the literal value of a static class="..."
-// attribute when present so a class directive can append to it inside the
-// same class quote pair.
-func extractStaticClass(attrs []ast.Attribute) (string, bool) {
-	for i := range attrs {
-		a := &attrs[i]
-		if a.Name != "class" || a.Kind != ast.AttrStatic {
-			continue
-		}
-		s, ok := a.Value.(*ast.StaticValue)
-		if !ok {
-			return "", false
-		}
-		return s.Value, true
-	}
-	return "", false
-}
-
-// shouldSkipAttr decides whether to emit an attribute directly. When class
-// directives wrap the class attribute, the literal class= attribute is
-// folded into the wrapper instead of emitted on its own.
-func shouldSkipAttr(a *ast.Attribute, wantClassWrap bool) bool {
-	switch a.Kind {
-	case ast.AttrClassDirective, ast.AttrStyleDirective:
-		return true
-	}
-	if wantClassWrap && a.Name == "class" && a.Kind == ast.AttrStatic {
-		if _, ok := a.Value.(*ast.StaticValue); ok {
-			return true
-		}
-	}
-	return false
 }
 
 func flushHead(b *Builder, head *strings.Builder) {
