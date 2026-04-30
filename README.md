@@ -41,6 +41,29 @@ server.go               ──→  REST endpoints              (//go:build svelt
                    single binary deploy
 ```
 
+## Quickstart
+
+Pre-alpha — expect rough edges. The baseline scaffold writes files; it does **not** yet wire up `cmd/app/main.go` or the Vite shell. Until [#356](https://github.com/binsarjr/sveltego/issues/356) closes, the path of least resistance is to copy [`playgrounds/basic/`](playgrounds/basic/) and edit it.
+
+```sh
+go install github.com/binsarjr/sveltego/cmd/sveltego@latest
+go install github.com/binsarjr/sveltego/init/cmd/sveltego-init@latest
+
+# Option A — copy the working playground (recommended today):
+git clone https://github.com/binsarjr/sveltego
+cd sveltego/playgrounds/basic
+sveltego build && ./build/app           # listens on :3000
+
+# Option B — scaffold + finish manually (gap tracked in #356):
+sveltego-init --ai ./hello
+cd hello
+# Add cmd/app/main.go, app.html, package.json, vite.config.js
+# (copy them from playgrounds/basic/ for now)
+sveltego build && ./build/app
+```
+
+`sveltego build` chains codegen → Vite → `go build` in one step; you do not need a separate `go build` invocation. The full quickstart with annotated layout lives in [docs/guide/quickstart.md](docs/guide/quickstart.md).
+
 ## Expression philosophy
 
 Inside `.svelte`, `{...}` mustaches are **Go expressions**, not JS:
@@ -83,7 +106,7 @@ This is a Go workspace (`go.work`) with one module per package:
 packages/
   sveltego/             # Core: parser, codegen, runtime, kit, router, server, CLI
   auth/                 # First-party auth library (ADR 0006; #216–#255)
-  init/                 # `sveltego init` scaffolder
+  init/                 # `sveltego-init` scaffolder (standalone binary)
   lsp/                  # Language server for `.svelte` with Go expressions
   mcp/                  # Model Context Protocol server (search_docs, lookup_api, …)
   enhanced-img/         # Image optimization helpers

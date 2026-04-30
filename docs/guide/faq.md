@@ -26,7 +26,7 @@ Markup mostly. Mustaches must be rewritten to Go. Component scripts must be rewr
 
 ## Where is hot reload?
 
-`sveltego dev` watches `src/routes/**` and regenerates `.gen/*.go` on change. The Go server restart is the primary feedback loop. Browser HMR for the Vite client bundle works as in any Vite project.
+`sveltego dev` is the planned watch + regenerate + HMR proxy command, but today it is a stub (deferred to v0.3, [#42](https://github.com/binsarjr/sveltego/issues/42)). For now, re-run `sveltego compile` after editing templates and restart the server. Once it ships, the Go server restart will be the primary feedback loop, with browser HMR for the Vite client bundle handled by Vite as in any other project.
 
 ## How do I serve static files?
 
