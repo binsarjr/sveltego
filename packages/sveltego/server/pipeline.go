@@ -217,10 +217,21 @@ func (s *Server) resolve(w http.ResponseWriter, r *http.Request, ev *kit.Request
 		}
 		form = fd
 	}
+	if isDataJSONRequest(r) && route.Options.SSROnly {
+		return nil, kit.SafeError{Code: http.StatusNotFound, Message: http.StatusText(http.StatusNotFound)}
+	}
 	if !optionsAllowSSR(route.Options) {
 		return s.renderEmptyShell(), nil
 	}
 	return s.renderPage(w, r, ev, route, form, pageBuf)
+}
+
+// isDataJSONRequest reports whether r is a direct XHR-style fetch of a
+// route's __data.json endpoint. The SPA router (#37, #38) uses these
+// requests to invalidate page data without a full navigation; SSROnly
+// routes must reject them so callers fall back to a full document fetch.
+func isDataJSONRequest(r *http.Request) bool {
+	return r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/__data.json")
 }
 
 // optionsAllowSSR returns true unless the route declared SSR=false. The

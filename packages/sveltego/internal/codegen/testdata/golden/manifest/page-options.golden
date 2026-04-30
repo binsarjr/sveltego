@@ -84,7 +84,7 @@ func Routes() []router.Route {
 			LayoutLoaders: []router.LayoutLoadHandler{
 				loadLayout__page_routes,
 			},
-			Options: kit.PageOptions{Prerender: true, SSR: true, CSR: true, TrailingSlash: kit.TrailingSlashIgnore},
+			Options: kit.PageOptions{Prerender: true, SSR: true, CSR: true, SSROnly: true, TrailingSlash: kit.TrailingSlashIgnore},
 		},
 	}
 }

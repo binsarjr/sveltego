@@ -92,6 +92,10 @@ func segmentsFor(pattern string) []router.Segment {
 			{Kind: router.SegmentStatic, Value: "lang"},
 			{Kind: router.SegmentParam, Name: "name"},
 		}
+	case "/protected":
+		return []router.Segment{{Kind: router.SegmentStatic, Value: "protected"}}
+	case "/public":
+		return []router.Segment{{Kind: router.SegmentStatic, Value: "public"}}
 	}
 	panic("unknown pattern: " + pattern)
 }
@@ -799,5 +803,60 @@ func TestServer_methodsOf(t *testing.T) {
 	want := []string{http.MethodGet, http.MethodPost}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("methodsOf: got %v want %v", got, want)
+	}
+}
+
+// TestServeHTTP_ssrOnlyRendersHTML asserts that a route with SSROnly=true
+// still serves normal HTML requests. The __data.json enforcement guard lives
+// in the pipeline but remains dormant until the __data.json endpoint lands
+// (blocked by #38 / SPA router #37); once that work merges, a dedicated
+// integration test covering the 404 rejection should be added here.
+func TestServeHTTP_ssrOnlyRendersHTML(t *testing.T) {
+	t.Parallel()
+	srv := newTestServer(t, []router.Route{{
+		Pattern:  "/protected",
+		Segments: segmentsFor("/protected"),
+		Page:     staticPage("<h1>protected</h1>"),
+		Options:  kit.PageOptions{SSR: true, CSR: true, SSROnly: true},
+	}})
+	ts := httptest.NewServer(srv)
+	t.Cleanup(ts.Close)
+
+	resp, err := http.Get(ts.URL + "/protected")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("SSROnly HTML: got %d want 200; body=%s", resp.StatusCode, body)
+	}
+	if !strings.Contains(string(body), "<h1>protected</h1>") {
+		t.Fatalf("body missing page content: %q", body)
+	}
+}
+
+// TestIsDataJSONRequest verifies the path suffix detector used by the
+// SSROnly guard.
+func TestIsDataJSONRequest(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		method string
+		path   string
+		want   bool
+	}{
+		{http.MethodGet, "/foo/__data.json", true},
+		{http.MethodGet, "/__data.json", true},
+		{http.MethodGet, "/foo/bar/__data.json", true},
+		{http.MethodPost, "/foo/__data.json", false}, // POST is not a data fetch
+		{http.MethodGet, "/foo/data.json", false},    // no leading __
+		{http.MethodGet, "/foo", false},
+		{http.MethodGet, "/foo/__data.jsonx", false}, // suffix must match exactly
+	}
+	for _, tc := range cases {
+		r, _ := http.NewRequest(tc.method, tc.path, nil)
+		if got := isDataJSONRequest(r); got != tc.want {
+			t.Errorf("isDataJSONRequest(%s %s) = %v, want %v", tc.method, tc.path, got, tc.want)
+		}
 	}
 }
