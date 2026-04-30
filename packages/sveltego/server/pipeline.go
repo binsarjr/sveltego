@@ -338,6 +338,11 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 			}
 			d, err := layoutLoad(lctx)
 			if err != nil {
+				// Flush any headers set during Load into the event so error
+				// paths in handlePipelineError can apply them via ev.ResponseHeader().
+				for k, vs := range lctx.CollectHeaders() {
+					ev.ResponseHeader()[k] = vs
+				}
 				return nil, err
 			}
 			layoutDatas[i] = d
@@ -346,6 +351,11 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 		if route.Load != nil {
 			d, err := route.Load(lctx)
 			if err != nil {
+				// Flush any headers set during Load into the event so error
+				// paths in handlePipelineError can apply them via ev.ResponseHeader().
+				for k, vs := range lctx.CollectHeaders() {
+					ev.ResponseHeader()[k] = vs
+				}
 				return nil, err
 			}
 			data = d
