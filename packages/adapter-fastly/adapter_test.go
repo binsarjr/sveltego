@@ -129,12 +129,12 @@ func TestBuildInvokesTinyGoWithCorrectFlags(t *testing.T) {
 	args := strings.Split(strings.TrimSpace(string(raw)), "\n")
 
 	wantArgs := map[string]bool{
-		"build":    false,
-		"-target":  false,
-		"wasip1":   false,
-		"-o":       false,
+		"build":      false,
+		"-target":    false,
+		"wasip1":     false,
+		"-o":         false,
 		"-scheduler": false,
-		"none":     false,
+		"none":       false,
 	}
 	for _, a := range args {
 		if _, ok := wantArgs[a]; ok {
