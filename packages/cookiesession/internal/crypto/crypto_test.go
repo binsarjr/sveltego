@@ -254,7 +254,7 @@ func FuzzDecrypt(f *testing.F) {
 	f.Add([]byte("deadbeef"))
 	f.Add([]byte(""))
 	key := makeKey(0xAA)
-	f.Fuzz(func(t *testing.T, data []byte) {
+	f.Fuzz(func(_ *testing.T, data []byte) {
 		_, _ = crypto.Decrypt(key, string(data))
 	})
 }
