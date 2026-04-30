@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	pgxv5 "github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -61,7 +61,7 @@ func (s *Store) UserByID(ctx context.Context, id string) (*auth.User, error) {
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectOneRow(rows, scanUser)
+	return pgxv5.CollectOneRow(rows, scanUser)
 }
 
 // UserByEmail returns the user with the given email. Returns ErrNotFound if absent.
@@ -72,17 +72,17 @@ func (s *Store) UserByEmail(ctx context.Context, email string) (*auth.User, erro
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectOneRow(rows, scanUser)
+	return pgxv5.CollectOneRow(rows, scanUser)
 }
 
-func scanUser(row pgx.CollectableRow) (*auth.User, error) {
+func scanUser(row pgxv5.CollectableRow) (*auth.User, error) {
 	var u auth.User
 	err := row.Scan(
 		&u.ID, &u.Email, &u.EmailVerified, &u.Name, &u.Image,
 		&u.CreatedAt, &u.UpdatedAt,
 	)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, pgxv5.ErrNoRows) {
 			return nil, fmt.Errorf("auth: %w", auth.ErrNotFound)
 		}
 		return nil, err
@@ -113,7 +113,7 @@ func (s *Store) UpdateUser(ctx context.Context, u *auth.User) error {
 // DeleteUser removes the user and cascades to sessions, accounts, and
 // verifications inside a single transaction. Returns ErrNotFound if absent.
 func (s *Store) DeleteUser(ctx context.Context, id string) error {
-	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	tx, err := s.pool.BeginTx(ctx, pgxv5.TxOptions{IsoLevel: pgxv5.ReadCommitted})
 	if err != nil {
 		return err
 	}
@@ -125,7 +125,7 @@ func (s *Store) DeleteUser(ctx context.Context, id string) error {
 
 	var dummy int
 	err = tx.QueryRow(ctx, `SELECT 1 FROM auth_users WHERE id = $1`, id).Scan(&dummy)
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, pgxv5.ErrNoRows) {
 		_ = tx.Rollback(ctx)
 		return fmt.Errorf("auth: %w", auth.ErrNotFound)
 	}
@@ -174,7 +174,7 @@ func (s *Store) SessionByToken(ctx context.Context, token string) (*auth.Session
 		return nil, err
 	}
 
-	sess, err := pgx.CollectOneRow(rows, func(row pgx.CollectableRow) (*auth.Session, error) {
+	sess, err := pgxv5.CollectOneRow(rows, func(row pgxv5.CollectableRow) (*auth.Session, error) {
 		var s auth.Session
 		if scanErr := row.Scan(
 			&s.ID, &s.UserID, &s.Token,
@@ -182,7 +182,7 @@ func (s *Store) SessionByToken(ctx context.Context, token string) (*auth.Session
 			&s.IPAddress, &s.UserAgent,
 			&s.CreatedAt, &s.UpdatedAt,
 		); scanErr != nil {
-			if errors.Is(scanErr, pgx.ErrNoRows) {
+			if errors.Is(scanErr, pgxv5.ErrNoRows) {
 				return nil, fmt.Errorf("auth: %w", auth.ErrNotFound)
 			}
 			return nil, scanErr
@@ -194,7 +194,7 @@ func (s *Store) SessionByToken(ctx context.Context, token string) (*auth.Session
 		return &s, nil
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, pgxv5.ErrNoRows) {
 			return nil, fmt.Errorf("auth: %w", auth.ErrNotFound)
 		}
 		return nil, err
@@ -266,7 +266,7 @@ func (s *Store) AccountsByUser(ctx context.Context, userID string) ([]*auth.Acco
 	}
 	defer rows.Close()
 
-	accs, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (*auth.Account, error) {
+	accs, err := pgxv5.CollectRows(rows, func(row pgxv5.CollectableRow) (*auth.Account, error) {
 		var a auth.Account
 		if scanErr := row.Scan(
 			&a.ID, &a.UserID, &a.Provider, &a.ProviderAccountID,
@@ -335,13 +335,13 @@ func (s *Store) VerificationByCode(ctx context.Context, code string) (*auth.Veri
 		return nil, err
 	}
 
-	v, err := pgx.CollectOneRow(rows, func(row pgx.CollectableRow) (*auth.Verification, error) {
+	v, err := pgxv5.CollectOneRow(rows, func(row pgxv5.CollectableRow) (*auth.Verification, error) {
 		var ver auth.Verification
 		if scanErr := row.Scan(
 			&ver.ID, &ver.UserID, &ver.Kind, &ver.Token,
 			&ver.ExpiresAt, &ver.CreatedAt,
 		); scanErr != nil {
-			if errors.Is(scanErr, pgx.ErrNoRows) {
+			if errors.Is(scanErr, pgxv5.ErrNoRows) {
 				return nil, fmt.Errorf("auth: %w", auth.ErrNotFound)
 			}
 			return nil, scanErr
@@ -351,7 +351,7 @@ func (s *Store) VerificationByCode(ctx context.Context, code string) (*auth.Veri
 		return &ver, nil
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, pgxv5.ErrNoRows) {
 			return nil, fmt.Errorf("auth: %w", auth.ErrNotFound)
 		}
 		return nil, err
