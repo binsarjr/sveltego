@@ -171,6 +171,17 @@ func collectSelectorPackages(expr goast.Expr, set map[string]struct{}) {
 	})
 }
 
+// dropField returns a new slice with any field whose Name matches name removed.
+func dropField(fields []pageDataField, name string) []pageDataField {
+	var out []pageDataField
+	for _, f := range fields {
+		if f.Name != name {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
 // emitPageDataStruct writes `type PageData = struct{...}` as a type alias
 // (note the `=`). The alias preserves type identity between the user's
 // inline anonymous struct literal returned by Load() and PageData, so the

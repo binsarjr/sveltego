@@ -80,6 +80,10 @@ func Generate(frag *ast.Fragment, opts Options) ([]byte, error) {
 		return nil, err
 	}
 	if opts.HasActions {
+		// Remove any user-declared Form field before injecting the contract field.
+		// This allows page.server.go to declare `Form any` in its Load return
+		// without causing a duplicate-field compile error. See #143.
+		pageData.Fields = dropField(pageData.Fields, "Form")
 		pageData.Fields = append(pageData.Fields, pageDataField{Name: "Form", Type: "any"})
 	}
 
