@@ -9,6 +9,7 @@ use (
 	./packages/adapter-lambda
 	./packages/adapter-server
 	./packages/adapter-static
+	./packages/auth
 	./packages/create-sveltego
 	./packages/enhanced-img
 	./packages/init
