@@ -136,8 +136,10 @@ func (w *Writer) WriteEscape(v any) {
 }
 
 // WriteEscapeAttr appends v escaped for an attribute value. Codegen wraps
-// attribute values in double quotes outside this call. error precedes
-// fmt.Stringer; see WriteEscape.
+// attribute values in double quotes outside this call. Numeric and bool values
+// bypass fmt. nil emits an empty string. A value that implements both error
+// and fmt.Stringer is rendered via Error(); types that need Stringer
+// precedence should not also satisfy error.
 func (w *Writer) WriteEscapeAttr(v any) {
 	switch x := v.(type) {
 	case nil:
@@ -211,7 +213,20 @@ func (w *Writer) Len() int {
 	return len(w.buf)
 }
 
-// Reset truncates the buffer to zero length, retaining capacity.
+// maxPooledBufCap is the largest buffer capacity kept when a Writer returns
+// to the pool. Buffers grown beyond this by a single large render are dropped
+// and replaced with a fresh default-capacity buffer so one rogue request
+// cannot permanently bloat the pool's steady-state footprint.
+const maxPooledBufCap = 64 * 1024
+
+// Reset truncates the buffer to zero length. If the buffer's capacity exceeds
+// maxPooledBufCap the backing array is released and replaced with a new
+// default-sized one; this prevents a single large render from permanently
+// bloating the pool.
 func (w *Writer) Reset() {
+	if cap(w.buf) > maxPooledBufCap {
+		w.buf = make([]byte, 0, defaultBufCap)
+		return
+	}
 	w.buf = w.buf[:0]
 }
