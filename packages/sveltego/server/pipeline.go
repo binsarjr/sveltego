@@ -163,6 +163,7 @@ func (s *Server) resolve(w http.ResponseWriter, r *http.Request, ev *kit.Request
 	if matchPath == "" {
 		matchPath = ev.URL.Path
 	}
+	matchedPath := matchPath
 	route, params, ok := s.tree.Match(matchPath)
 	if !ok {
 		// Retry with the toggled trailing slash so a Never route hit
@@ -174,6 +175,7 @@ func (s *Server) resolve(w http.ResponseWriter, r *http.Request, ev *kit.Request
 		if alt != matchPath {
 			if r2, p2, ok2 := s.tree.Match(alt); ok2 {
 				route, params, ok = r2, p2, ok2
+				matchedPath = alt
 			}
 		}
 	}
@@ -186,6 +188,7 @@ func (s *Server) resolve(w http.ResponseWriter, r *http.Request, ev *kit.Request
 	for k, v := range params {
 		ev.Params[k] = v
 	}
+	ev.RawParams = rawParamsFromPath(matchedPath, route.Segments, params)
 
 	if redirect := trailingSlashRedirect(ev.URL, route.Options.TrailingSlash); redirect != "" {
 		return &kit.Response{
@@ -331,6 +334,7 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 		lctx = kit.NewLoadCtx(r, ev.Params)
 		lctx.Locals = ev.Locals
 		lctx.Cookies = ev.Cookies
+		lctx.RawParams = ev.RawParams
 		layoutDatas = make([]any, len(route.LayoutChain))
 		for i, layoutLoad := range route.LayoutLoaders {
 			if layoutLoad == nil {
@@ -367,11 +371,12 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 	}
 
 	rctx := &kit.RenderCtx{
-		Locals:  ev.Locals,
-		URL:     ev.URL,
-		Params:  ev.Params,
-		Cookies: ev.Cookies,
-		Request: r,
+		Locals:    ev.Locals,
+		URL:       ev.URL,
+		Params:    ev.Params,
+		RawParams: ev.RawParams,
+		Cookies:   ev.Cookies,
+		Request:   r,
 	}
 	inner := func(buf *render.Writer) error {
 		return route.Page(buf, rctx, data)
@@ -637,6 +642,69 @@ func indexScriptSpecial(p []byte) int {
 		}
 	}
 	return -1
+}
+
+// rawParamsFromPath extracts un-decoded route parameter values from path
+// using the pattern's segment list and the already-decoded params map
+// (used only to disambiguate optional segments). It splits path on
+// literal '/' bytes without URL-decoding so callers receive the
+// percent-encoded form the client sent (e.g. "hello%20world" rather than
+// "hello world"). Static segments are consumed silently; rest segments
+// join their remaining raw pieces with "/". Returns nil when there are
+// no param segments.
+func rawParamsFromPath(path string, segs []router.Segment, decoded map[string]string) map[string]string {
+	// Strip leading slash so splitting yields uniform segments.
+	if len(path) > 0 && path[0] == '/' {
+		path = path[1:]
+	}
+	// Split on literal '/' — no decoding.
+	var parts []string
+	if path != "" {
+		parts = strings.Split(path, "/")
+	}
+
+	// Count param-like segments to decide whether to allocate.
+	paramCount := 0
+	for _, s := range segs {
+		if s.Kind != router.SegmentStatic {
+			paramCount++
+		}
+	}
+	if paramCount == 0 {
+		return nil
+	}
+
+	out := make(map[string]string, paramCount)
+	pi := 0 // index into parts
+	for _, s := range segs {
+		switch s.Kind {
+		case router.SegmentStatic:
+			pi++
+		case router.SegmentParam:
+			if pi < len(parts) {
+				out[s.Name] = parts[pi]
+				pi++
+			}
+		case router.SegmentOptional:
+			// The decoded params map tells us whether the optional segment
+			// matched a real value ("" means it was absent). Only consume
+			// a raw part when the decoded value is non-empty.
+			if decoded[s.Name] != "" && pi < len(parts) {
+				out[s.Name] = parts[pi]
+				pi++
+			} else {
+				out[s.Name] = ""
+			}
+		case router.SegmentRest:
+			if pi < len(parts) {
+				out[s.Name] = strings.Join(parts[pi:], "/")
+			} else {
+				out[s.Name] = ""
+			}
+			pi = len(parts)
+		}
+	}
+	return out
 }
 
 // writeResponse flushes a Response built by Handle (or its short-circuit
