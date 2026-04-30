@@ -11,6 +11,12 @@ import (
 	page_routes___lang___about "myapp/.gen/routes/__lang__/about"
 )
 
+// Route ID constants for type-safe linking. Pass to kit.Link instead of a
+// raw string so route renames surface as compile errors.
+const (
+	RouteIDLangAbout = `/[[lang]]/about`
+)
+
 // render__page_routes___lang___about adapts page_routes___lang___about.Page{}.Render to router.PageHandler.
 func render__page_routes___lang___about(w *render.Writer, ctx *kit.RenderCtx, data any) error {
 	var typed page_routes___lang___about.PageData
