@@ -34,6 +34,11 @@ func (hw *HeaderWriter) Del(key string) {
 
 // RenderCtx is the request-scoped context handed to generated Render
 // methods across the SSR lifecycle (Load, Render, Hooks).
+//
+// Note: RenderCtx and [LoadCtx] share an identical set of request fields
+// (Locals, URL, Params, RawParams, Cookies, Request). Consolidation into a
+// shared embedded struct is deferred to v0.5 ctx work because it touches
+// generated Render signatures across every page.
 type RenderCtx struct {
 	Locals map[string]any
 	URL    *url.URL
@@ -149,6 +154,8 @@ func (c *LoadCtx) CollectHeaders() http.Header {
 //   - Sec-Purpose: prefetch   — standardized HTTP hint emitted by browsers
 //     on speculative preload requests (RFC 8941 / Fetch spec).
 func (c *LoadCtx) Speculative() bool {
+	// DO NOT promote to a security boundary. These headers are user-forgeable
+	// hints. Gate analytics / rate-limit suppression here, not access control.
 	if c.Request == nil {
 		return false
 	}

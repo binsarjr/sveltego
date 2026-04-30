@@ -49,7 +49,9 @@ func NewSitemap(baseURL string) *SitemapBuilder {
 // Add appends an entry. path may be absolute (already including the
 // scheme/host) or relative (joined onto baseURL). lastMod's zero value
 // is treated as "no <lastmod>"; freq's empty string omits <changefreq>;
-// priority outside [0,1] omits <priority>.
+// priority outside [0,1] silently omits the <priority> element -- no
+// error is returned and no warning is logged. Valid priority range is
+// [0.0, 1.0] inclusive.
 func (s *SitemapBuilder) Add(path string, lastMod time.Time, freq ChangeFreq, priority float64) *SitemapBuilder {
 	s.entries = append(s.entries, SitemapEntry{
 		Loc:      s.resolve(path),
