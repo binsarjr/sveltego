@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"fmt"
+	"mime"
 	"net/http"
 	"os"
 	"path"
@@ -105,15 +106,14 @@ func (h *staticHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	enc, encName, servePath, info := h.negotiate(r, rawPath, rawInfo)
 
 	setCacheHeaders(w, r.URL.Path, h.immutablePrefix, h.maxAgeSeconds)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	if encName != "" {
 		w.Header().Set("Content-Encoding", encName)
 		w.Header().Add("Vary", "Accept-Encoding")
 	} else if h.brotli || h.gzip {
 		w.Header().Add("Vary", "Accept-Encoding")
 	}
-	if ct := contentTypeFor(rawPath); ct != "" {
-		w.Header().Set("Content-Type", ct)
-	}
+	w.Header().Set("Content-Type", contentTypeFor(rawPath))
 	if h.etag {
 		w.Header().Set("ETag", buildETag(info, enc))
 	}
@@ -238,6 +238,12 @@ func buildETag(info os.FileInfo, enc string) string {
 // which mis-identifies precompressed siblings; deriving from the raw
 // extension keeps text/css and application/javascript stable across
 // encoded responses.
+//
+// The explicit map overrides OS MIME databases for extensions that are
+// mishandled on some platforms (e.g. .ico on Windows, .wasm and .woff2
+// absent from many default mime.types). Falls back to
+// mime.TypeByExtension, then application/octet-stream as last resort so
+// X-Content-Type-Options: nosniff is always effective.
 func contentTypeFor(rawPath string) string {
 	ext := strings.ToLower(filepath.Ext(rawPath))
 	switch ext {
@@ -257,8 +263,19 @@ func contentTypeFor(rawPath string) string {
 		return "application/xml; charset=utf-8"
 	case ".wasm":
 		return "application/wasm"
+	case ".woff":
+		return "font/woff"
+	case ".woff2":
+		return "font/woff2"
+	case ".ico":
+		return "image/x-icon"
+	case ".webmanifest":
+		return "application/manifest+json"
 	}
-	return ""
+	if ct := mime.TypeByExtension(ext); ct != "" {
+		return ct
+	}
+	return "application/octet-stream"
 }
 
 // errStaticHandler returns an http.Handler that serves a 500 with err's
