@@ -3,6 +3,7 @@ package kit
 import (
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 // HeaderWriter exposes Set/Add/Del on a response header map. Returned by
@@ -119,6 +120,32 @@ func (c *LoadCtx) Header() *HeaderWriter {
 // this directly.
 func (c *LoadCtx) CollectHeaders() http.Header {
 	return c.headers
+}
+
+// Speculative reports whether this Load was triggered by a speculative
+// prefetch rather than a real navigation. Use it to skip expensive work
+// (analytics recording, rate-limit counters, cache warming) that should
+// not fire on hover-triggered preloads.
+//
+// The server detects speculation via two headers, both treated as hints
+// (not security boundaries — a caller can forge them):
+//
+//   - X-Sveltego-Preload: 1  — emitted by the sveltego client SPA router
+//     on every __data.json preload fetch (#40).
+//   - Sec-Purpose: prefetch   — standardized HTTP hint emitted by browsers
+//     on speculative preload requests (RFC 8941 / Fetch spec).
+func (c *LoadCtx) Speculative() bool {
+	if c.Request == nil {
+		return false
+	}
+	if c.Request.Header.Get("X-Sveltego-Preload") == "1" {
+		return true
+	}
+	// Sec-Purpose may carry multiple tokens; "prefetch" is sufficient.
+	if strings.Contains(c.Request.Header.Get("Sec-Purpose"), "prefetch") {
+		return true
+	}
+	return false
 }
 
 // NewRenderCtx builds a RenderCtx for the given request, response, and

@@ -143,3 +143,61 @@ func TestLoadCtx_RawParam_NilRawParams(t *testing.T) {
 		t.Fatalf("RawParam on nil RawParams = %q, want %q", got, "")
 	}
 }
+
+// TestLoadCtx_Speculative_FalseForRealNav pins the common case: a plain
+// GET with no preload header must return false.
+func TestLoadCtx_Speculative_FalseForRealNav(t *testing.T) {
+	t.Parallel()
+	r := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	ctx := kit.NewLoadCtx(r, nil)
+	if ctx.Speculative() {
+		t.Fatal("Speculative() = true for plain GET, want false")
+	}
+}
+
+// TestLoadCtx_Speculative_TrueForSveltegoHeader pins the sveltego-specific
+// client header: X-Sveltego-Preload: 1 must flip Speculative to true.
+func TestLoadCtx_Speculative_TrueForSveltegoHeader(t *testing.T) {
+	t.Parallel()
+	r := httptest.NewRequest(http.MethodGet, "/dashboard/__data.json", nil)
+	r.Header.Set("X-Sveltego-Preload", "1")
+	ctx := kit.NewLoadCtx(r, nil)
+	if !ctx.Speculative() {
+		t.Fatal("Speculative() = false with X-Sveltego-Preload: 1, want true")
+	}
+}
+
+// TestLoadCtx_Speculative_TrueForSecPurposePrefetch pins the standard HTTP
+// browser hint: Sec-Purpose containing "prefetch" must flip Speculative to true.
+func TestLoadCtx_Speculative_TrueForSecPurposePrefetch(t *testing.T) {
+	t.Parallel()
+	r := httptest.NewRequest(http.MethodGet, "/dashboard/__data.json", nil)
+	r.Header.Set("Sec-Purpose", "prefetch")
+	ctx := kit.NewLoadCtx(r, nil)
+	if !ctx.Speculative() {
+		t.Fatal("Speculative() = false with Sec-Purpose: prefetch, want true")
+	}
+}
+
+// TestLoadCtx_Speculative_TrueForSecPurposeWithTokens confirms that
+// Sec-Purpose carrying extra tokens (e.g. "prefetch;prerender") still
+// triggers Speculative, matching the "contains prefetch" substring rule.
+func TestLoadCtx_Speculative_TrueForSecPurposeWithTokens(t *testing.T) {
+	t.Parallel()
+	r := httptest.NewRequest(http.MethodGet, "/dashboard/__data.json", nil)
+	r.Header.Set("Sec-Purpose", "prefetch;prerender")
+	ctx := kit.NewLoadCtx(r, nil)
+	if !ctx.Speculative() {
+		t.Fatal("Speculative() = false with Sec-Purpose: prefetch;prerender, want true")
+	}
+}
+
+// TestLoadCtx_Speculative_FalseWithNilRequest guards the nil-request edge
+// case (e.g. direct construction in unit tests) — must return false, not panic.
+func TestLoadCtx_Speculative_FalseWithNilRequest(t *testing.T) {
+	t.Parallel()
+	ctx := kit.NewLoadCtx(nil, nil)
+	if ctx.Speculative() {
+		t.Fatal("Speculative() = true with nil request, want false")
+	}
+}
