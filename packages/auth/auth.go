@@ -38,9 +38,13 @@ type Config struct {
 	// Plugins holds optional capability extensions (populated by #224+).
 	Plugins []any
 
-	// EnableCSRF enables double-submit CSRF protection on mutating auth endpoints.
-	// Defaults to true once csrf.go lands (#233).
-	EnableCSRF bool
+	// Hasher is the password hashing implementation. If nil, NewArgon2idHasher()
+	// is used as the default (Argon2id with OWASP-recommended parameters).
+	Hasher Hasher
+
+	// CSRF holds the double-submit CSRF protection configuration. If nil, CSRF
+	// protection is not automatically applied; callers must wrap handlers manually.
+	CSRF *CSRF
 
 	// EnableRateLimit enables per-endpoint rate limiting (populated by a follow-up issue).
 	EnableRateLimit bool
@@ -68,6 +72,9 @@ func New(cfg Config) (*Auth, error) {
 	}
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
+	}
+	if cfg.Hasher == nil {
+		cfg.Hasher = NewArgon2idHasher()
 	}
 	return &Auth{cfg: cfg}, nil
 }

@@ -32,6 +32,16 @@ while the major version is 0.
 - `SMSRecord` — holds the To/Body of a recorded NoopSMSSender call.
 - `NoopSMSSender` — in-memory recording adapter for tests/dev; construct via `NewNoopSMSSender`.
 - `NewNoopSMSSender() *NoopSMSSender` — constructor.
+- `Hasher` — interface for pluggable password hashing backends.
+- `Argon2idHasher` — Argon2id (RFC 9106) implementation of Hasher; construct via `NewArgon2idHasher`.
+- `NewArgon2idHasher(...Argon2idOption) *Argon2idHasher` — constructor.
+- `Argon2idOption` — functional option type for `NewArgon2idHasher`.
+- `WithTime(uint32)`, `WithMemory(uint32)`, `WithThreads(uint8)` — Argon2idOption constructors.
+- `CSRF` — double-submit cookie + trusted-origin CSRF protection; construct via `NewCSRF`.
+- `NewCSRF(...CSRFOption) *CSRF` — constructor.
+- `CSRFOption` — functional option type for `NewCSRF`.
+- `WithCSRFCookieName`, `WithCSRFHeaderName`, `WithCSRFFieldName`, `WithTrustedOrigins`,
+  `WithCSRFTokenSize`, `WithCSRFAllowInsecure` — CSRFOption constructors.
 
 ### Subpackage: `auth/mailer/smtp`
 
