@@ -174,8 +174,14 @@ func safeRelPath(urlPath string) (string, bool) {
 }
 
 // acceptsEncoding reports whether tok appears as a non-zero-quality
-// token in an Accept-Encoding header value. Quality parsing is minimal
-// — `;q=0` (with optional whitespace and decimals) suppresses the token.
+// token in an Accept-Encoding header value. Quality parsing is minimal:
+// `;q=0` (with optional whitespace and decimals) suppresses the token.
+// Any qualifier that is not a well-formed `q=<float>` is treated as
+// acceptable — this is a deliberate short-circuit. RFC 9110 §12.5.4
+// defines extension parameters (e.g. `;d=4`) that are not parsed here;
+// the failure mode is conservative: the handler may serve an encoding the
+// client did not prefer but can silently ignore. A full parser is future
+// work not required for v0.1.
 func acceptsEncoding(header, tok string) bool {
 	if header == "" {
 		return false

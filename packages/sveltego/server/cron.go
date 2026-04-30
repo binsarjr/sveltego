@@ -8,6 +8,12 @@ import (
 	"github.com/binsarjr/sveltego/exports/kit"
 )
 
+// Log keys used exclusively by cron task logging.
+const (
+	logKeyName = "name"
+	logKeySpec = "spec"
+)
+
 // runCronTasks starts one goroutine per task. Each goroutine fires the task
 // on its parsed interval and exits when ctx is cancelled. Errors from the
 // task function are logged via logger but do not stop the loop — a failing

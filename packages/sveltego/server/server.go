@@ -1,10 +1,15 @@
 // Package server is the runtime entry point a sveltego app composes in
 // its main package: feed it the codegen-emitted route slice, the user's
 // app.html shell, and an optional matchers and hooks bundle, and it
-// returns an http.Handler that runs the SvelteKit-shaped Reroute → Handle
-// → Match → Load → Render → Response pipeline. Form actions remain out
-// of scope for Phase 0; layouts and hooks (Handle, HandleError,
-// HandleFetch, Reroute, Init) are wired.
+// returns an http.Handler that runs the SvelteKit-shaped request pipeline:
+//
+//	CSP nonce → Reroute → Handle → Match → Load → Render → Response
+//
+// The CSP middleware (applyCSP) runs before Handle so the
+// Content-Security-Policy header and nonce are present on every response
+// path — success, error boundary, redirect, and short-circuit alike.
+//
+// Hooks wired: Handle, HandleError, HandleFetch, Reroute, Init.
 package server
 
 import (
@@ -90,6 +95,12 @@ type Config struct {
 }
 
 // Server is the http.Handler implementation that drives a sveltego app.
+//
+// Logger is a public field for ergonomic access in tests and single-binary
+// apps. Do not mutate Logger after calling New or once the server begins
+// serving; concurrent reads in ServeHTTP vs writes from the caller are
+// racy. A future stable release will replace this with an unexported field
+// and a Logger() accessor.
 type Server struct {
 	tree          *router.Tree
 	Logger        *slog.Logger

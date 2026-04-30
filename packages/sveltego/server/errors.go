@@ -21,8 +21,6 @@ const (
 	logKeyStatus   = "status"
 	logKeyLocation = "location"
 	logKeyFailCode = "fail_code"
-	logKeyName     = "name"
-	logKeySpec     = "spec"
 	logKeyStreamID = "stream_id"
 )
 
@@ -156,11 +154,14 @@ func (s *Server) handlePipelineError(w http.ResponseWriter, r *http.Request, ev 
 		return
 	}
 
-	// Preserve the legacy httpStatuser observation: when the user did
-	// not author HandleError, the identity default returns 500 — but
-	// pre-hooks behavior promoted any error implementing HTTPStatus()
-	// to that status. Honor that path so existing user errors that
-	// expose a status keep doing so.
+	// Preserve the legacy httpStatuser observation. HandleError now takes
+	// (SafeError, error) and may return a short-circuit error; when the
+	// user did NOT author HandleError the identity default returns a 500
+	// SafeError. Pre-hooks behavior promoted errors that implement
+	// HTTPStatus() to that status, so we honor that path here. This branch
+	// is therefore still reachable (not dead): it fires whenever HandleError
+	// returns exactly the identity-default 500 and the original error
+	// carries an HTTPStatus() method.
 	if safe.Code == http.StatusInternalServerError && safe.Message == http.StatusText(http.StatusInternalServerError) {
 		var hs httpStatuser
 		if errors.As(err, &hs) {

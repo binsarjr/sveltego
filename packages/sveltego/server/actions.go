@@ -14,6 +14,10 @@ import (
 // PageData struct alias the codegen emits with `Form any`; routes
 // without that field receive data unchanged. nil data falls through:
 // PageData zero value carries Form=nil so the page reads it as nil.
+//
+// The reflective path is the v0.1 fallback. Once #143 (form-field
+// collision detection) lands, codegen can emit a typed setter that
+// skips reflection entirely.
 func injectFormField(data, formValue any) any {
 	if data == nil {
 		return nil
