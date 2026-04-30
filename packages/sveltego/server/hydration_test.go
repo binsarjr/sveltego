@@ -155,6 +155,76 @@ func TestRenderPage_payloadIncludesManifest(t *testing.T) {
 	}
 }
 
+// TestDataJSON_carriesDeps asserts the client payload ships the dep
+// tags Load declared via ctx.Depends, so $app/navigation.invalidate can
+// match them on the client (#85).
+func TestDataJSON_carriesDeps(t *testing.T) {
+	t.Parallel()
+
+	srv := newTestServer(t, []router.Route{{
+		Pattern:  "/posts",
+		Segments: []router.Segment{{Kind: router.SegmentStatic, Value: "posts"}},
+		Page:     staticPage("posts"),
+		Load: func(ctx *kit.LoadCtx) (any, error) {
+			ctx.Depends("posts:list", "feed")
+			return map[string]string{"k": "v"}, nil
+		},
+	}})
+	ts := httptest.NewServer(srv)
+	t.Cleanup(ts.Close)
+
+	resp, err := http.Get(ts.URL + "/posts/__data.json")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+
+	var payload struct {
+		Deps []string `json:"deps"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("parse: %v; body=%s", err, body)
+	}
+	want := []string{"posts:list", "feed"}
+	if len(payload.Deps) != len(want) {
+		t.Fatalf("deps = %v, want %v", payload.Deps, want)
+	}
+	for i, w := range want {
+		if payload.Deps[i] != w {
+			t.Errorf("deps[%d] = %q, want %q", i, payload.Deps[i], w)
+		}
+	}
+}
+
+// TestDataJSON_omitsDepsWhenNone asserts the deps field is absent when
+// Load did not call Depends, so the wire stays small for the common case.
+func TestDataJSON_omitsDepsWhenNone(t *testing.T) {
+	t.Parallel()
+
+	srv := newTestServer(t, []router.Route{{
+		Pattern:  "/silent",
+		Segments: []router.Segment{{Kind: router.SegmentStatic, Value: "silent"}},
+		Page:     staticPage("silent"),
+		Load: func(_ *kit.LoadCtx) (any, error) {
+			return map[string]string{"k": "v"}, nil
+		},
+	}})
+	ts := httptest.NewServer(srv)
+	t.Cleanup(ts.Close)
+
+	resp, err := http.Get(ts.URL + "/silent/__data.json")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+
+	if strings.Contains(string(body), `"deps"`) {
+		t.Errorf("payload should omit deps when none declared; got: %s", body)
+	}
+}
+
 // TestDataJSON_omitsManifest asserts that __data.json responses do NOT
 // include the manifest (the client already has it from the initial paint).
 func TestDataJSON_omitsManifest(t *testing.T) {

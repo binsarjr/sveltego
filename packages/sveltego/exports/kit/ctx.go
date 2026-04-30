@@ -101,6 +101,7 @@ type LoadCtx struct {
 	Request   *http.Request
 	parents   []any
 	headers   http.Header
+	deps      []string
 }
 
 // Param returns the URL-decoded route parameter value for name and
@@ -153,6 +154,26 @@ func (c *LoadCtx) Header() *HeaderWriter {
 // this directly.
 func (c *LoadCtx) CollectHeaders() http.Header {
 	return c.headers
+}
+
+// Depends declares that this Load's result depends on the given tags.
+// Client-side code can later trigger a re-run by calling
+// `invalidate("tag")` from $app/navigation; the data payload carries the
+// declared tags so the SPA router knows which cached entries to evict.
+//
+// Tags are arbitrary strings; conventional shapes mirror SvelteKit
+// ("posts:list", "user:42"). Duplicates are kept as declared so multiple
+// Depends calls in one Load do not silently coalesce.
+func (c *LoadCtx) Depends(tags ...string) {
+	c.deps = append(c.deps, tags...)
+}
+
+// CollectDeps returns the dep tags declared by this Load via Depends.
+// The pipeline calls this after the full load chain completes and ships
+// the union of tags in the client payload. User code never calls this
+// directly.
+func (c *LoadCtx) CollectDeps() []string {
+	return c.deps
 }
 
 // Speculative reports whether this Load was triggered by a speculative
