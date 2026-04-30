@@ -23,10 +23,10 @@ func BenchmarkServeHTTP_Action(b *testing.B) { runScenario(b, mustAction) }
 func runScenario(b *testing.B, build func(*testing.B) scenarios.Scenario) {
 	b.Helper()
 	sc := build(b)
-	rec := httptest.NewRecorder()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for range b.N {
+		rec := httptest.NewRecorder()
 		_ = sc.Run(rec)
 	}
 }
@@ -47,6 +47,7 @@ func BenchmarkRouteResolution(b *testing.B) {
 // trusted and escaped output, mirroring what page handlers emit.
 func BenchmarkRenderWriter(b *testing.B) {
 	b.ReportAllocs()
+	b.ResetTimer()
 	for range b.N {
 		w := render.Acquire()
 		w.WriteString("<article><h1>post ")
