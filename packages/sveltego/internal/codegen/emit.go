@@ -28,6 +28,21 @@ type Builder struct {
 	// the SSR anchor comments line up with the client-side hydration
 	// metadata table.
 	keyCounter int
+	// nestDepth counts how deep the current emit position sits inside
+	// element wrappers or block constructs ({#if}, {#each}, {#await},
+	// {#key}). Special elements like <svelte:body> may only appear at
+	// the template root and consult this counter to validate placement.
+	nestDepth int
+	// componentMode is true while emitting a Svelte component's Render
+	// body (GenerateComponent). Slot outlets in this mode dispatch to
+	// the per-component Slots struct rather than the layout `children`
+	// closure.
+	componentMode bool
+	// slots collects every <slot> outlet seen during a component render
+	// so GenerateComponent can emit the matching Slots struct field set.
+	// Names are normalized: empty/"default" both map to "Default"; named
+	// slots map to PascalCase identifiers.
+	slots []slotOutlet
 }
 
 // Line appends s as one indented source line.

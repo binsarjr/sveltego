@@ -16,6 +16,8 @@ func emitIfBlock(b *Builder, n *ast.IfBlock) {
 		b.Fail(err)
 		return
 	}
+	b.nestDepth++
+	defer func() { b.nestDepth-- }()
 	b.Linef("if %s {", n.Cond)
 	b.Indent()
 	emitChildren(b, n.Then)
@@ -74,6 +76,8 @@ func emitEachBlock(b *Builder, n *ast.EachBlock) {
 		item = "_"
 	}
 
+	b.nestDepth++
+	defer func() { b.nestDepth-- }()
 	if len(n.Else) > 0 {
 		b.Linef("if len(%s) == 0 {", n.Iter)
 		b.Indent()
@@ -116,7 +120,9 @@ func emitKeyBlock(b *Builder, n *ast.KeyBlock) {
 	open := fmt.Sprintf("<!--sgkey:%d:%s-->", idx, n.Key)
 	closeMarker := fmt.Sprintf("<!--/sgkey:%d-->", idx)
 	b.Linef("w.WriteString(%s)", quoteGo(open))
+	b.nestDepth++
 	emitChildren(b, n.Body)
+	b.nestDepth--
 	b.Linef("w.WriteString(%s)", quoteGo(closeMarker))
 }
 
@@ -155,6 +161,8 @@ func emitAwaitBlock(b *Builder, n *ast.AwaitBlock) {
 	if thenVar == "" || len(n.Then) == 0 {
 		thenVar = "_"
 	}
+	b.nestDepth++
+	defer func() { b.nestDepth-- }()
 	b.Line("{")
 	b.Indent()
 	b.Linef("%s, _err := %s", thenVar, n.Expr)
