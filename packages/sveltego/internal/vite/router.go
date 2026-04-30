@@ -30,6 +30,12 @@ type RouterOptions struct {
 //   - swap of the active component via Svelte 5 unmount/mount.
 //   - a per-navigation AbortController so rapid clicks cancel in-flight
 //     requests cleanly.
+//   - the public $app/navigation surface (goto, invalidate, invalidateAll,
+//     preloadData, preloadCode, pushState, replaceState, beforeNavigate,
+//     afterNavigate, onNavigate) — exported so navigation.ts can re-export
+//     a stable user-facing module.
+//   - declarative prefetch via data-sveltego-prefetch="hover|tap|viewport"
+//     sharing the same payload + chunk cache as click navigation.
 //
 // The route table is read from the hydration payload at boot
 // (window.__sveltego__.manifest); component constructors are loaded via
@@ -45,13 +51,28 @@ func GenerateRouter(opts RouterOptions) string {
 
 	b.WriteString("type Segment = { kind: number; name?: string; value?: string };\n")
 	b.WriteString("type ManifestEntry = { pattern: string; segments: Segment[] };\n")
-	b.WriteString("type Payload = {\n")
+	b.WriteString("export type Payload = {\n")
 	b.WriteString("  routeId: string;\n")
 	b.WriteString("  data: unknown;\n")
 	b.WriteString("  layoutData?: unknown[];\n")
 	b.WriteString("  form: unknown;\n")
 	b.WriteString("  url: string;\n")
 	b.WriteString("  manifest?: ManifestEntry[];\n")
+	b.WriteString("  deps?: string[];\n")
+	b.WriteString("};\n\n")
+
+	b.WriteString("export type GotoOpts = {\n")
+	b.WriteString("  replaceState?: boolean;\n")
+	b.WriteString("  noScroll?: boolean;\n")
+	b.WriteString("  keepFocus?: boolean;\n")
+	b.WriteString("  invalidateAll?: boolean;\n")
+	b.WriteString("  state?: unknown;\n")
+	b.WriteString("};\n\n")
+
+	b.WriteString("export type Navigation = {\n")
+	b.WriteString("  from: { url: URL } | null;\n")
+	b.WriteString("  to: { url: URL };\n")
+	b.WriteString("  type: 'link' | 'goto' | 'popstate' | 'form';\n")
 	b.WriteString("};\n\n")
 
 	b.WriteString("type Loader = () => Promise<{ default: any }>;\n\n")
@@ -83,9 +104,25 @@ const routerRuntime = `let mounted: any = null;
 let manifest: ManifestEntry[] = [];
 let activeAbort: AbortController | null = null;
 const cache = new Map<string, Payload>();
+const chunkCache = new Map<string, Promise<{ default: any }>>();
 const scrolls = new Map<number, [number, number]>();
 let nextHistoryId = 1;
 let currentHistoryId = 0;
+const PREFETCH_CACHE_MAX = 30;
+const PREFETCH_HOVER_DELAY_MS = 150;
+
+const beforeHooks = new Set<(nav: Navigation & { cancel: () => void }) => void>();
+const afterHooks = new Set<(nav: Navigation) => void>();
+const onNavHooks = new Set<(nav: Navigation) => void | Promise<void>>();
+
+// depRegistry maps each cache key to the set of dependency tags
+// declared by that route's Load (via ctx.Depends("…")). invalidate()
+// looks up which keys must be evicted.
+const depRegistry = new Map<string, Set<string>>();
+// activeKey is the cache key of the currently mounted route. invalidate
+// uses it to decide which payloads must be refetched immediately
+// vs simply evicted.
+let activeKey: string = '';
 
 export function startRouter(initial: { component: any; payload: Payload; target: HTMLElement }): void {
   mounted = initial.component;
@@ -95,11 +132,16 @@ export function startRouter(initial: { component: any; payload: Payload; target:
   if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
   currentHistoryId = nextHistoryId++;
   history.replaceState({ sveltego: 1, id: currentHistoryId }, '', initial.payload.url || location.href);
-  cache.set(canonical(location.pathname + location.search), initial.payload);
+  const initKey = canonical(location.pathname + location.search);
+  cache.set(initKey, initial.payload);
+  recordDeps(initKey, initial.payload);
+  activeKey = initKey;
 
   document.addEventListener('click', onClick);
   window.addEventListener('popstate', onPopState);
   window.addEventListener('beforeunload', saveScroll);
+
+  installPrefetch();
 }
 
 function saveScroll(): void {
@@ -120,13 +162,13 @@ function onClick(e: MouseEvent): void {
   e.preventDefault();
   const replace = a.hasAttribute('data-sveltego-replacestate');
   const noscroll = a.hasAttribute('data-sveltego-noscroll');
-  void navigate(url, { replace, noscroll });
+  void navigate(url, { replace, noscroll, type: 'link' });
 }
 
 function onPopState(e: PopStateEvent): void {
   const url = new URL(location.href);
   const id = (e.state && (e.state as { id?: number }).id) || 0;
-  void navigate(url, { replace: true, noscroll: true, fromPop: true, restoreId: id });
+  void navigate(url, { replace: true, noscroll: true, fromPop: true, restoreId: id, type: 'popstate' });
 }
 
 export function shouldNotIntercept(a: HTMLAnchorElement): boolean {
@@ -185,53 +227,66 @@ function literalAhead(segs: Segment[], from: number, parts: string[], at: number
   return parts[at] === next.value;
 }
 
-async function navigate(
-  url: URL,
-  opts: { replace?: boolean; noscroll?: boolean; fromPop?: boolean; restoreId?: number },
-): Promise<void> {
+type NavigateOpts = {
+  replace?: boolean;
+  noscroll?: boolean;
+  fromPop?: boolean;
+  restoreId?: number;
+  state?: unknown;
+  type?: Navigation['type'];
+};
+
+async function navigate(url: URL, opts: NavigateOpts): Promise<void> {
   if (activeAbort) activeAbort.abort();
   // Snapshot the outgoing scroll offset before swapping pages so popstate
   // back/forward can restore it.
   saveScroll();
+
+  const fromURL = new URL(location.href);
+  const navInfo: Navigation = {
+    from: { url: fromURL },
+    to: { url },
+    type: opts.type ?? 'goto',
+  };
+  if (!runBeforeHooks(navInfo)) return;
+
   const ctrl = new AbortController();
   activeAbort = ctrl;
   const key = canonical(url.pathname + url.search);
-  const dataURL = url.pathname.replace(/\/$/, '') + '/__data.json' + url.search;
 
   let payload: Payload | null = cache.get(key) ?? null;
   if (!payload) {
     try {
-      const res = await fetch(dataURL, {
-        signal: ctrl.signal,
-        headers: { 'x-sveltego-data': '1' },
-      });
-      if (!res.ok) {
-        location.assign(url.href);
-        return;
-      }
-      payload = (await res.json()) as Payload;
-      cache.set(key, payload);
+      payload = await fetchPayload(url, ctrl.signal);
     } catch (err) {
       if ((err as { name?: string }).name === 'AbortError') return;
       location.assign(url.href);
       return;
     }
+    if (!payload) {
+      location.assign(url.href);
+      return;
+    }
+    cache.set(key, payload);
+    recordDeps(key, payload);
   }
   if (activeAbort !== ctrl) return;
 
   const entry = matchManifest(url.pathname);
   const routeId = entry?.pattern ?? payload.routeId;
-  const loader = loaders[routeId];
-  if (!loader) {
+  let mod: { default: any };
+  try {
+    mod = await loadChunk(routeId);
+  } catch {
     location.assign(url.href);
     return;
   }
-  const mod = await loader();
   if (activeAbort !== ctrl) return;
 
   if (!opts.fromPop) {
     currentHistoryId = nextHistoryId++;
-    history[opts.replace ? 'replaceState' : 'pushState']({ sveltego: 1, id: currentHistoryId }, '', url.href);
+    const state = { sveltego: 1, id: currentHistoryId, user: opts.state };
+    history[opts.replace ? 'replaceState' : 'pushState'](state, '', url.href);
   } else if (opts.restoreId) {
     currentHistoryId = opts.restoreId;
   }
@@ -251,6 +306,7 @@ async function navigate(
     props: { data: payload.data, form: payload.form ?? null },
   });
   (window as any).__sveltego__ = payload;
+  activeKey = key;
 
   if (opts.fromPop && opts.restoreId) {
     const saved = scrolls.get(opts.restoreId);
@@ -259,9 +315,327 @@ async function navigate(
     window.scrollTo(0, 0);
   }
   activeAbort = null;
+  runAfterHooks(navInfo);
 }
 
 function canonical(pathSearch: string): string {
   return pathSearch.replace(/\/+$/, '') || '/';
+}
+
+function dataURLFor(url: URL): string {
+  return url.pathname.replace(/\/$/, '') + '/__data.json' + url.search;
+}
+
+async function fetchPayload(url: URL, signal?: AbortSignal, speculative = false): Promise<Payload | null> {
+  const headers: Record<string, string> = { 'x-sveltego-data': '1' };
+  if (speculative) headers['x-sveltego-preload'] = '1';
+  const res = await fetch(dataURLFor(url), { signal, headers });
+  if (!res.ok) return null;
+  return (await res.json()) as Payload;
+}
+
+function loadChunk(routeId: string): Promise<{ default: any }> {
+  let p = chunkCache.get(routeId);
+  if (p) return p;
+  const loader = loaders[routeId];
+  if (!loader) return Promise.reject(new Error('no loader for ' + routeId));
+  p = loader();
+  chunkCache.set(routeId, p);
+  return p;
+}
+
+function recordDeps(key: string, payload: Payload): void {
+  if (!payload.deps || payload.deps.length === 0) {
+    depRegistry.delete(key);
+    return;
+  }
+  depRegistry.set(key, new Set(payload.deps));
+}
+
+function runBeforeHooks(nav: Navigation): boolean {
+  let cancelled = false;
+  const cancel = (): void => {
+    cancelled = true;
+  };
+  for (const h of beforeHooks) {
+    try {
+      h({ ...nav, cancel });
+    } catch (_e) {
+      // hook errors must not break navigation
+    }
+    if (cancelled) return false;
+  }
+  return true;
+}
+
+function runAfterHooks(nav: Navigation): void {
+  for (const h of afterHooks) {
+    try {
+      h(nav);
+    } catch (_e) {
+      // hook errors must not break navigation
+    }
+  }
+  for (const h of onNavHooks) {
+    try {
+      void h(nav);
+    } catch (_e) {
+      // hook errors must not break navigation
+    }
+  }
+}
+
+// goto programmatically navigates to url. Mirrors SvelteKit's
+// $app/navigation.goto. When invalidateAll is true every cached payload
+// is dropped before the fetch so stale data cannot serve.
+export async function goto(url: string | URL, opts: GotoOpts = {}): Promise<void> {
+  const target = typeof url === 'string' ? new URL(url, location.href) : url;
+  if (target.origin !== location.origin) {
+    location.assign(target.href);
+    return;
+  }
+  if (opts.invalidateAll) {
+    invalidateAll();
+  }
+  await navigate(target, {
+    replace: opts.replaceState,
+    noscroll: opts.noScroll,
+    state: opts.state,
+    type: 'goto',
+  });
+}
+
+// invalidate refetches load data for every cached entry whose dep set
+// matches target. Predicate form lets callers express patterns; string
+// form is exact-match against the dep tag emitted by ctx.Depends.
+export async function invalidate(target: string | ((url: URL) => boolean)): Promise<void> {
+  const matchFn: (key: string, deps: Set<string>) => boolean =
+    typeof target === 'function'
+      ? (key) => target(new URL(key, location.origin))
+      : (_k, deps) => deps.has(target);
+
+  const stale: string[] = [];
+  for (const [key, deps] of depRegistry) {
+    if (matchFn(key, deps)) stale.push(key);
+  }
+  if (stale.length === 0) return;
+
+  for (const key of stale) {
+    cache.delete(key);
+    depRegistry.delete(key);
+  }
+
+  if (stale.includes(activeKey)) {
+    await refetchActive();
+  }
+}
+
+// invalidateAll drops every cached payload and re-runs the active route.
+export async function invalidateAll(): Promise<void> {
+  cache.clear();
+  depRegistry.clear();
+  await refetchActive();
+}
+
+async function refetchActive(): Promise<void> {
+  const url = new URL(location.href);
+  try {
+    const payload = await fetchPayload(url);
+    if (!payload) return;
+    const key = canonical(url.pathname + url.search);
+    cache.set(key, payload);
+    recordDeps(key, payload);
+    if (mounted && (mounted as { $set?: (p: unknown) => void }).$set) {
+      (mounted as { $set: (p: unknown) => void }).$set({
+        data: payload.data,
+        form: payload.form ?? null,
+      });
+    }
+    (window as any).__sveltego__ = payload;
+  } catch (_e) {
+    // network failure: leave existing payload in place
+  }
+}
+
+// preloadData fetches and caches the data payload for href without
+// navigating. Subsequent goto/click reuses the cached payload.
+export async function preloadData(href: string | URL): Promise<void> {
+  const url = typeof href === 'string' ? new URL(href, location.href) : href;
+  if (url.origin !== location.origin) return;
+  const key = canonical(url.pathname + url.search);
+  if (cache.has(key)) return;
+  if (cache.size >= PREFETCH_CACHE_MAX) {
+    const oldest = cache.keys().next().value;
+    if (oldest !== undefined) {
+      cache.delete(oldest);
+      depRegistry.delete(oldest);
+    }
+  }
+  try {
+    const payload = await fetchPayload(url, undefined, true);
+    if (payload) {
+      cache.set(key, payload);
+      recordDeps(key, payload);
+    }
+  } catch (_e) {
+    // best-effort prefetch: swallow errors
+  }
+}
+
+// preloadCode warms the dynamic-import chunk for the route matching href
+// so click navigation runs no extra round-trip.
+export async function preloadCode(href: string | URL): Promise<void> {
+  const url = typeof href === 'string' ? new URL(href, location.href) : href;
+  if (url.origin !== location.origin) return;
+  const entry = matchManifest(url.pathname);
+  if (!entry) return;
+  try {
+    await loadChunk(entry.pattern);
+  } catch (_e) {
+    // best-effort prefetch: swallow errors
+  }
+}
+
+// pushState updates the URL bar and stores per-entry user state without
+// re-running Load. Use for shallow routing (modal overlays, tabs).
+export function pushState(url: string | URL, state: unknown): void {
+  const target = typeof url === 'string' ? new URL(url, location.href) : url;
+  currentHistoryId = nextHistoryId++;
+  history.pushState({ sveltego: 1, id: currentHistoryId, user: state }, '', target.href);
+}
+
+// replaceState updates the URL bar in place without re-running Load.
+export function replaceState(url: string | URL, state: unknown): void {
+  const target = typeof url === 'string' ? new URL(url, location.href) : url;
+  history.replaceState({ sveltego: 1, id: currentHistoryId, user: state }, '', target.href);
+}
+
+// beforeNavigate registers fn to run before each navigation. fn may call
+// nav.cancel() to abort. Returns an unsubscribe function.
+export function beforeNavigate(fn: (nav: Navigation & { cancel: () => void }) => void): () => void {
+  beforeHooks.add(fn);
+  return () => beforeHooks.delete(fn);
+}
+
+// afterNavigate registers fn to run after each successful navigation.
+// Returns an unsubscribe function.
+export function afterNavigate(fn: (nav: Navigation) => void): () => void {
+  afterHooks.add(fn);
+  return () => afterHooks.delete(fn);
+}
+
+// onNavigate registers fn to run for each successful navigation. fn may
+// return a Promise; the router does not await it. Returns an unsubscribe.
+export function onNavigate(fn: (nav: Navigation) => void | Promise<void>): () => void {
+  onNavHooks.add(fn);
+  return () => onNavHooks.delete(fn);
+}
+
+// installPrefetch wires the data-sveltego-prefetch="hover|tap|viewport"
+// triggers. Hover and tap react to delegated events on document; viewport
+// uses an IntersectionObserver that picks up matching links on first
+// scan and on every DOM mutation under <body>.
+function installPrefetch(): void {
+  const hoverTimers = new WeakMap<HTMLAnchorElement, ReturnType<typeof setTimeout>>();
+
+  document.addEventListener('mouseover', (e) => {
+    const a = anchorFor(e.target);
+    if (!a) return;
+    if (resolvePrefetchMode(a) !== 'hover') return;
+    if (hoverTimers.has(a)) return;
+    const t = setTimeout(() => {
+      hoverTimers.delete(a);
+      void prefetchAnchor(a);
+    }, PREFETCH_HOVER_DELAY_MS);
+    hoverTimers.set(a, t);
+  });
+  document.addEventListener('mouseout', (e) => {
+    const a = anchorFor(e.target);
+    if (!a) return;
+    const t = hoverTimers.get(a);
+    if (t) {
+      clearTimeout(t);
+      hoverTimers.delete(a);
+    }
+  });
+  document.addEventListener('focusin', (e) => {
+    const a = anchorFor(e.target);
+    if (!a) return;
+    if (resolvePrefetchMode(a) !== 'hover') return;
+    void prefetchAnchor(a);
+  });
+  document.addEventListener('pointerdown', (e) => {
+    const a = anchorFor(e.target);
+    if (!a) return;
+    if (resolvePrefetchMode(a) !== 'tap') return;
+    void prefetchAnchor(a);
+  });
+  document.addEventListener('touchstart', (e) => {
+    const a = anchorFor(e.target);
+    if (!a) return;
+    if (resolvePrefetchMode(a) !== 'tap') return;
+    void prefetchAnchor(a);
+  }, { passive: true });
+
+  installViewportPrefetch();
+}
+
+function installViewportPrefetch(): void {
+  if (typeof IntersectionObserver === 'undefined') return;
+  const seen = new WeakSet<HTMLAnchorElement>();
+  const obs = new IntersectionObserver(
+    (entries) => {
+      for (const en of entries) {
+        if (!en.isIntersecting) continue;
+        const a = en.target as HTMLAnchorElement;
+        obs.unobserve(a);
+        void prefetchAnchor(a);
+      }
+    },
+    { rootMargin: '64px' },
+  );
+
+  const scan = (): void => {
+    const links = document.querySelectorAll<HTMLAnchorElement>('a[data-sveltego-prefetch="viewport"]');
+    links.forEach((a) => {
+      if (seen.has(a)) return;
+      seen.add(a);
+      obs.observe(a);
+    });
+  };
+  scan();
+  if (typeof MutationObserver !== 'undefined') {
+    const mo = new MutationObserver(scan);
+    mo.observe(document.body, { subtree: true, childList: true });
+  }
+}
+
+function anchorFor(target: EventTarget | null): HTMLAnchorElement | null {
+  if (!(target instanceof Element)) return null;
+  return target.closest('a[href]') as HTMLAnchorElement | null;
+}
+
+type PrefetchMode = 'hover' | 'tap' | 'viewport' | 'off';
+
+function resolvePrefetchMode(a: HTMLAnchorElement): PrefetchMode {
+  if (saveDataEnabled()) return 'off';
+  if (shouldNotIntercept(a)) return 'off';
+  const url = new URL(a.href, location.href);
+  if (url.origin !== location.origin) return 'off';
+  if (!matchManifest(url.pathname)) return 'off';
+  const own = a.dataset.sveltegoPrefetch as PrefetchMode | undefined;
+  if (own) return own;
+  const body = (document.body.dataset.sveltegoPrefetch as PrefetchMode | undefined) ?? 'hover';
+  return body;
+}
+
+function saveDataEnabled(): boolean {
+  const conn = (navigator as { connection?: { saveData?: boolean } }).connection;
+  return !!(conn && conn.saveData);
+}
+
+async function prefetchAnchor(a: HTMLAnchorElement): Promise<void> {
+  const url = new URL(a.href, location.href);
+  await Promise.all([preloadData(url), preloadCode(url)]);
 }
 `

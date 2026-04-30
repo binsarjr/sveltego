@@ -473,6 +473,10 @@ func emitClientRouter(projectRoot, outDir string, routeMap map[string]string) er
 	if err := os.WriteFile(target, []byte(src), genFileMode); err != nil {
 		return fmt.Errorf("codegen: write client router %s: %w", target, err)
 	}
+	navTarget := filepath.Join(dir, "navigation.ts")
+	if err := os.WriteFile(navTarget, []byte(vite.GenerateNavigationModule()), genFileMode); err != nil {
+		return fmt.Errorf("codegen: write client navigation %s: %w", navTarget, err)
+	}
 	return nil
 }
 

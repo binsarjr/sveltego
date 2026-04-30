@@ -504,6 +504,22 @@ func TestBuild_EmitsSPARouterModule(t *testing.T) {
 	if !bytes.Contains(idEntryBytes, []byte(`from "../../../__router/router"`)) {
 		t.Errorf("id entry.ts router import path wrong:\n%s", idEntryBytes)
 	}
+
+	navPath := filepath.Join(root, ".gen", "client", "__router", "navigation.ts")
+	navBytes, err := os.ReadFile(navPath)
+	if err != nil {
+		t.Fatalf("navigation.ts not emitted: %v", err)
+	}
+	for _, want := range []string{
+		"goto,",
+		"invalidate,",
+		"preloadData,",
+		"from './router'",
+	} {
+		if !bytes.Contains(navBytes, []byte(want)) {
+			t.Errorf("navigation.ts missing %q:\n%s", want, navBytes)
+		}
+	}
 }
 
 func TestBuild_EmbedSkippedWhenNoAssets(t *testing.T) {
