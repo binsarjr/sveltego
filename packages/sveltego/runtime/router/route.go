@@ -23,6 +23,11 @@ type ServerHandlers map[string]http.HandlerFunc
 // returns the data threaded into the page render.
 type LoadHandler func(ctx *kit.LoadCtx) (any, error)
 
+// LayoutLoadHandler runs the user-written Load() from +layout.server.go.
+// One handler per layout in the chain; nil entries denote layouts without
+// a sibling layout.server.go and are skipped by the pipeline.
+type LayoutLoadHandler func(ctx *kit.LoadCtx) (any, error)
+
 // ActionsHandler returns the typed Actions value declared in
 // +page.server.go. The router keeps it as `any` to remain type-erased;
 // the dispatcher casts back to the concrete type.
@@ -50,4 +55,9 @@ type Route struct {
 	// outer -> inner. The server pipeline composes them so the outermost
 	// layout owns the document chrome and the page renders innermost.
 	LayoutChain []LayoutHandler
+	// LayoutLoaders runs in lockstep with LayoutChain. Index i holds the
+	// loader for layout chain[i] or nil when that layout has no
+	// +layout.server.go. The pipeline invokes them outer -> inner before
+	// the page Load and pushes each result onto the LoadCtx parent stack.
+	LayoutLoaders []LayoutLoadHandler
 }

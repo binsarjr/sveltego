@@ -14,6 +14,11 @@ import "github.com/binsarjr/sveltego/runtime/router"
 // layout dir's encoded gen-tree package path (e.g. ".gen/routes",
 // ".gen/routes/_g_app"). It enables the manifest emitter to import the
 // generated layout package without re-deriving the encoding.
+//
+// LayoutServerFiles also runs in lockstep with LayoutChain. Each entry is
+// the absolute path to <layoutDir>/layout.server.go when that file exists,
+// otherwise the empty string. The codegen emitter uses these paths to
+// mirror layout server sources and emit per-layout Load wires.
 type ScannedRoute struct {
 	Pattern            string
 	Segments           []router.Segment
@@ -29,6 +34,7 @@ type ScannedRoute struct {
 	HasServer          bool
 	LayoutChain        []string
 	LayoutPackagePaths []string
+	LayoutServerFiles  []string
 }
 
 // DiscoveredMatcher names a Go file under src/params/ that exports

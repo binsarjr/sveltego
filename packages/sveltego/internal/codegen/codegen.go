@@ -22,6 +22,9 @@ type Options struct {
 type LayoutOptions struct {
 	// PackageName is written verbatim into the generated `package` clause.
 	PackageName string
+	// ServerFilePath optionally points at a sibling layout.server.go whose
+	// Load() inline struct return is used to infer LayoutData fields.
+	ServerFilePath string
 }
 
 // Generate lowers frag to Go source for a Page.Render method. The returned
@@ -105,8 +108,12 @@ func GenerateLayout(frag *ast.Fragment, opts LayoutOptions) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	layoutData, err := inferPageData(opts.ServerFilePath)
+	if err != nil {
+		return nil, err
+	}
 
-	imports := mergeImports(scripts.Imports, nil)
+	imports := mergeImports(scripts.Imports, layoutData.Imports)
 
 	var b Builder
 	b.hasChildren = true
@@ -129,7 +136,7 @@ func GenerateLayout(frag *ast.Fragment, opts LayoutOptions) ([]byte, error) {
 
 	b.Line("type Layout struct{}")
 	b.Line("")
-	b.Line("type LayoutData = struct{}")
+	emitLayoutDataAlias(&b, layoutData.Fields)
 	b.Line("")
 	b.Line("func (l Layout) Render(w *render.Writer, ctx *kit.RenderCtx, data LayoutData, children func(*render.Writer) error) error {")
 	b.Indent()
@@ -150,6 +157,24 @@ func GenerateLayout(frag *ast.Fragment, opts LayoutOptions) ([]byte, error) {
 		return nil, fmt.Errorf("codegen: format generated source: %w", err)
 	}
 	return restoreRunesBytes(out), nil
+}
+
+// emitLayoutDataAlias writes `type LayoutData = struct{...}` mirroring
+// the alias-form rationale on emitPageDataStruct: type identity between
+// the user's inline struct literal and the LayoutData symbol asserted
+// by the manifest adapter must be preserved.
+func emitLayoutDataAlias(b *Builder, fields []pageDataField) {
+	if len(fields) == 0 {
+		b.Line("type LayoutData = struct{}")
+		return
+	}
+	b.Line("type LayoutData = struct {")
+	b.Indent()
+	for _, fd := range fields {
+		b.Linef("%s %s", fd.Name, fd.Type)
+	}
+	b.Dedent()
+	b.Line("}")
 }
 
 // mergeImports unions framework imports with script + pagedata imports,

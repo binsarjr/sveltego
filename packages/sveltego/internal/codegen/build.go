@@ -140,8 +140,17 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 			}
 			pkgPath := route.LayoutPackagePaths[i]
 			pkgName := layoutPackageName(pkgPath)
-			if err := emitLayout(opts.ProjectRoot, outDir, layoutDir, pkgPath, pkgName); err != nil {
+			serverFile := ""
+			if i < len(route.LayoutServerFiles) {
+				serverFile = route.LayoutServerFiles[i]
+			}
+			if err := emitLayout(opts.ProjectRoot, outDir, layoutDir, pkgPath, pkgName, serverFile); err != nil {
 				return nil, err
+			}
+			if serverFile != "" {
+				if err := emitLayoutMirrorAndWire(opts.ProjectRoot, outDir, modulePath, pkgPath, pkgName, serverFile); err != nil {
+					return nil, err
+				}
 			}
 			emittedLayouts[layoutDir] = struct{}{}
 		}
@@ -399,8 +408,10 @@ func dirExists(path string) bool {
 // share the directory with any +page.svelte / wire.gen.go for the same
 // dir; the distinct filename keeps them in separate generated artifacts.
 // The leading character must not be "_" because Go's build system
-// silently ignores files whose name starts with "_".
-func emitLayout(projectRoot, outDir, layoutDir, pkgPath, pkgName string) error {
+// silently ignores files whose name starts with "_". serverFile, when
+// non-empty, points at a sibling layout.server.go whose Load() inline
+// struct return is used to infer LayoutData fields.
+func emitLayout(projectRoot, outDir, layoutDir, pkgPath, pkgName, serverFile string) error {
 	layoutPath := filepath.Join(layoutDir, "+layout.svelte")
 	src, err := os.ReadFile(layoutPath) //nolint:gosec // path comes from scanner walk under projectRoot
 	if err != nil {
@@ -410,7 +421,7 @@ func emitLayout(projectRoot, outDir, layoutDir, pkgPath, pkgName string) error {
 	if len(perrs) > 0 {
 		return fmt.Errorf("codegen: parse %s: %w", layoutPath, perrs)
 	}
-	out, err := GenerateLayout(frag, LayoutOptions{PackageName: pkgName})
+	out, err := GenerateLayout(frag, LayoutOptions{PackageName: pkgName, ServerFilePath: serverFile})
 	if err != nil {
 		return fmt.Errorf("codegen: generate %s: %w", layoutPath, err)
 	}
@@ -423,6 +434,34 @@ func emitLayout(projectRoot, outDir, layoutDir, pkgPath, pkgName string) error {
 		return fmt.Errorf("codegen: write %s: %w", target, err)
 	}
 	return nil
+}
+
+// emitLayoutMirrorAndWire writes the user-source mirror for one layout
+// server file and the adjacent wire_layout.gen.go that the manifest
+// references. The mirror lives at <projectRoot>/<outDir>/layoutsrc/
+// <encodedSubpath>/layout_server.go with the build constraint stripped
+// and the package clause rewritten to <encodedPackageName>. The wire
+// file lives at <projectRoot>/<outDir>/<encodedSubpath>/
+// wire_layout.gen.go and re-exports Load wrapped to satisfy
+// router.LayoutLoadHandler.
+func emitLayoutMirrorAndWire(projectRoot, outDir, modulePath, pkgPath, pkgName, serverFile string) error {
+	encodedSub := strings.TrimPrefix(pkgPath, ".gen/")
+
+	usf := userSourceFile{
+		UserPath:    serverFile,
+		MirrorPath:  filepath.Join(projectRoot, outDir, "layoutsrc", filepath.FromSlash(encodedSub), "layout_server.go"),
+		PackageName: pkgName,
+	}
+	if err := mirrorUserSource(&usf); err != nil {
+		return err
+	}
+
+	wireDir := filepath.Join(projectRoot, outDir, filepath.FromSlash(encodedSub))
+	return emitLayoutWire(outDir, modulePath, mirrorRoute{
+		encodedSubpath: encodedSub,
+		packageName:    pkgName,
+		wireDir:        wireDir,
+	})
 }
 
 // layoutPackageName extracts the directory's package name from a

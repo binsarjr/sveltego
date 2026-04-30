@@ -491,6 +491,129 @@ func TestServeHTTP_layoutChainComposition(t *testing.T) {
 	}
 }
 
+// TestServeHTTP_layoutLoadParentChain covers Phase 0k-B: layout loaders
+// run outer→inner, each pushing onto the LoadCtx parent stack so the
+// next layer (and the page Load) read their direct parent through
+// ctx.Parent. The render side receives each layout's own data, not the
+// page's.
+func TestServeHTTP_layoutLoadParentChain(t *testing.T) {
+	t.Parallel()
+	type rootData struct{ User string }
+	type sectionData struct {
+		User string
+		Org  string
+	}
+
+	rootLoad := func(_ *kit.LoadCtx) (any, error) {
+		return rootData{User: "alice"}, nil
+	}
+	sectionLoad := func(ctx *kit.LoadCtx) (any, error) {
+		parent, ok := ctx.Parent().(rootData)
+		if !ok {
+			return nil, errors.New("section: missing root parent")
+		}
+		return sectionData{User: parent.User, Org: "acme"}, nil
+	}
+	pageLoad := func(ctx *kit.LoadCtx) (any, error) {
+		parent, ok := ctx.Parent().(sectionData)
+		if !ok {
+			return nil, errors.New("page: missing section parent")
+		}
+		return parent.User + "@" + parent.Org, nil
+	}
+
+	rootLayout := func(w *render.Writer, _ *kit.RenderCtx, data any, children func(*render.Writer) error) error {
+		d, _ := data.(rootData)
+		w.WriteString("<root user=" + d.User + ">")
+		if err := children(w); err != nil {
+			return err
+		}
+		w.WriteString("</root>")
+		return nil
+	}
+	sectionLayout := func(w *render.Writer, _ *kit.RenderCtx, data any, children func(*render.Writer) error) error {
+		d, _ := data.(sectionData)
+		w.WriteString("<section org=" + d.Org + ">")
+		if err := children(w); err != nil {
+			return err
+		}
+		w.WriteString("</section>")
+		return nil
+	}
+	page := func(w *render.Writer, _ *kit.RenderCtx, data any) error {
+		s, _ := data.(string)
+		w.WriteString("<p>" + s + "</p>")
+		return nil
+	}
+
+	srv := newTestServer(t, []router.Route{{
+		Pattern:     "/",
+		Segments:    segmentsFor("/"),
+		Page:        page,
+		Load:        pageLoad,
+		LayoutChain: []router.LayoutHandler{rootLayout, sectionLayout},
+		LayoutLoaders: []router.LayoutLoadHandler{
+			rootLoad,
+			sectionLoad,
+		},
+	}})
+	ts := httptest.NewServer(srv)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status: got %d want 200; body=%s", resp.StatusCode, body)
+	}
+	want := "<root user=alice><section org=acme><p>alice@acme</p></section></root>"
+	if !strings.Contains(string(body), want) {
+		t.Fatalf("expected layered render %q in body:\n%s", want, body)
+	}
+}
+
+// TestServeHTTP_layoutLoadErrorShortCircuits asserts that a layout
+// loader's error propagates through handleLoadError exactly like a page
+// Load error. The page Load and any inner layout Load must not run.
+func TestServeHTTP_layoutLoadErrorShortCircuits(t *testing.T) {
+	t.Parallel()
+	pageRan := false
+	page := func(w *render.Writer, _ *kit.RenderCtx, _ any) error {
+		pageRan = true
+		w.WriteString("page")
+		return nil
+	}
+	failing := func(_ *kit.LoadCtx) (any, error) {
+		return nil, errors.New("layout load boom")
+	}
+	srv := newTestServer(t, []router.Route{{
+		Pattern:     "/",
+		Segments:    segmentsFor("/"),
+		Page:        page,
+		LayoutChain: []router.LayoutHandler{func(w *render.Writer, _ *kit.RenderCtx, _ any, c func(*render.Writer) error) error { return c(w) }},
+		LayoutLoaders: []router.LayoutLoadHandler{
+			failing,
+		},
+	}})
+	ts := httptest.NewServer(srv)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("layout load error: got %d want 500", resp.StatusCode)
+	}
+	if pageRan {
+		t.Fatal("page rendered despite layout load failure")
+	}
+}
+
 func TestServeHTTP_layoutErrorAborts(t *testing.T) {
 	t.Parallel()
 	page := func(w *render.Writer, _ *kit.RenderCtx, _ any) error {
