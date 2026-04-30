@@ -1,12 +1,12 @@
-go 1.23
+go 1.25
 
 use (
 	./bench
 	./benchmarks
 	./packages/adapter-auto
 	./packages/adapter-cloudflare
-	./packages/adapter-fastly
 	./packages/adapter-docker
+	./packages/adapter-fastly
 	./packages/adapter-lambda
 	./packages/adapter-server
 	./packages/adapter-static
