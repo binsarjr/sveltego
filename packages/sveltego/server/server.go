@@ -82,6 +82,11 @@ type Config struct {
 	// after Init returns a non-nil error. An empty value falls back to a
 	// built-in error page.
 	InitErrorHTML string
+	// CronTasks is the optional list of scheduled background tasks. Each
+	// task starts a goroutine on server init that ticks at the parsed
+	// interval until the server shuts down. Tasks are skipped when their
+	// Spec fails to parse; the error is logged and startup continues.
+	CronTasks []kit.CronTask
 }
 
 // Server is the http.Handler implementation that drives a sveltego app.
@@ -91,6 +96,7 @@ type Server struct {
 	hooks         kit.Hooks
 	csp           kit.CSPConfig
 	streamTimeout time.Duration
+	cronTasks     []kit.CronTask
 
 	shellHead string
 	shellMid  string
@@ -109,8 +115,9 @@ type Server struct {
 	// initErrorHTML is served with 500 when Init returned an error.
 	initErrorHTML string
 
-	mu      sync.Mutex
-	httpSrv *http.Server
+	mu         sync.Mutex
+	httpSrv    *http.Server
+	cronCancel context.CancelFunc
 }
 
 // New validates cfg and returns a Server ready for use as an http.Handler.
@@ -165,6 +172,7 @@ func New(cfg Config) (*Server, error) {
 		hooks:           cfg.Hooks.WithDefaults(),
 		csp:             cfg.CSP,
 		streamTimeout:   streamTimeout,
+		cronTasks:       cfg.CronTasks,
 		shellHead:       head,
 		shellMid:        mid,
 		shellTail:       tail,
@@ -270,11 +278,11 @@ func (s *Server) RunInitAsync(ctx context.Context) {
 func (s *Server) runInitAsync(ctx context.Context, done chan struct{}) {
 	err := s.hooks.Init(ctx)
 	if err != nil {
-		logFn := s.Logger.Error
-		logFn("server: init hook failed", logKeyError, err.Error())
+		s.Logger.Error("server: init hook failed", logKeyError, err.Error())
 		s.initState.Store(initFailed)
 	} else {
 		s.initState.Store(initReady)
+		s.startCron(ctx)
 	}
 	close(done)
 }
@@ -293,6 +301,7 @@ func (s *Server) Init(ctx context.Context) error {
 	}
 	s.initState.Store(initReady)
 	close(done)
+	s.startCron(ctx)
 	return nil
 }
 
@@ -305,12 +314,31 @@ func writeInitFallback(w http.ResponseWriter, status int, body string) {
 	_, _ = w.Write([]byte(body))
 }
 
+// startCron derives a child context from parent and launches background
+// cron goroutines. It records the cancel func so Shutdown can stop them.
+// No-op when CronTasks is empty.
+func (s *Server) startCron(parent context.Context) {
+	if len(s.cronTasks) == 0 {
+		return
+	}
+	cronCtx, cancel := context.WithCancel(parent)
+	s.mu.Lock()
+	s.cronCancel = cancel
+	s.mu.Unlock()
+	runCronTasks(cronCtx, s.cronTasks, s.Logger)
+}
+
 // Shutdown gracefully stops a server started via ListenAndServe.
-// In-flight requests complete; new connections are refused.
+// In-flight requests complete; new connections are refused. Any running
+// cron goroutines are stopped via context cancellation before returning.
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.mu.Lock()
 	srv := s.httpSrv
+	cancel := s.cronCancel
 	s.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
 	if srv == nil {
 		return nil
 	}
