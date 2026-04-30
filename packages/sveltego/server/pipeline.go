@@ -605,14 +605,14 @@ func (s *Server) renderStreaming(w http.ResponseWriter, r *http.Request, ev *kit
 		if ctx.Err() != nil {
 			s.cancelStreams(streams)
 			s.Logger.DebugContext(ctx, "streaming: client disconnected mid-stream",
-				slog.String("stream_id", f.id))
+				slog.Uint64("stream_id", f.id))
 			return kit.ErrClientGone
 		}
 		if err := buf.FlushTo(w); err != nil {
 			if isClientGone(ctx, err) {
 				s.cancelStreams(streams)
 				s.Logger.DebugContext(ctx, "streaming: client disconnected mid-stream (write)",
-					slog.String("stream_id", f.id))
+					slog.Uint64("stream_id", f.id))
 				return kit.ErrClientGone
 			}
 			return err
