@@ -3,6 +3,9 @@ set -euo pipefail
 
 staged_all=$(git diff --cached --name-only --diff-filter=ACM || true)
 staged_go=$(echo "$staged_all" | grep -E '\.go$' || true)
+# Files under testdata/ are fixture sources, not Go packages — skip in
+# lint and test steps. They still get formatted by gofumpt/goimports.
+testable_go=$(echo "$staged_go" | grep -vE '(^|/)testdata/' || true)
 
 if [[ -n "$staged_go" ]]; then
   echo "→ gofumpt"
@@ -14,12 +17,24 @@ if [[ -n "$staged_go" ]]; then
   echo "→ re-staging formatted files"
   echo "$staged_go" | xargs git add
 
-  echo "→ golangci-lint (delta only)"
-  golangci-lint run --new-from-rev=HEAD --fix
+  if [[ -n "$testable_go" ]]; then
+    echo "→ golangci-lint (delta only, per touched module)"
+    # Workspace root has no go.mod; running ./... there fails type-checking.
+    # Iterate over go.work modules and lint only those touched by this commit.
+    while IFS= read -r mod_dir; do
+      [[ -z "$mod_dir" ]] && continue
+      rel="${mod_dir#$PWD/}"
+      [[ "$rel" == "$mod_dir" ]] && continue
+      if echo "$testable_go" | grep -qE "^$rel/"; then
+        echo "  • $rel"
+        (cd "$mod_dir" && golangci-lint run --new-from-rev=HEAD --fix ./...)
+      fi
+    done < <(go list -m -f '{{.Dir}}' 2>/dev/null)
+  fi
 fi
 
 echo "→ go test (changed packages)"
-changed_pkgs=$(echo "$staged_go" | xargs -n1 dirname | sort -u | sed 's|^|./|' || true)
+changed_pkgs=$(echo "$testable_go" | xargs -n1 dirname 2>/dev/null | sort -u | sed 's|^|./|' || true)
 if [[ -n "$changed_pkgs" ]]; then
   go test -short -race $changed_pkgs
 fi
