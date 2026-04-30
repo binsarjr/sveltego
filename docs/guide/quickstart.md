@@ -31,7 +31,7 @@ hello/
   src/
     routes/
       +page.svelte
-      +page.server.go      # //go:build sveltego
+      page.server.go       # //go:build sveltego (no `+` prefix on user .go files)
     hooks.server.go        # //go:build sveltego (optional)
     lib/                   # $lib alias target
   go.mod
@@ -53,7 +53,7 @@ hello/
 <h1>{Data.Greeting}</h1>
 ```
 
-`src/routes/+page.server.go`:
+`src/routes/page.server.go` (no `+` prefix — user `.go` files use the `//go:build sveltego` tag instead, so the standard Go toolchain ignores them):
 
 ```go
 //go:build sveltego

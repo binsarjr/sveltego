@@ -22,7 +22,7 @@ The effort is comparable but the rewrite trade buys us performance, deploy simpl
 
 Tracked as GitHub milestones at `binsarjr/sveltego`. Each issue carries Summary, Background, Goals, Non-Goals, Detailed Design, Acceptance Criteria, Testing Strategy, Risks, Dependencies, References.
 
-### MVP (37 issues) — minimum to render a page
+### MVP (42 issues) — minimum to render a page
 
 Foundation layer first: monorepo layout RFC (#95), code style + stability RFCs (#96, #97), lint + hooks + release-please + CI + PR template + AI doc sync + golden tests + bench gate (#98–105). Then technical RFCs (parser strategy, expression syntax, file convention, codegen layout — #1–4), then bootstrap (Go module, CLI), then the core pipeline:
 
@@ -39,7 +39,7 @@ Foundation layer first: monorepo layout RFC (#95), code style + stability RFCs (
 
 Layout chain rendering, `layout.server.go` parent data flow, `Handle` / `HandleError` / `HandleFetch` / `Reroute` / `Init`, `+error.svelte` boundaries, `server.go` REST endpoints, `Actions()` map with form binding (urlencoded + multipart), `kit.Cookies`, `kit.Redirect / Fail / Error` sentinel helpers, route groups `(group)/` + layout reset `@`, page options (`Prerender`, `SSR`, `CSR`, `TrailingSlash`), env var convention (`$env/static`, `$env/dynamic`).
 
-### v0.3 (13 issues) — Client SPA & Hydration
+### v0.3 (21 issues) — Client SPA & Hydration
 
 Vite integration for the Svelte client bundle, `window.__sveltego__` hydration payload, client hydrate runtime, SPA router (link interception + history), `__data.json` per-route endpoint, `use:enhance` for forms, prefetch on hover/viewport, precompressed static asset serving, `sveltego dev` with HMR. Full `$app/navigation` API (`goto`, `invalidate`, `preload`, `pushState`), Snapshot API for cross-nav state, typed `kit.Link` with route params, `kit.Asset` with hashed static URLs.
 
@@ -47,7 +47,7 @@ Vite integration for the Svelte client bundle, `window.__sveltego__` hydration p
 
 Runes: `$props`, `$state`, `$derived`, `$effect`, `$bindable`. Snippets and `{@render}`. Legacy slots (default + named, with slot props). Special elements: `<svelte:head>`, `<svelte:body>` / `<svelte:window>` / `<svelte:document>`, `<svelte:component>`, `<svelte:options>`. CSS scope hash matching upstream. `{@html}`, `{@const}`, `{#await}`, `{#key}`. Nested component import and rendering. Compile-time a11y warnings.
 
-### v1.0 (14 issues) — Production Ready
+### v1.0 (25 issues) — Production Ready
 
 Benchmark suite vs adapter-bun with nightly regression gate. Docs site (Vitepress). Blog and dashboard examples. Streaming responses. Prerender / SSG mode. CSP nonce injection. CI (GitHub Actions). Release pipeline (release-please + GoReleaser). LSP for `.svelte` with Go expressions. Sitemap/robots helpers, image optimization (`<Image>`), service worker convention, deploy adapters (server, docker, static, lambda, cloudflare).
 
@@ -55,9 +55,17 @@ Benchmark suite vs adapter-bun with nightly regression gate. Docs site (Vitepres
 
 `llms.txt` + `llms-full.txt` for AI agents. `sveltego mcp` Model Context Protocol server (`search_docs`, `lookup_api`, `validate_template`, `scaffold_route`). Markdown-first docs with copy-for-LLM buttons. AI assistant project templates (`CLAUDE.md`, `.cursorrules`, `AGENTS.md`, copilot instructions) wired into `sveltego init --ai`. Provenance comments in generated `.gen/*.go`. AI-assisted development guide page.
 
+### v0.5 (23 issues) — SvelteKit-parity catch-up
+
+Tracks upstream `sveltejs/kit` enhancements that landed after the initial roadmap snapshot: `kit.After()`, `HandleAction` global middleware, `Init()` error fallback, short-circuiting `HandleError`, `LoadCtx.Speculative()`, typed `kit.HTTPError`, headers/cookies on error responses, `kit.RedirectReload`, `LoadCtx.RawParam()`, codegen `RouteID` constants, dev-only code stripping, etc. Also includes the cookie-session auth core (`auth/cookiesession`) — separate package modeled on `svelte-kit-cookie-session`.
+
+### v0.6 (40 issues) — Authentication
+
+Full `sveltego-auth` package modeled on the better-auth feature set: master plan (#155), package scaffold, storage adapters (memory, `database/sql`, pgx), session token format + DB-backed strategy, encrypted-cookie session strategy, password hashing (argon2id), email/password flows, email verification, password reset, mailer + SMS adapters, magic-link, OTP, TOTP, OAuth core + provider adapters, RBAC primitives, audit log, 2FA, account linking, etc.
+
 ### Standalone
 
-- #94 RFC: explicit non-goals (universal load, WS server, vercel-style adapter, etc.) — sets boundaries before contributors propose them.
+- #94 (closed) — non-goals RFC retained as ADR 0005; the GitHub issue is unmilestoned.
 
 ## Decision log (high-level)
 
@@ -74,7 +82,7 @@ Benchmark suite vs adapter-bun with nightly regression gate. Docs site (Vitepres
 - [x] Direction confirmed (Go-native rewrite, not JS embed)
 - [x] Repo created at `binsarjr/sveltego`
 - [x] Issue templates (feature, RFC, bug)
-- [x] 20 labels, 6 milestones, 105 issues created
+- [x] 20 labels, 6 milestones, 105 issues created (initial roadmap snapshot; live counts now 8 milestones / 221 issues — see milestone table above)
 - [x] All 69 original issues rewritten in English with industry-standard detail
 - [x] v1.1 milestone added — LLM & AI tooling (#70–75)
 - [x] SvelteKit-parity gap audit + 19 issues filed with priorities (#76–94)
