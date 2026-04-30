@@ -290,24 +290,16 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 	} else {
 		b.Line("return []router.Route{")
 		b.Indent()
-		layoutInfoFor := func(pkgPath string) (alias string, hasServer, hasHead bool) {
-			for _, li := range layoutImports {
-				if li.pkgPath == pkgPath {
-					return li.alias, li.hasServer, li.hasHead
-				}
-			}
-			return "", false, false
+		layoutByPath := make(map[string]layoutImport, len(layoutImports))
+		for _, li := range layoutImports {
+			layoutByPath[li.pkgPath] = li
 		}
-		errorAliasFor := func(pkgPath string) string {
-			for _, ei := range errorImports {
-				if ei.pkgPath == pkgPath {
-					return ei.alias
-				}
-			}
-			return ""
+		errorAliasByPath := make(map[string]string, len(errorImports))
+		for _, ei := range errorImports {
+			errorAliasByPath[ei.pkgPath] = ei.alias
 		}
 		for _, e := range entries {
-			emitRouteEntry(&b, e.route, e.alias, layoutInfoFor, errorAliasFor, opts.RouteOptions, opts.PageHeads)
+			emitRouteEntry(&b, e.route, e.alias, layoutByPath, errorAliasByPath, opts.RouteOptions, opts.PageHeads)
 		}
 		b.Dedent()
 		b.Line("}")
@@ -496,7 +488,7 @@ func emitErrorAdapters(b *Builder, imports []errorImport) {
 	}
 }
 
-func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutInfoFor func(string) (string, bool, bool), errorAliasFor func(string) string, routeOptions map[string]kit.PageOptions, pageHeads map[string]bool) {
+func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutByPath map[string]layoutImport, errorAliasByPath map[string]string, routeOptions map[string]kit.PageOptions, pageHeads map[string]bool) {
 	b.Line("{")
 	b.Indent()
 	b.Linef("Pattern: %s,", quoteGo(r.Pattern))
@@ -518,11 +510,11 @@ func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutIn
 		b.Line("LayoutChain: []router.LayoutHandler{")
 		b.Indent()
 		for _, p := range r.LayoutPackagePaths {
-			la, _, _ := layoutInfoFor(p)
-			if la == "" {
+			li, ok := layoutByPath[p]
+			if !ok {
 				continue
 			}
-			b.Linef("render__layout__%s,", la)
+			b.Linef("render__layout__%s,", li.alias)
 		}
 		b.Dedent()
 		b.Line("},")
@@ -530,11 +522,14 @@ func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutIn
 		anyServer := false
 		anyHead := false
 		for _, p := range r.LayoutPackagePaths {
-			_, hs, hh := layoutInfoFor(p)
-			if hs {
+			li, ok := layoutByPath[p]
+			if !ok {
+				continue
+			}
+			if li.hasServer {
 				anyServer = true
 			}
-			if hh {
+			if li.hasHead {
 				anyHead = true
 			}
 		}
@@ -542,12 +537,12 @@ func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutIn
 			b.Line("LayoutLoaders: []router.LayoutLoadHandler{")
 			b.Indent()
 			for _, p := range r.LayoutPackagePaths {
-				la, hs, _ := layoutInfoFor(p)
-				if la == "" {
+				li, ok := layoutByPath[p]
+				if !ok {
 					continue
 				}
-				if hs {
-					b.Linef("loadLayout__%s,", la)
+				if li.hasServer {
+					b.Linef("loadLayout__%s,", li.alias)
 				} else {
 					b.Line("nil,")
 				}
@@ -559,12 +554,12 @@ func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutIn
 			b.Line("LayoutHeads: []router.LayoutHeadHandler{")
 			b.Indent()
 			for _, p := range r.LayoutPackagePaths {
-				la, _, hh := layoutInfoFor(p)
-				if la == "" {
+				li, ok := layoutByPath[p]
+				if !ok {
 					continue
 				}
-				if hh {
-					b.Linef("head__layout__%s,", la)
+				if li.hasHead {
+					b.Linef("head__layout__%s,", li.alias)
 				} else {
 					b.Line("nil,")
 				}
@@ -575,7 +570,7 @@ func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutIn
 	}
 	emitOptionsField(b, r.Pattern, routeOptions)
 	if r.ErrorBoundaryPackagePath != "" {
-		if ea := errorAliasFor(r.ErrorBoundaryPackagePath); ea != "" {
+		if ea, ok := errorAliasByPath[r.ErrorBoundaryPackagePath]; ok && ea != "" {
 			b.Linef("Error: renderError__%s,", ea)
 			if r.ErrorBoundaryLayoutDepth > 0 {
 				b.Linef("ErrorLayoutDepth: %d,", r.ErrorBoundaryLayoutDepth)
