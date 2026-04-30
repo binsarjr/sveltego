@@ -14,7 +14,7 @@ To avoid hallucinating conventions, layout, or APIs, read **in this order** befo
 6. `AGENTS.md` — master AI rules synced to `.cursorrules` and copilot instructions per RFC #103.
 7. `CONTRIBUTING.md` — code style, error handling, logging, ctx propagation.
 8. `STABILITY.md` per package — what's safe to change (RFC #97).
-9. Any package-local `CLAUDE.md` for scope-specific patterns (e.g. `packages/sveltego/core/codegen/CLAUDE.md`).
+9. Any package-local `CLAUDE.md` for scope-specific patterns (e.g. `packages/sveltego/internal/codegen/CLAUDE.md` once it lands).
 
 If a doc is missing, check the corresponding issue body — body-files in `/tmp/setup-bodies/*.md` exist locally during the bootstrap phase.
 
@@ -38,11 +38,11 @@ When in doubt about a convention: open the relevant issue with `gh issue view <N
 
 ## Repository state
 
-Pre-alpha. **No Go source yet** — repo holds specs, RFCs, and a 105-issue roadmap on GitHub at `binsarjr/sveltego`. The first code lands when foundation RFCs (#95–97) and setup tasks (#98–103) land. Until then, all work happens in:
+Pre-alpha. MVP closed; v0.2, v0.4, and v1.1 shipped; v0.3, v0.5, v0.6, and v1.0 in flight. The Go workspace already hosts the core (`packages/sveltego`), tooling (`packages/lsp`, `packages/mcp`, `packages/init`, `packages/create-sveltego`, `packages/enhanced-img`), five deploy adapters plus `adapter-auto`, the bench harness (`bench/`, `benchmarks/`), AI templates (`templates/ai/`), and end-to-end playgrounds. New work continues to flow through:
 
 - `tasks/todo.md` — current execution plan, milestone scope, phase tracking
 - `tasks/lessons.md` — design decisions and self-rules captured per session (append-only journal)
-- GitHub issues on `binsarjr/sveltego` — every concrete unit of work
+- GitHub issues on `binsarjr/sveltego` — every concrete unit of work (see milestone counts below for live totals)
 
 Always read both `tasks/` files at session start before proposing changes.
 
@@ -200,17 +200,20 @@ If counts, file lists, or roadmap stages disagree across these, the doc set is b
 
 ## Roadmap structure
 
-6 milestones, 105 issues. Issue numbering follows execution order:
+8 milestones. Counts below match the live `gh api repos/binsarjr/sveltego/milestones` output — re-verify with `gh issue list --milestone <N> --state all --json number | jq length` whenever you edit this table.
 
 | Milestone | Issues | Focus |
 |---|---|---|
-| MVP | #1–23, #76, #77, #83, #95–105 | Foundation RFCs + setup, parser, codegen, runtime, router, CLI to render a page |
-| v0.2 | #24–33, #78–82 | Layouts, hooks, error boundaries, form actions, route groups, page options, env |
-| v0.3 | #34–42, #84, #85, #87, #88 | Vite client, hydration, SPA router, `$app/navigation`, Snapshot, kit.Link, kit.Asset |
-| v0.4 | #43–59, #86, #90 | Svelte 5 full coverage, a11y, `<svelte:options>` |
-| v1.0 | #60–69, #89, #91–93 | Bench, docs, streaming, SSG, CSP, sitemap, image opt, deploy adapters |
-| v1.1 | #70–75 | LLM tooling: `llms.txt`, MCP server, AI templates, provenance |
-| Standalone | #94 | RFC: explicit non-goals |
+| MVP | 42 (#1–23, #76, #77, #83, #95–110) | Foundation RFCs + setup, parser, codegen, runtime, router, CLI to render a page |
+| v0.2 | 15 (#24–33, #78–82) | Layouts, hooks, error boundaries, form actions, route groups, page options, env |
+| v0.3 | 21 (#34–42, #84, #85, #87, #88, plus #123, #172, #181, #183, #204, #206–208) | Vite client, hydration, SPA router, `$app/navigation`, Snapshot, kit.Link, kit.Asset |
+| v0.4 | 19 (#43–59, #86, #90) | Svelte 5 full coverage, a11y, `<svelte:options>` |
+| v0.5 | 23 (SvelteKit-parity catch-up + cookie-session core) | Upstream-tracked enhancements (`kit.After`, `HandleAction`, `RawParam`, `RouteID`, …) and the cookie-session auth core |
+| v0.6 | 40 (auth track) | `sveltego-auth` master plan (#155), storage adapters, sessions, password / magic-link / OTP / OAuth |
+| v1.0 | 25 (#60–69, #89, #91–93, plus post-merge code-quality follow-ups) | Bench, docs, streaming, SSG, CSP, sitemap, image opt, deploy adapters, post-Wave-1 hardening |
+| v1.1 | 6 (#70–75) | LLM tooling: `llms.txt`, MCP server, AI templates, provenance |
+
+Closed standalone issues (e.g. #94 non-goals RFC) live unmilestoned — search `gh issue list --search "no:milestone state:closed"` if needed.
 
 ## Issue conventions
 
@@ -218,7 +221,7 @@ Every issue body follows the same contract — keep it when authoring or editing
 
 `Summary · Background · Goals · Non-Goals · Detailed Design (with code) · Acceptance Criteria · Testing Strategy · Out of Scope · Risks & Open Questions · Dependencies (Blocks / Blocked by) · References`
 
-Required labels per issue: one `area:*`, one `type:*`, one `priority:*` (`p0` blocker / `p1` important / `p2` nice-to-have). Areas in use: `codegen`, `router`, `runtime`, `cli`, `client`, `forms`, `hooks`, `perf`, `docs`, `infra`, `design`, `llm`. The `blocked` label flags cross-issue waits.
+Required labels per issue: one `area:*`, one `type:*`, one `priority:*` (`priority:p0` blocker / `priority:p1` important / `priority:p2` nice-to-have). Areas in use: `auth`, `cli`, `client`, `codegen`, `design`, `docs`, `forms`, `hooks`, `infra`, `llm`, `perf`, `router`, `runtime`, `tooling`. The `blocked` label flags cross-issue waits.
 
 Author/edit issues with `gh issue create --body-file` or `gh issue edit --body-file`, never inline `--body` (heredoc avoids quoting traps). Recent batch scripts (`/tmp/sveltego-issues-*.sh`) show the helper pattern.
 

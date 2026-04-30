@@ -11,13 +11,13 @@ Per-tool entry points:
 - GitHub Copilot → `.github/copilot-instructions.md` (auto-generated).
 - Aider / generic agents → this file.
 
-If a per-package `CLAUDE.md` exists (e.g. `packages/sveltego/core/codegen/CLAUDE.md`), it wins for that package's scope. Cross-cutting rules live here.
+If a per-package `CLAUDE.md` exists (e.g. `packages/sveltego/internal/codegen/CLAUDE.md` once it lands), it wins for that package's scope. Cross-cutting rules live here.
 
 ---
 
 ## 1. Project shape
 
-`sveltego` is a **rewrite of SvelteKit's shape in pure Go**, not an embedding of SvelteKit-the-JS-server. Pre-alpha. No Go source has landed yet — the repo currently holds specs, RFCs, ADRs, and a 105-issue roadmap on GitHub at `binsarjr/sveltego`.
+`sveltego` is a **rewrite of SvelteKit's shape in pure Go**, not an embedding of SvelteKit-the-JS-server. Pre-alpha. The Go workspace already hosts the core (`packages/sveltego`), tooling (`packages/lsp`, `packages/mcp`, `packages/init`, `packages/create-sveltego`, `packages/enhanced-img`), five deploy adapters plus `adapter-auto`, the bench harness (`bench/`, `benchmarks/`), AI templates, and end-to-end playgrounds. MVP, v0.2, v0.4, and v1.1 milestones have shipped; v0.3, v0.5, v0.6, and v1.0 are in flight on `binsarjr/sveltego`.
 
 Hard invariants (do not reopen without new evidence — see `tasks/lessons.md` "Pivot to Go-native rewrite"):
 
@@ -224,7 +224,7 @@ Generated output lives under `.gen/` (gitignored). Every `.gen/*.go` starts with
 ## 6. Issue and PR workflow
 
 - **Issue body contract:** Summary · Background · Goals · Non-Goals · Detailed Design (with code) · Acceptance Criteria · Testing Strategy · Out of Scope · Risks & Open Questions · Dependencies (Blocks / Blocked by) · References.
-- **Required labels per issue:** one `area:*`, one `type:*`, one `priority:*` (`p0` blocker / `p1` important / `p2` nice-to-have). Areas in use: `codegen`, `router`, `runtime`, `cli`, `client`, `forms`, `hooks`, `perf`, `docs`, `infra`, `design`, `llm`. The `blocked` label flags cross-issue waits.
+- **Required labels per issue:** one `area:*`, one `type:*`, one `priority:*` (`priority:p0` blocker / `priority:p1` important / `priority:p2` nice-to-have). Areas in use: `auth`, `cli`, `client`, `codegen`, `design`, `docs`, `forms`, `hooks`, `infra`, `llm`, `perf`, `router`, `runtime`, `tooling`. The `blocked` label flags cross-issue waits.
 - Author/edit issues with `gh issue create --body-file` or `gh issue edit --body-file`. **Never** inline `--body` (heredoc avoids quoting traps).
 - Definition of Done: see `.github/PULL_REQUEST_TEMPLATE.md` (RFC #102).
 
