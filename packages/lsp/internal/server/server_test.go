@@ -213,7 +213,7 @@ func TestServer_HandlePanicRequestRecoversAndResponds(t *testing.T) {
 		t.Errorf("expected panic log line, got %q", logs.String())
 	}
 
-	ok := func(params json.RawMessage) (any, *RPCError) {
+	ok := func(json.RawMessage) (any, *RPCError) {
 		return map[string]string{"hi": "there"}, nil
 	}
 	srv.handle(&Message{ID: rawID(t, 100), Method: "textDocument/hover"}, ok)
