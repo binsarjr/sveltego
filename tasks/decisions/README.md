@@ -9,6 +9,7 @@ Locked decisions for `sveltego`. Each ADR mirrors a tracked GitHub RFC issue. Th
 | 0003 | File Convention (`.gen/` Layout) | [#3](https://github.com/binsarjr/sveltego/issues/3) | Accepted |
 | 0004 | Codegen Output Shape | [#4](https://github.com/binsarjr/sveltego/issues/4) | Accepted |
 | 0005 | Non-Goals | [#94](https://github.com/binsarjr/sveltego/issues/94) | Accepted |
+| 0006 | sveltego-auth Master Plan | [#155](https://github.com/binsarjr/sveltego/issues/155) | Accepted |
 
 ## Convention
 
