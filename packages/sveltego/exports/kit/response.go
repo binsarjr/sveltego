@@ -37,6 +37,16 @@ func Text(status int, body string) *Response {
 	return res
 }
 
+// XML builds a Response carrying body as application/xml. Used by
+// kit.SitemapBuilder.Bytes() callers and any +server.go route that
+// emits XML directly.
+func XML(status int, body []byte) *Response {
+	res := NewResponse(status, body)
+	res.Headers.Set("Content-Type", "application/xml; charset=utf-8")
+	res.Headers.Set("Content-Length", strconv.Itoa(len(body)))
+	return res
+}
+
 // NoContent returns an empty 204 Response.
 func NoContent() *Response {
 	return NewResponse(http.StatusNoContent, nil)

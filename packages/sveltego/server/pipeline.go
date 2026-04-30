@@ -1,6 +1,8 @@
 package server
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/http"
@@ -12,6 +14,41 @@ import (
 	"github.com/binsarjr/sveltego/render"
 	"github.com/binsarjr/sveltego/runtime/router"
 )
+
+// nonceBytes is the entropy source for a CSP nonce. 16 bytes (128 bits)
+// matches the OWASP recommendation; base64-encoded that becomes a
+// 22-character token (RawURLEncoding) safe to embed in HTML attributes.
+const nonceBytes = 16
+
+// generateNonce returns a fresh per-request CSP nonce using crypto/rand.
+// Returns the empty string on rand failure; callers treat empty as "no
+// nonce" and skip the header so a transient PRNG hiccup doesn't surface
+// as a broken page.
+func generateNonce() string {
+	var buf [nonceBytes]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		return ""
+	}
+	return base64.RawURLEncoding.EncodeToString(buf[:])
+}
+
+// applyCSP generates a per-request nonce, stores it on ev.Locals, and
+// sets the configured Content-Security-Policy header on w. No-op when
+// s.csp.Mode is CSPOff. Runs before Handle so the header is present on
+// success, error, and short-circuit paths alike.
+func (s *Server) applyCSP(w http.ResponseWriter, ev *kit.RequestEvent) {
+	if s.csp.Mode == kit.CSPOff {
+		return
+	}
+	nonce := generateNonce()
+	if nonce == "" {
+		return
+	}
+	kit.SetNonce(ev, nonce)
+	if name := kit.CSPHeaderName(s.csp.Mode); name != "" {
+		w.Header().Set(name, kit.BuildCSPHeader(s.csp, nonce))
+	}
+}
 
 // hasAnyLayoutLoader reports whether at least one entry in loaders is
 // non-nil. The pipeline skips LoadCtx allocation when both the route
@@ -42,6 +79,7 @@ var errServerRouteWrote = errors.New("server: server route wrote response")
 func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 	ev := kit.NewRequestEvent(r, nil)
 	ev.SetFetcher(s.hooks.HandleFetch)
+	s.applyCSP(w, ev)
 
 	if rewritten := s.hooks.Reroute(ev.URL); rewritten != "" {
 		ev.MatchPath = rewritten
