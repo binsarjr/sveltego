@@ -35,7 +35,7 @@ Inside the template, fields are referenced as `{Data.Title}`, `{Data.Posts}`, et
 
 ## Layout load
 
-`+layout.server.go` works the same way and exports `LayoutData`. The pipeline runs each layer's `Load` outer-to-inner. Children read the immediate parent through `ctx.Parent()`:
+`layout.server.go` works the same way and exports `LayoutData`. The pipeline runs each layer's `Load` outer-to-inner. Children read the immediate parent through `ctx.Parent()`:
 
 ```go
 parent := ctx.Parent().(rootlayout.LayoutData)
@@ -80,4 +80,4 @@ The render path emits a placeholder, flushes the shell, then patches the slot wh
 
 - It cannot run on the client. Loaders are server-only.
 - It must not mutate `RequestEvent.Locals` after `Handle` finished — read only.
-- It cannot write to `http.ResponseWriter`; responses come from the page template or a `+server.go` handler.
+- It cannot write to `http.ResponseWriter`; responses come from the page template or a `server.go` handler.
