@@ -1,6 +1,9 @@
 package kit
 
-import "strconv"
+import (
+	"net/http"
+	"strconv"
+)
 
 // RedirectErr signals a redirect short-circuit from Load. Code is the
 // HTTP status (303 for POST->GET, 307/308 to preserve method).
@@ -58,9 +61,14 @@ func Redirect(code int, location string) error {
 }
 
 // Error returns an error that, when returned from Load, makes the
-// pipeline emit an HTTP error response with the given status and message.
-func Error(code int, message string) error {
-	return &HTTPErr{Code: code, Message: message}
+// pipeline emit an HTTP error response with the given status. When message
+// is omitted, Message defaults to http.StatusText(code).
+func Error(code int, message ...string) error {
+	msg := http.StatusText(code)
+	if len(message) > 0 && message[0] != "" {
+		msg = message[0]
+	}
+	return &HTTPErr{Code: code, Message: msg}
 }
 
 // Fail returns an error that, when returned from a form action, makes the
