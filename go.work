@@ -10,6 +10,7 @@ use (
 	./packages/adapter-lambda
 	./packages/adapter-server
 	./packages/adapter-static
+	./packages/auth
 	./packages/cookiesession
 	./packages/create-sveltego
 	./packages/enhanced-img
