@@ -161,18 +161,14 @@ func extractTitle(body, fallback string) string {
 	return fallback
 }
 
+// docsIndex loads the docs index lazily on first access and memoises the
+// result. The loader runs outside s.mu so a slow filesystem walk does not
+// block the JSON-RPC writer.
 func (s *Server) docsIndex() (*DocsIndex, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.cachedDocs != nil {
-		return s.cachedDocs, nil
-	}
-	idx, err := LoadDocsIndex(s.cfg.DocsDir)
-	if err != nil {
-		return nil, err
-	}
-	s.cachedDocs = idx
-	return idx, nil
+	s.docsOnce.Do(func() {
+		s.docsIdx, s.docsErr = LoadDocsIndex(s.cfg.DocsDir)
+	})
+	return s.docsIdx, s.docsErr
 }
 
 func readDocPage(dir, slug string) (string, error) {
