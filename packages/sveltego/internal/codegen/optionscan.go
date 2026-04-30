@@ -17,12 +17,14 @@ import (
 // recognizes inside *.server.go files. Anything else is ignored so the
 // user can declare their own package-private constants.
 var optionConstNames = map[string]struct{}{
-	"Prerender":     {},
-	"SSR":           {},
-	"CSR":           {},
-	"SSROnly":       {},
-	"CSRF":          {},
-	"TrailingSlash": {},
+	"Prerender":          {},
+	"PrerenderAuto":      {},
+	"PrerenderProtected": {},
+	"SSR":                {},
+	"CSR":                {},
+	"SSROnly":            {},
+	"CSRF":               {},
+	"TrailingSlash":      {},
 }
 
 // scanPageOptions reads path (when present) and returns the page
@@ -88,6 +90,20 @@ func assignOption(out *kit.PageOptionsOverride, name string, expr goast.Expr, pa
 		}
 		out.Prerender = v
 		out.HasPrerender = true
+	case "PrerenderAuto":
+		v, err := evalBool(expr)
+		if err != nil {
+			return fmt.Errorf("codegen: %s: PrerenderAuto: %w", path, err)
+		}
+		out.PrerenderAuto = v
+		out.HasPrerenderAuto = true
+	case "PrerenderProtected":
+		v, err := evalBool(expr)
+		if err != nil {
+			return fmt.Errorf("codegen: %s: PrerenderProtected: %w", path, err)
+		}
+		out.PrerenderProtected = v
+		out.HasPrerenderProtected = true
 	case "SSR":
 		v, err := evalBool(expr)
 		if err != nil {
@@ -160,27 +176,40 @@ func evalTrailingSlash(expr goast.Expr) (kit.TrailingSlash, error) {
 // override outer -> inner, then applies the route's own
 // page.server.go (or server.go) override last. Layout overrides are
 // memoized so chains shared across routes parse once.
+//
+// `<svelte:options prerender=...>` declarations on +layout.svelte and
+// +page.svelte are folded in alongside their server-file siblings so a
+// page can opt in to prerendering without authoring a +page.server.go.
 func resolvePageOptions(scan *routescan.ScanResult) (map[string]kit.PageOptions, error) {
 	if scan == nil {
 		return nil, nil
 	}
 	out := make(map[string]kit.PageOptions, len(scan.Routes))
 	layoutCache := make(map[string]kit.PageOptionsOverride)
+	sveltePrerenderCache := make(map[string]kit.PageOptionsOverride)
 	for _, r := range scan.Routes {
 		base := kit.DefaultPageOptions()
-		for i := range r.LayoutChain {
-			if i >= len(r.LayoutServerFiles) {
-				break
+		for i, layoutDir := range r.LayoutChain {
+			// 1. layout.server.go (when present)
+			if i < len(r.LayoutServerFiles) {
+				path := r.LayoutServerFiles[i]
+				if path != "" {
+					over, err := loadCached(path, layoutCache)
+					if err != nil {
+						return nil, err
+					}
+					base = base.Merge(over)
+				}
 			}
-			path := r.LayoutServerFiles[i]
-			if path == "" {
-				continue
+			// 2. +layout.svelte's <svelte:options prerender>
+			layoutSveltePath, err := resolveLayoutSource(layoutDir)
+			if err == nil {
+				over, err := loadCachedSveltePrerender(layoutSveltePath, sveltePrerenderCache)
+				if err != nil {
+					return nil, err
+				}
+				base = base.Merge(over)
 			}
-			over, err := loadCached(path, layoutCache)
-			if err != nil {
-				return nil, err
-			}
-			base = base.Merge(over)
 		}
 		var routeFile string
 		switch {
@@ -196,9 +225,33 @@ func resolvePageOptions(scan *routescan.ScanResult) (map[string]kit.PageOptions,
 			}
 			base = base.Merge(over)
 		}
+		if r.HasPage {
+			pageName := "+page.svelte"
+			if r.HasReset {
+				pageName = "+page@" + r.ResetTarget + ".svelte"
+			}
+			pageSvelte := filepath.Join(r.Dir, pageName)
+			over, err := loadCachedSveltePrerender(pageSvelte, sveltePrerenderCache)
+			if err != nil {
+				return nil, err
+			}
+			base = base.Merge(over)
+		}
 		out[r.Pattern] = base
 	}
 	return out, nil
+}
+
+func loadCachedSveltePrerender(path string, cache map[string]kit.PageOptionsOverride) (kit.PageOptionsOverride, error) {
+	if v, ok := cache[path]; ok {
+		return v, nil
+	}
+	v, err := scanPrerenderFromSvelte(path)
+	if err != nil {
+		return kit.PageOptionsOverride{}, err
+	}
+	cache[path] = v
+	return v, nil
 }
 
 func loadCached(path string, cache map[string]kit.PageOptionsOverride) (kit.PageOptionsOverride, error) {

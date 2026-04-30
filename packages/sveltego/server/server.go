@@ -101,6 +101,15 @@ type Config struct {
 	// ViteBase is the URL base path for Vite assets, e.g. "/static/_app".
 	// Defaults to "/static/_app" when ViteManifest is non-empty.
 	ViteBase string
+	// Prerender, when non-nil, enables the static-first short-circuit:
+	// requests whose URL.Path matches a manifest entry receive the
+	// pre-baked HTML instead of running the SSR pipeline. Load it via
+	// LoadPrerenderManifest at startup.
+	Prerender *prerenderTable
+	// PrerenderAuth gates protected prerendered routes (#187). When nil
+	// the runtime falls back to kit.DenyAllPrerenderAuth — protected
+	// pages never serve until the embedding app supplies a real gate.
+	PrerenderAuth kit.PrerenderAuthGate
 }
 
 // Server is the http.Handler implementation that drives a sveltego app.
@@ -148,6 +157,12 @@ type Server struct {
 	mu         sync.Mutex
 	httpSrv    *http.Server
 	cronCancel context.CancelFunc
+
+	// prerender, when non-nil, holds the manifest the runtime consults
+	// before falling through to SSR. prerenderAuth gates protected
+	// entries (#187).
+	prerender     *prerenderTable
+	prerenderAuth kit.PrerenderAuthGate
 }
 
 // New validates cfg and returns a Server ready for use as an http.Handler.
@@ -226,6 +241,8 @@ func New(cfg Config) (*Server, error) {
 		initTimeout:     initTimeout,
 		initPendingHTML: initPendingHTML,
 		initErrorHTML:   initErrorHTML,
+		prerender:       cfg.Prerender,
+		prerenderAuth:   cfg.PrerenderAuth,
 	}
 	// Start as ready so that callers using httptest.NewServer directly
 	// (without ListenAndServe or Init) see normal pipeline behavior.
@@ -260,7 +277,17 @@ func (s *Server) startInit() chan struct{} {
 // still running, it waits up to InitTimeout then returns 503 with the
 // pending fallback body. When Init has failed it returns 500 with the
 // error fallback body immediately.
+//
+// The prerender table, when present, short-circuits before Init: a
+// matching static HTML hit is served without waiting for Init or
+// running Handle. This is intentional — the whole point of prerender
+// is "no Go code per request". Protected entries gate via
+// PrerenderAuth, falling through to the live SSR pipeline (with the
+// normal init checks) on deny.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if s.prerender != nil && s.servePrerendered(w, r) {
+		return
+	}
 	switch s.initState.Load() {
 	case initReady:
 		// fast path — most requests land here

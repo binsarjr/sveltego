@@ -658,6 +658,12 @@ func formatPageOptions(o kit.PageOptions) string {
 	if o.Prerender {
 		parts = append(parts, "Prerender: true")
 	}
+	if o.PrerenderAuto {
+		parts = append(parts, "PrerenderAuto: true")
+	}
+	if o.PrerenderProtected {
+		parts = append(parts, "PrerenderProtected: true")
+	}
 	if !o.SSR {
 		parts = append(parts, "SSR: false")
 	} else {

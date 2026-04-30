@@ -11,12 +11,18 @@ import (
 // Pointers are used for boolean attributes that distinguish "absent" from
 // "explicitly false" — `runes={false}` is a meaningful opt-out, while a
 // missing `runes` attribute leaves rune detection on the script.
+//
+// Prerender is a string union ("", "true", "false", "auto", "protected")
+// matching SvelteKit's `<svelte:options prerender>` shape; the empty
+// string means the page declared nothing and inherits from its server
+// file or layout cascade.
 type svelteOptions struct {
 	Runes         *bool
 	CustomElement string
 	Namespace     string
 	Accessors     *bool
 	Immutable     *bool
+	Prerender     string
 	Pos           ast.Pos
 	Present       bool
 }
@@ -183,6 +189,12 @@ func parseSvelteOptionAttrs(out *svelteOptions, e *ast.Element) error {
 				return err
 			}
 			out.Immutable = &v
+		case "prerender":
+			s, err := svelteOptionPrerender(a, e.P)
+			if err != nil {
+				return err
+			}
+			out.Prerender = s
 		default:
 			return &CodegenError{
 				Pos: e.P,
@@ -229,6 +241,50 @@ func svelteOptionBool(a *ast.Attribute, pos ast.Pos) (bool, error) {
 	return false, &CodegenError{
 		Pos: pos,
 		Msg: fmt.Sprintf("<svelte:options> %s: expected true or false", a.Name),
+	}
+}
+
+// svelteOptionPrerender resolves a `prerender` attribute on
+// <svelte:options>. A bare attribute is "true"; a static literal must be
+// "true", "false", "auto", or "protected". `prerender={true}` and
+// `prerender={false}` are tolerated for symmetry with other boolean
+// attributes; "auto" and "protected" must be supplied as static strings.
+func svelteOptionPrerender(a *ast.Attribute, pos ast.Pos) (string, error) {
+	if a.Value == nil {
+		return "true", nil
+	}
+	switch v := a.Value.(type) {
+	case *ast.StaticValue:
+		s := strings.ToLower(strings.TrimSpace(v.Value))
+		switch s {
+		case "", "true":
+			return "true", nil
+		case "false":
+			return "false", nil
+		case "auto":
+			return "auto", nil
+		case "protected":
+			return "protected", nil
+		}
+		return "", &CodegenError{
+			Pos: pos,
+			Msg: fmt.Sprintf("<svelte:options> prerender=%q: must be one of true, false, auto, protected", v.Value),
+		}
+	case *ast.DynamicValue:
+		switch strings.TrimSpace(v.Expr) {
+		case "true":
+			return "true", nil
+		case "false":
+			return "false", nil
+		}
+		return "", &CodegenError{
+			Pos: pos,
+			Msg: fmt.Sprintf("<svelte:options> prerender={%s}: dynamic values must be the literal true or false; use the string \"auto\" or \"protected\" instead", v.Expr),
+		}
+	}
+	return "", &CodegenError{
+		Pos: pos,
+		Msg: "<svelte:options> prerender: expected true, false, auto, or protected",
 	}
 }
 

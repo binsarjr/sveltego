@@ -248,6 +248,11 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("codegen: resolve page options: %w", err)
 	}
+	localsDiags, err := collectLocalsPrerenderWarnings(scan, routeOptions)
+	if err != nil {
+		return nil, fmt.Errorf("codegen: locals/prerender scan: %w", err)
+	}
+	warnings = append(warnings, localsDiags...)
 	manifestBytes, err := GenerateManifest(scan, ManifestOptions{
 		PackageName:  "gen",
 		ModulePath:   modulePath,
