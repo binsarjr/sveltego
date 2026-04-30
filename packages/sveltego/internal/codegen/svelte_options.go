@@ -1,0 +1,269 @@
+package codegen
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/binsarjr/sveltego/internal/ast"
+)
+
+// svelteOptions captures the validated `<svelte:options>` attributes.
+// Pointers are used for boolean attributes that distinguish "absent" from
+// "explicitly false" — `runes={false}` is a meaningful opt-out, while a
+// missing `runes` attribute leaves rune detection on the script.
+type svelteOptions struct {
+	Runes         *bool
+	CustomElement string
+	Namespace     string
+	Accessors     *bool
+	Immutable     *bool
+	Pos           ast.Pos
+	Present       bool
+}
+
+// extractSvelteOptions finds the (at most one) <svelte:options> element
+// at the fragment's top level, validates its attributes, and removes the
+// node from the fragment. Nested occurrences are rejected with a position
+// error. Unknown attributes are rejected so a typo does not silently
+// disable a feature.
+func extractSvelteOptions(frag *ast.Fragment) (svelteOptions, error) {
+	if frag == nil {
+		return svelteOptions{}, nil
+	}
+	if err := rejectNestedSvelteOptions(frag.Children); err != nil {
+		return svelteOptions{}, err
+	}
+
+	var opts svelteOptions
+	kept := frag.Children[:0]
+	for _, child := range frag.Children {
+		e, ok := child.(*ast.Element)
+		if !ok || e.Name != "svelte:options" {
+			kept = append(kept, child)
+			continue
+		}
+		if opts.Present {
+			return svelteOptions{}, &CodegenError{
+				Pos: e.P,
+				Msg: "duplicate <svelte:options>: only one allowed per component",
+			}
+		}
+		if len(e.Children) > 0 {
+			return svelteOptions{}, &CodegenError{
+				Pos: e.P,
+				Msg: "<svelte:options> must not have children",
+			}
+		}
+		if err := parseSvelteOptionAttrs(&opts, e); err != nil {
+			return svelteOptions{}, err
+		}
+		opts.Present = true
+		opts.Pos = e.P
+	}
+	for i := len(kept); i < len(frag.Children); i++ {
+		frag.Children[i] = nil
+	}
+	frag.Children = kept
+	return opts, nil
+}
+
+// rejectNestedSvelteOptions walks every node reachable from the top-level
+// children except the top-level themselves, returning a CodegenError if a
+// <svelte:options> appears anywhere below the root.
+func rejectNestedSvelteOptions(children []ast.Node) error {
+	for _, c := range children {
+		e, ok := c.(*ast.Element)
+		if !ok {
+			continue
+		}
+		if e.Name == "svelte:options" {
+			continue
+		}
+		if err := rejectNestedSvelteOptionsScan(e.Children); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func rejectNestedSvelteOptionsScan(nodes []ast.Node) error {
+	for _, n := range nodes {
+		switch v := n.(type) {
+		case *ast.Element:
+			if v.Name == "svelte:options" {
+				return &CodegenError{
+					Pos: v.P,
+					Msg: "<svelte:options> must appear at the template root, not inside another element or block",
+				}
+			}
+			if err := rejectNestedSvelteOptionsScan(v.Children); err != nil {
+				return err
+			}
+		case *ast.IfBlock:
+			if err := rejectNestedSvelteOptionsScan(v.Then); err != nil {
+				return err
+			}
+			for i := range v.Elifs {
+				if err := rejectNestedSvelteOptionsScan(v.Elifs[i].Body); err != nil {
+					return err
+				}
+			}
+			if err := rejectNestedSvelteOptionsScan(v.Else); err != nil {
+				return err
+			}
+		case *ast.EachBlock:
+			if err := rejectNestedSvelteOptionsScan(v.Body); err != nil {
+				return err
+			}
+			if err := rejectNestedSvelteOptionsScan(v.Else); err != nil {
+				return err
+			}
+		case *ast.AwaitBlock:
+			if err := rejectNestedSvelteOptionsScan(v.Pending); err != nil {
+				return err
+			}
+			if err := rejectNestedSvelteOptionsScan(v.Then); err != nil {
+				return err
+			}
+			if err := rejectNestedSvelteOptionsScan(v.Catch); err != nil {
+				return err
+			}
+		case *ast.KeyBlock:
+			if err := rejectNestedSvelteOptionsScan(v.Body); err != nil {
+				return err
+			}
+		case *ast.SnippetBlock:
+			if err := rejectNestedSvelteOptionsScan(v.Body); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func parseSvelteOptionAttrs(out *svelteOptions, e *ast.Element) error {
+	for i := range e.Attributes {
+		a := &e.Attributes[i]
+		switch a.Name {
+		case "runes":
+			v, err := svelteOptionBool(a, e.P)
+			if err != nil {
+				return err
+			}
+			out.Runes = &v
+		case "customElement":
+			s, err := svelteOptionString(a, e.P)
+			if err != nil {
+				return err
+			}
+			out.CustomElement = s
+		case "namespace":
+			s, err := svelteOptionString(a, e.P)
+			if err != nil {
+				return err
+			}
+			switch s {
+			case "html", "svg", "mathml", "foreign":
+			default:
+				return &CodegenError{
+					Pos: e.P,
+					Msg: fmt.Sprintf("<svelte:options> namespace=%q: must be one of html, svg, mathml, foreign", s),
+				}
+			}
+			out.Namespace = s
+		case "accessors":
+			v, err := svelteOptionBool(a, e.P)
+			if err != nil {
+				return err
+			}
+			out.Accessors = &v
+		case "immutable":
+			v, err := svelteOptionBool(a, e.P)
+			if err != nil {
+				return err
+			}
+			out.Immutable = &v
+		default:
+			return &CodegenError{
+				Pos: e.P,
+				Msg: fmt.Sprintf("<svelte:options>: unknown attribute %q", a.Name),
+			}
+		}
+	}
+	return nil
+}
+
+// svelteOptionBool resolves an attribute value to a boolean. A bare
+// attribute (`<svelte:options accessors />`) reads as true, matching
+// HTML's boolean-attribute convention. A static `"true"`/`"false"`
+// literal works the same. A `{true}`/`{false}` dynamic literal is also
+// accepted because Svelte templates commonly use that form.
+func svelteOptionBool(a *ast.Attribute, pos ast.Pos) (bool, error) {
+	if a.Value == nil {
+		return true, nil
+	}
+	switch v := a.Value.(type) {
+	case *ast.StaticValue:
+		switch strings.ToLower(strings.TrimSpace(v.Value)) {
+		case "", "true":
+			return true, nil
+		case "false":
+			return false, nil
+		}
+		return false, &CodegenError{
+			Pos: pos,
+			Msg: fmt.Sprintf("<svelte:options> %s=%q: expected true or false", a.Name, v.Value),
+		}
+	case *ast.DynamicValue:
+		switch strings.TrimSpace(v.Expr) {
+		case "true":
+			return true, nil
+		case "false":
+			return false, nil
+		}
+		return false, &CodegenError{
+			Pos: pos,
+			Msg: fmt.Sprintf("<svelte:options> %s={%s}: expected true or false literal", a.Name, v.Expr),
+		}
+	}
+	return false, &CodegenError{
+		Pos: pos,
+		Msg: fmt.Sprintf("<svelte:options> %s: expected true or false", a.Name),
+	}
+}
+
+// svelteOptionString resolves an attribute value to a static string.
+// Dynamic values are rejected — `<svelte:options>` attrs must be known
+// at compile time.
+func svelteOptionString(a *ast.Attribute, pos ast.Pos) (string, error) {
+	if a.Value == nil {
+		return "", &CodegenError{
+			Pos: pos,
+			Msg: fmt.Sprintf("<svelte:options> %s: missing value", a.Name),
+		}
+	}
+	if v, ok := a.Value.(*ast.StaticValue); ok {
+		return v.Value, nil
+	}
+	return "", &CodegenError{
+		Pos: pos,
+		Msg: fmt.Sprintf("<svelte:options> %s: expected a static string value", a.Name),
+	}
+}
+
+// validateRunesOption checks the runes opt-in/opt-out against the script
+// body. When `runes={false}`, the script must not call any rune. When
+// `runes={true}` (or absent), the script may use runes freely; runes are
+// the project default.
+func validateRunesOption(opts svelteOptions, scripts scriptOutput) error {
+	if opts.Runes == nil || *opts.Runes {
+		return nil
+	}
+	if len(scripts.Runes) > 0 {
+		return &CodegenError{
+			Pos: opts.Pos,
+			Msg: fmt.Sprintf("<svelte:options runes={false}>: script uses rune %s; remove the rune or set runes={true}", scripts.Runes[0]),
+		}
+	}
+	return nil
+}
