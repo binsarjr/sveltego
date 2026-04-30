@@ -152,3 +152,37 @@ func TestSentinels_DistinctTypes(t *testing.T) {
 		t.Error("Fail must match only *FailErr")
 	}
 }
+
+func TestRedirectReload_SetsForceReload(t *testing.T) {
+	t.Parallel()
+
+	err := kit.Redirect(303, "/login", kit.RedirectReload())
+
+	var redir *kit.RedirectErr
+	if !errors.As(err, &redir) {
+		t.Fatalf("errors.As(*RedirectErr) failed")
+	}
+	if !redir.ForceReload {
+		t.Error("ForceReload = false, want true")
+	}
+	if redir.Code != 303 {
+		t.Errorf("Code = %d, want 303", redir.Code)
+	}
+	if redir.Location != "/login" {
+		t.Errorf("Location = %q, want /login", redir.Location)
+	}
+}
+
+func TestRedirect_WithoutReload_ForceReloadFalse(t *testing.T) {
+	t.Parallel()
+
+	err := kit.Redirect(303, "/login")
+
+	var redir *kit.RedirectErr
+	if !errors.As(err, &redir) {
+		t.Fatalf("errors.As(*RedirectErr) failed")
+	}
+	if redir.ForceReload {
+		t.Error("ForceReload = true, want false for plain Redirect")
+	}
+}

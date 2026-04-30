@@ -156,3 +156,82 @@ func TestPipeline_LoadReturnsRedirect_307PreservesMethod(t *testing.T) {
 		t.Errorf("Location = %q, want /elsewhere", got)
 	}
 }
+
+func TestPipeline_RedirectReload_SetsReloadHeader(t *testing.T) {
+	t.Parallel()
+
+	routes := []router.Route{{
+		Pattern:  "/",
+		Segments: segmentsFor("/"),
+		Load: func(_ *kit.LoadCtx) (any, error) {
+			return nil, kit.Redirect(303, "/login", kit.RedirectReload())
+		},
+		Page: func(w *render.Writer, _ *kit.RenderCtx, _ any) error {
+			w.WriteString("should not render")
+			return nil
+		},
+	}}
+	srv := newTestServer(t, routes)
+	ts := httptest.NewServer(srv)
+	t.Cleanup(ts.Close)
+
+	client := &http.Client{
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	resp, err := client.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+
+	if resp.StatusCode != 303 {
+		t.Errorf("status = %d, want 303", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Location"); got != "/login" {
+		t.Errorf("Location = %q, want /login", got)
+	}
+	if got := resp.Header.Get("X-Sveltego-Reload"); got != "1" {
+		t.Errorf("X-Sveltego-Reload = %q, want 1", got)
+	}
+}
+
+func TestPipeline_PlainRedirect_NoReloadHeader(t *testing.T) {
+	t.Parallel()
+
+	routes := []router.Route{{
+		Pattern:  "/",
+		Segments: segmentsFor("/"),
+		Load: func(_ *kit.LoadCtx) (any, error) {
+			return nil, kit.Redirect(303, "/login")
+		},
+		Page: func(w *render.Writer, _ *kit.RenderCtx, _ any) error {
+			w.WriteString("should not render")
+			return nil
+		},
+	}}
+	srv := newTestServer(t, routes)
+	ts := httptest.NewServer(srv)
+	t.Cleanup(ts.Close)
+
+	client := &http.Client{
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	resp, err := client.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+
+	if resp.StatusCode != 303 {
+		t.Errorf("status = %d, want 303", resp.StatusCode)
+	}
+	if got := resp.Header.Get("X-Sveltego-Reload"); got != "" {
+		t.Errorf("X-Sveltego-Reload = %q, want empty for plain Redirect", got)
+	}
+}
