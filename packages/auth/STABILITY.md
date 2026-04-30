@@ -22,8 +22,40 @@ while the major version is 0.
 - `Session` — active session record.
 - `Verification` — short-lived verification record.
 - `ErrNotFound`, `ErrConflict`, `ErrInvalidCredentials`, `ErrSessionExpired`,
-  `ErrRateLimited`, `ErrCSRFInvalid`, `ErrEmailNotVerified`, `Err2FARequired`
-  — sentinel errors.
+  `ErrRateLimited`, `ErrCSRFInvalid`, `ErrEmailNotVerified`, `Err2FARequired`,
+  `ErrMailerSend`, `ErrSMSSend` — sentinel errors.
+- `Mailer` — interface for email delivery adapters; nil disables email flows.
+- `Email` — message struct passed to Mailer.Send.
+- `NoopMailer` — in-memory recording adapter for tests/dev; construct via `NewNoopMailer`.
+- `NewNoopMailer() *NoopMailer` — constructor.
+- `SMSSender` — interface for SMS delivery adapters; nil disables SMS flows.
+- `SMSRecord` — holds the To/Body of a recorded NoopSMSSender call.
+- `NoopSMSSender` — in-memory recording adapter for tests/dev; construct via `NewNoopSMSSender`.
+- `NewNoopSMSSender() *NoopSMSSender` — constructor.
+
+### Subpackage: `auth/mailer/smtp`
+
+- `Mailer` — net/smtp STARTTLS adapter; construct via `New`.
+- `New(host, port, username, password, ...Option) *Mailer` — constructor.
+- `WithTLSConfig`, `WithTimeout`, `WithFrom` — functional options.
+
+### Subpackage: `auth/mailer/resend`
+
+- `Mailer` — Resend HTTP API adapter; construct via `New`.
+- `New(apiKey, ...Option) *Mailer` — constructor.
+- `WithHTTPClient`, `WithBaseURL`, `WithFrom` — functional options.
+
+### Subpackage: `auth/mailer/sendgrid`
+
+- `Mailer` — SendGrid v3 HTTP API adapter; construct via `New`.
+- `New(apiKey, ...Option) *Mailer` — constructor.
+- `WithHTTPClient`, `WithBaseURL`, `WithFrom` — functional options.
+
+### Subpackage: `auth/sms/twilio`
+
+- `Sender` — Twilio Programmable SMS adapter; construct via `New`.
+- `New(accountSID, authToken, fromNumber, ...Option) *Sender` — constructor.
+- `WithHTTPClient`, `WithBaseURL` — functional options.
 
 ## Deprecated
 
