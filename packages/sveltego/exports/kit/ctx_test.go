@@ -201,3 +201,26 @@ func TestLoadCtx_Speculative_FalseWithNilRequest(t *testing.T) {
 		t.Fatal("Speculative() = true with nil request, want false")
 	}
 }
+
+// TestLoadCtx_Depends_RecordsTags pins the basic accumulation path: each
+// Depends() call appends to the tag set so the pipeline can ship the
+// union to the client.
+func TestLoadCtx_Depends_RecordsTags(t *testing.T) {
+	t.Parallel()
+	ctx := kit.NewLoadCtx(httptest.NewRequest(http.MethodGet, "/", nil), nil)
+	if got := ctx.CollectDeps(); len(got) != 0 {
+		t.Fatalf("fresh ctx CollectDeps = %v, want empty", got)
+	}
+	ctx.Depends("posts:list")
+	ctx.Depends("user:42", "session")
+	got := ctx.CollectDeps()
+	want := []string{"posts:list", "user:42", "session"}
+	if len(got) != len(want) {
+		t.Fatalf("CollectDeps = %v, want %v", got, want)
+	}
+	for i, w := range want {
+		if got[i] != w {
+			t.Errorf("CollectDeps[%d] = %q, want %q", i, got[i], w)
+		}
+	}
+}

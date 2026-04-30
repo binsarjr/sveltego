@@ -338,6 +338,7 @@ type clientPayload struct {
 	Form       any                   `json:"form"`
 	URL        string                `json:"url"`
 	Manifest   []clientManifestEntry `json:"manifest,omitempty"`
+	Deps       []string              `json:"deps,omitempty"`
 }
 
 // clientManifestEntry is one route descriptor shipped to the client SPA
@@ -471,9 +472,10 @@ func (s *Server) renderDataJSON(r *http.Request, ev *kit.RequestEvent, route *ro
 	var (
 		data        any
 		layoutDatas []any
+		lctx        *kit.LoadCtx
 	)
 	if route.Load != nil || hasAnyLayoutLoader(route.LayoutLoaders) {
-		lctx := kit.NewLoadCtx(r, ev.Params)
+		lctx = kit.NewLoadCtx(r, ev.Params)
 		lctx.Locals = ev.Locals
 		lctx.Cookies = ev.Cookies
 		lctx.RawParams = ev.RawParams
@@ -501,6 +503,9 @@ func (s *Server) renderDataJSON(r *http.Request, ev *kit.RequestEvent, route *ro
 		data = injectFormField(data, form.data)
 	}
 	payload := buildClientPayload(r, route, data, layoutDatas, form)
+	if lctx != nil {
+		payload.Deps = lctx.CollectDeps()
+	}
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("server: marshal __data.json: %w", err)
@@ -697,6 +702,9 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 	}
 	payload := buildClientPayload(r, route, data, layoutDatas, form)
 	payload.Manifest = s.clientManifest
+	if lctx != nil {
+		payload.Deps = lctx.CollectDeps()
+	}
 	emitPayloadScriptTag(buf, payload)
 	buf.WriteString(s.shellTail)
 
