@@ -135,14 +135,14 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 		}
 		// Response was already written (server route, streaming, or error
 		// page). Drain any After callbacks before releasing resources.
-		s.drainAfter(ev)
+		s.drainAfter(ev) //nolint:contextcheck // intentional: request ctx is cancelled on return; After runs on Background
 		return
 	}
 	if res == nil {
 		return
 	}
 	s.writeResponse(w, ev, res)
-	s.drainAfter(ev)
+	s.drainAfter(ev) //nolint:contextcheck // intentional: request ctx is cancelled on return; After runs on Background
 }
 
 // drainAfter runs all functions queued via RequestEvent.After with a

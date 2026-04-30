@@ -16,7 +16,7 @@ import (
 // afterRoute builds a route that queues n After callbacks via the Handle
 // hook and records each execution into calls (in order) using mu for
 // synchronisation with the test goroutine.
-func afterRoute(calls *[]int, mu *sync.Mutex, fns ...func(context.Context)) router.Route {
+func afterRoute(_ *[]int, _ *sync.Mutex, _ ...func(context.Context)) router.Route {
 	return router.Route{
 		Pattern:  "/",
 		Segments: segmentsFor("/"),
