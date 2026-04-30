@@ -65,7 +65,7 @@ func (s *Server) applyCSP(w http.ResponseWriter, ev *kit.RequestEvent) {
 	}
 	kit.SetNonce(ev, nonce)
 	if name := kit.CSPHeaderName(s.csp.Mode); name != "" {
-		w.Header().Set(name, kit.BuildCSPHeader(s.csp, nonce))
+		w.Header().Set(name, s.cspTemplate.Build(nonce))
 	}
 }
 
@@ -614,25 +614,29 @@ func (s *Server) renderStreaming(w http.ResponseWriter, r *http.Request, ev *kit
 		return err
 	}
 
-	for _, f := range streams {
+	for i, f := range streams {
 		emitResolveScript(ctx, buf, f.id, f.stream, s.streamTimeout)
 		// ctx.Err() is set when the client disconnected and WaitAny
 		// returned early. The resolve script carries an error payload
 		// that we don't need to flush — log once and bail.
 		if ctx.Err() != nil {
-			s.cancelStreams(streams)
+			cancelStreams(streams[i+1:])
 			s.Logger.DebugContext(ctx, "streaming: client disconnected mid-stream",
 				logKeyStreamID, f.id)
 			return kit.ErrClientGone
 		}
 		if err := buf.FlushTo(w); err != nil {
 			if isClientGone(ctx, err) {
-				s.cancelStreams(streams)
+				cancelStreams(streams[i+1:])
 				s.Logger.DebugContext(ctx, "streaming: client disconnected mid-stream (write)",
 					logKeyStreamID, f.id)
 				return kit.ErrClientGone
 			}
 			return err
+		}
+		if ctx.Err() != nil {
+			cancelStreams(streams[i+1:])
+			return nil
 		}
 	}
 
@@ -651,6 +655,17 @@ func (s *Server) renderStreaming(w http.ResponseWriter, r *http.Request, ev *kit
 // outlive the request when the client disconnects mid-stream.
 func (s *Server) cancelStreams(streams []streamedField) {
 	for _, f := range streams {
+		if c, ok := f.stream.(interface{ Cancel() }); ok {
+			c.Cancel()
+		}
+	}
+}
+
+// cancelStreams calls Cancel on each stream in fs. Used when the request
+// context dies before all streams resolve, so producer goroutines that
+// weren't waited on receive a cancellation signal promptly.
+func cancelStreams(fs []streamedField) {
+	for _, f := range fs {
 		if c, ok := f.stream.(interface{ Cancel() }); ok {
 			c.Cancel()
 		}

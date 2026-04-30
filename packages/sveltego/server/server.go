@@ -95,6 +95,7 @@ type Server struct {
 	Logger        *slog.Logger
 	hooks         kit.Hooks
 	csp           kit.CSPConfig
+	cspTemplate   *kit.CSPTemplate
 	streamTimeout time.Duration
 	cronTasks     []kit.CronTask
 
@@ -171,6 +172,7 @@ func New(cfg Config) (*Server, error) {
 		Logger:          logger,
 		hooks:           cfg.Hooks.WithDefaults(),
 		csp:             cfg.CSP,
+		cspTemplate:     kit.NewCSPTemplate(cfg.CSP),
 		streamTimeout:   streamTimeout,
 		cronTasks:       cfg.CronTasks,
 		shellHead:       head,

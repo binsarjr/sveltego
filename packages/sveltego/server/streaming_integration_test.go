@@ -61,10 +61,10 @@ func TestStreaming_PlaceholderShellFlushesBeforePayload(t *testing.T) {
 	routes := []router.Route{{
 		Pattern:  "/",
 		Segments: segmentsFor("/"),
-		Load: func(_ *kit.LoadCtx) (any, error) {
+		Load: func(lctx *kit.LoadCtx) (any, error) {
 			return streamingPageData{
 				Title: "Home",
-				Posts: kit.Stream(func() ([]string, error) {
+				Posts: kit.StreamCtx(lctx.Request.Context(), func(_ context.Context) ([]string, error) {
 					<-release
 					return []string{"a", "b"}, nil
 				}),
@@ -120,10 +120,10 @@ func TestStreaming_TimeoutEmitsErrorPayload(t *testing.T) {
 	routes := []router.Route{{
 		Pattern:  "/",
 		Segments: segmentsFor("/"),
-		Load: func(_ *kit.LoadCtx) (any, error) {
+		Load: func(lctx *kit.LoadCtx) (any, error) {
 			return streamingPageData{
 				Title: "Slow",
-				Posts: kit.Stream(func() ([]string, error) {
+				Posts: kit.StreamCtx(lctx.Request.Context(), func(_ context.Context) ([]string, error) {
 					<-stuck
 					return nil, nil
 				}),
@@ -171,13 +171,14 @@ func TestStreaming_MultipleStreamsResolveInOrder(t *testing.T) {
 	routes := []router.Route{{
 		Pattern:  "/",
 		Segments: segmentsFor("/"),
-		Load: func(_ *kit.LoadCtx) (any, error) {
+		Load: func(lctx *kit.LoadCtx) (any, error) {
+			rctx := lctx.Request.Context()
 			return doubleStreamData{
-				First: kit.Stream(func() (string, error) {
+				First: kit.StreamCtx(rctx, func(_ context.Context) (string, error) {
 					<-gateA
 					return "alpha", nil
 				}),
-				Second: kit.Stream(func() (int, error) {
+				Second: kit.StreamCtx(rctx, func(_ context.Context) (int, error) {
 					<-gateB
 					return 7, nil
 				}),
@@ -230,9 +231,9 @@ func TestStreaming_ClientDisconnectStopsWaiting(t *testing.T) {
 	routes := []router.Route{{
 		Pattern:  "/",
 		Segments: segmentsFor("/"),
-		Load: func(_ *kit.LoadCtx) (any, error) {
+		Load: func(lctx *kit.LoadCtx) (any, error) {
 			return streamingPageData{
-				Posts: kit.Stream(func() ([]string, error) {
+				Posts: kit.StreamCtx(lctx.Request.Context(), func(_ context.Context) ([]string, error) {
 					<-stuck
 					return nil, nil
 				}),
@@ -308,9 +309,9 @@ func TestStreaming_ScriptInjectionEscaped(t *testing.T) {
 	routes := []router.Route{{
 		Pattern:  "/",
 		Segments: segmentsFor("/"),
-		Load: func(_ *kit.LoadCtx) (any, error) {
+		Load: func(lctx *kit.LoadCtx) (any, error) {
 			return streamingPageData{
-				Posts: kit.Stream(func() ([]string, error) {
+				Posts: kit.StreamCtx(lctx.Request.Context(), func(_ context.Context) ([]string, error) {
 					return []string{"</script><script>alert(1)</script>"}, nil
 				}),
 			}, nil
@@ -412,6 +413,109 @@ func TestStreaming_ClientDisconnect_NoErrorSpam(t *testing.T) {
 	}
 	if n := logs.debug.Load(); n < 1 {
 		t.Errorf("want at least 1 debug log entry on client disconnect; got %d", n)
+	}
+}
+
+// TestStreaming_CancelPropagatesWithinDeadline verifies that when a request
+// context is cancelled, the producer goroutine behind a StreamCtx stream
+// receives the cancellation signal and exits within the deadline. The test
+// uses a second gate to confirm the goroutine saw ctx.Done() rather than
+// blocking forever on its own channel.
+func TestStreaming_CancelPropagatesWithinDeadline(t *testing.T) {
+	t.Parallel()
+
+	producerExited := make(chan struct{})
+
+	routes := []router.Route{{
+		Pattern:  "/",
+		Segments: segmentsFor("/"),
+		Load: func(lctx *kit.LoadCtx) (any, error) {
+			return streamingPageData{
+				Posts: kit.StreamCtx(lctx.Request.Context(), func(ctx context.Context) ([]string, error) {
+					defer close(producerExited)
+					<-ctx.Done()
+					return nil, ctx.Err()
+				}),
+			}, nil
+		},
+		Page: staticPage("<p>shell</p>"),
+	}}
+	srv := newTestServer(t, routes)
+	ts := httptest.NewServer(srv)
+	t.Cleanup(ts.Close)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ts.URL+"/", nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+
+	go func() {
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return
+		}
+		_, _ = io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+	}()
+
+	// Give the shell time to flush before cancelling.
+	time.Sleep(30 * time.Millisecond)
+	cancel()
+
+	select {
+	case <-producerExited:
+	case <-time.After(time.Second):
+		t.Fatalf("producer goroutine did not exit after context cancel within 1s")
+	}
+}
+
+// TestCSP_TemplateNoPerRequestAlloc verifies that applyCSP uses the
+// precompiled CSPTemplate and does not perform per-request directive-map
+// allocations for the header value. generateNonce emits one string alloc
+// and template.Build emits one concat alloc; the directive-merge path that
+// BuildCSPHeader (the old path) exercised on every call is absent.
+func TestCSP_TemplateNoPerRequestAlloc(t *testing.T) {
+	srv, err := New(Config{
+		Routes: []router.Route{{
+			Pattern:  "/",
+			Segments: segmentsFor("/"),
+			Page:     staticPage("ok"),
+		}},
+		Shell:  testShell,
+		Logger: quietLogger(),
+		CSP:    kit.CSPConfig{Mode: kit.CSPStrict},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	// Pre-create stable objects so the alloc counter reflects only the
+	// work applyCSP itself does, not recorder/event construction.
+	rec := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	ev := kit.NewRequestEvent(r, nil)
+
+	// Warm once to populate any lazy state.
+	srv.applyCSP(rec, ev)
+
+	// Reset recorder header map so Set doesn't grow slices on first call.
+	rec.Header().Del("Content-Security-Policy")
+
+	const runs = 10
+	allocs := testing.AllocsPerRun(runs, func() {
+		// Reset the nonce between iterations; ev.Locals already exists.
+		kit.SetNonce(ev, "")
+		srv.applyCSP(rec, ev)
+	})
+	// generateNonce: 1 alloc (base64 string). SetNonce interface box: 1 alloc.
+	// Build 3-way concat: 1-2 allocs (compiler-dependent). Header.Set
+	// []string: 1 alloc. Allow ≤ 7 to tolerate minor runtime variation while
+	// proving no directive-map rebuild path (which adds ~8+ allocs from map
+	// construction + sort + slice appends). The template path is always faster
+	// than the old BuildCSPHeader hot path.
+	if allocs > 7 {
+		t.Errorf("applyCSP allocs = %.0f per call, want ≤ 7 (no directive map rebuild)", allocs)
 	}
 }
 
