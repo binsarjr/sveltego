@@ -60,8 +60,11 @@ type HandleFetchFn func(ev *RequestEvent, req *http.Request) (*http.Response, er
 type RerouteFn func(u *url.URL) string
 
 // InitFn is the signature of the optional Init hook. Init runs once at
-// server start, before the first request. Returning an error aborts
-// startup; the binary exits non-zero with the error logged.
+// server start before the first request is processed. When Init returns
+// an error the server does not crash: every incoming request receives a
+// 500 response with the configured InitErrorHTML body. While Init is
+// still running, requests that exceed InitTimeout receive a 503 response
+// with the configured InitPendingHTML body.
 type InitFn func(ctx context.Context) error
 
 // SafeError is the user-facing error contract HandleError returns and

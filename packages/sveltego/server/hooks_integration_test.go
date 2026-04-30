@@ -282,17 +282,38 @@ func TestHooks_InitRunsBeforeFirstRequest(t *testing.T) {
 	}
 }
 
-func TestHooks_InitErrorAbortsListenAndServe(t *testing.T) {
+func TestHooks_InitErrorServesFallback(t *testing.T) {
 	t.Parallel()
-	want := errors.New("init boom")
 	hooks := kit.Hooks{
-		Init: func(_ context.Context) error { return want },
+		Init: func(_ context.Context) error { return errors.New("init boom") },
 	}
-	srv := newHookServer(t, hooks, []router.Route{{
-		Pattern: "/", Segments: segmentsFor("/"), Page: staticPage("x"),
-	}})
-	if err := srv.ListenAndServe(":0"); !errors.Is(err, want) {
-		t.Errorf("err = %v, want wraps %v", err, want)
+	srv, err := New(Config{
+		Routes:        []router.Route{{Pattern: "/", Segments: segmentsFor("/"), Page: staticPage("x")}},
+		Shell:         testShell,
+		Logger:        quietLogger(),
+		Hooks:         hooks,
+		InitErrorHTML: "<p>failed</p>",
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if err := srv.Init(context.Background()); err == nil {
+		t.Fatal("expected Init to return error")
+	}
+	ts := httptest.NewServer(srv)
+	t.Cleanup(ts.Close)
+
+	resp, err2 := http.Get(ts.URL + "/")
+	if err2 != nil {
+		t.Fatalf("GET: %v", err2)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", resp.StatusCode)
+	}
+	if !strings.Contains(string(body), "failed") {
+		t.Errorf("body = %q, want init error HTML", body)
 	}
 }
 
