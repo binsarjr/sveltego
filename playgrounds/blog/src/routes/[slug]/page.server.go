@@ -45,14 +45,14 @@ func Load(ctx *kit.LoadCtx) (struct {
 		Body   string
 		Posted string
 	}
+	Form any
 },
 	error,
 ) {
-	slug := ""
-	if ctx != nil {
-		slug = ctx.Params["slug"]
-	}
-	if slug == "" {
+	// First return literal carries the struct shape codegen infers from.
+	// Subsequent returns reuse `zero` to avoid restating the type seven
+	// times.
+	if ctx == nil || ctx.Params["slug"] == "" {
 		return struct {
 			Title    string
 			Date     string
@@ -62,61 +62,40 @@ func Load(ctx *kit.LoadCtx) (struct {
 				Body   string
 				Posted string
 			}
+			Form any
 		}{}, errors.New("missing slug param")
 	}
+	slug := ctx.Params["slug"]
+
+	var zero struct {
+		Title    string
+		Date     string
+		HTML     string
+		Comments []struct {
+			Author string
+			Body   string
+			Posted string
+		}
+		Form any
+	}
+
 	if !isSafeSlug(slug) {
-		return struct {
-			Title    string
-			Date     string
-			HTML     string
-			Comments []struct {
-				Author string
-				Body   string
-				Posted string
-			}
-		}{}, kit.Error(404, "post not found")
+		return zero, kit.Error(404, "post not found")
 	}
 
 	path := filepath.Join("content", "posts", slug+".md")
 	body, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return struct {
-				Title    string
-				Date     string
-				HTML     string
-				Comments []struct {
-					Author string
-					Body   string
-					Posted string
-				}
-			}{}, kit.Error(404, "post not found")
+			return zero, kit.Error(404, "post not found")
 		}
-		return struct {
-			Title    string
-			Date     string
-			HTML     string
-			Comments []struct {
-				Author string
-				Body   string
-				Posted string
-			}
-		}{}, kit.Error(500, "read post: "+err.Error())
+		return zero, kit.Error(500, "read post: "+err.Error())
 	}
 
 	fm, content := splitFrontmatter(body)
 	html, err := renderMarkdown(content)
 	if err != nil {
-		return struct {
-			Title    string
-			Date     string
-			HTML     string
-			Comments []struct {
-				Author string
-				Body   string
-				Posted string
-			}
-		}{}, kit.Error(500, "render markdown: "+err.Error())
+		return zero, kit.Error(500, "render markdown: "+err.Error())
 	}
 
 	commentsMu.RLock()
@@ -127,21 +106,12 @@ func Load(ctx *kit.LoadCtx) (struct {
 	}(nil), comments[slug]...)
 	commentsMu.RUnlock()
 
-	return struct {
-		Title    string
-		Date     string
-		HTML     string
-		Comments []struct {
-			Author string
-			Body   string
-			Posted string
-		}
-	}{
-		Title:    fm["title"],
-		Date:     fm["date"],
-		HTML:     html,
-		Comments: existing,
-	}, nil
+	out := zero
+	out.Title = fm["title"]
+	out.Date = fm["date"]
+	out.HTML = html
+	out.Comments = existing
+	return out, nil
 }
 
 // Actions exposes the comment submission entry. The default key fires
