@@ -22,6 +22,12 @@ var manifestFixtures = []string{
 	"layout-chain",
 }
 
+// pageOptionsFixture lives under testdata/page-options/ rather than
+// the routescan testdata tree because the option scanner needs paired
+// layout.server.go / page.server.go files; replicating them under
+// routescan would distort the routescan goldens.
+var pageOptionsFixture = "page-options"
+
 func TestGenerateManifest_Goldens(t *testing.T) {
 	t.Parallel()
 	for _, name := range manifestFixtures {
@@ -39,6 +45,32 @@ func TestGenerateManifest_Goldens(t *testing.T) {
 			assertManifestGolden(t, name, got)
 		})
 	}
+}
+
+func TestGenerateManifest_PageOptionsGolden(t *testing.T) {
+	t.Parallel()
+	abs, err := filepath.Abs(filepath.Join("testdata", pageOptionsFixture))
+	if err != nil {
+		t.Fatalf("abs: %v", err)
+	}
+	scan, err := routescan.Scan(routescan.ScanInput{RoutesDir: filepath.Join(abs, "routes")})
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	routeOpts, err := resolvePageOptions(scan)
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	got, err := GenerateManifest(scan, ManifestOptions{
+		PackageName:  "gen",
+		ModulePath:   "myapp",
+		GenRoot:      ".gen",
+		RouteOptions: routeOpts,
+	})
+	if err != nil {
+		t.Fatalf("GenerateManifest: %v", err)
+	}
+	assertManifestGolden(t, pageOptionsFixture, got)
 }
 
 func TestGenerateManifest_Deterministic(t *testing.T) {

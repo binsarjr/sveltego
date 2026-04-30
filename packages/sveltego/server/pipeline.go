@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/binsarjr/sveltego/exports/kit"
 	"github.com/binsarjr/sveltego/render"
@@ -89,10 +91,30 @@ func (s *Server) resolve(w http.ResponseWriter, r *http.Request, ev *kit.Request
 	}
 	route, params, ok := s.tree.Match(matchPath)
 	if !ok {
+		// Retry with the toggled trailing slash so a Never route hit
+		// at /about/ or an Always route hit at /about can redirect to
+		// the canonical form. The retry only fires when no original
+		// match existed; routes whose canonical form is /about/ still
+		// match /about exactly without this fallback.
+		alt := togglePathSlash(matchPath)
+		if alt != matchPath {
+			if r2, p2, ok2 := s.tree.Match(alt); ok2 {
+				route, params, ok = r2, p2, ok2
+			}
+		}
+	}
+	if !ok {
 		return nil, kit.SafeError{Code: http.StatusNotFound, Message: http.StatusText(http.StatusNotFound)}
 	}
 	for k, v := range params {
 		ev.Params[k] = v
+	}
+
+	if redirect := trailingSlashRedirect(ev.URL, route.Options.TrailingSlash); redirect != "" {
+		return &kit.Response{
+			Status:  http.StatusPermanentRedirect,
+			Headers: http.Header{"Location": []string{redirect}},
+		}, nil
 	}
 
 	if len(route.Server) > 0 {
@@ -107,7 +129,86 @@ func (s *Server) resolve(w http.ResponseWriter, r *http.Request, ev *kit.Request
 	if route.Page == nil {
 		return nil, kit.SafeError{Code: http.StatusNotFound, Message: http.StatusText(http.StatusNotFound)}
 	}
+	if !optionsAllowSSR(route.Options) {
+		return s.renderEmptyShell(), nil
+	}
 	return s.renderPage(r, ev, route)
+}
+
+// optionsAllowSSR returns true unless the route declared SSR=false. The
+// codegen-time cascade fills SSR=true by default; the field only flips
+// to false when user code explicitly opted out. Routes with the
+// zero-value PageOptions (no codegen Options emitted yet) also pass
+// because the zero value carries TrailingSlashDefault and false SSR
+// together — used here as a proxy for "no options were resolved" so
+// the legacy render path stays the default for older manifests.
+func optionsAllowSSR(opts kit.PageOptions) bool {
+	if opts == (kit.PageOptions{}) {
+		return true
+	}
+	return opts.SSR
+}
+
+// renderEmptyShell builds a Response carrying just the app shell with
+// an empty mount point. Used when route.Options.SSR is false: the
+// browser receives a valid HTML document and hydrates from the client
+// bundle once delivered (#34). Cookies queued during Reroute / Handle
+// still flow through writeResponse.
+func (s *Server) renderEmptyShell() *kit.Response {
+	body := s.shellHead + s.shellMid + `<div id="app"></div>` + s.shellTail
+	headers := http.Header{}
+	headers.Set("Content-Type", "text/html; charset=utf-8")
+	headers.Set("Content-Length", strconv.Itoa(len(body)))
+	return &kit.Response{
+		Status:  http.StatusOK,
+		Headers: headers,
+		Body:    []byte(body),
+	}
+}
+
+// togglePathSlash flips path's trailing slash. "/" returns "/"; "/x"
+// returns "/x/"; "/x/" returns "/x". Used to retry a route match when
+// the request and the route's canonical form differ only by a slash.
+func togglePathSlash(path string) string {
+	if path == "/" || path == "" {
+		return path
+	}
+	if strings.HasSuffix(path, "/") {
+		return strings.TrimRight(path, "/")
+	}
+	return path + "/"
+}
+
+// trailingSlashRedirect returns the canonical path when the request's
+// trailing slash disagrees with the route policy, or the empty string
+// when no redirect is needed. The canonical path preserves the URL
+// query string. Root "/" is exempt from the Never policy because
+// stripping its slash would yield an empty path.
+func trailingSlashRedirect(u *url.URL, policy kit.TrailingSlash) string {
+	if u == nil {
+		return ""
+	}
+	path := u.Path
+	switch policy {
+	case kit.TrailingSlashAlways:
+		if !strings.HasSuffix(path, "/") {
+			return canonicalRedirect(u, path+"/")
+		}
+	case kit.TrailingSlashNever:
+		if path != "/" && strings.HasSuffix(path, "/") {
+			return canonicalRedirect(u, strings.TrimRight(path, "/"))
+		}
+	}
+	return ""
+}
+
+func canonicalRedirect(u *url.URL, path string) string {
+	out := *u
+	out.Path = path
+	out.Scheme = ""
+	out.Host = ""
+	out.User = nil
+	return out.RequestURI()
 }
 
 // renderPage runs the load chain and renders the page into a fresh

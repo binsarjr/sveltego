@@ -60,4 +60,9 @@ type Route struct {
 	// +layout.server.go. The pipeline invokes them outer -> inner before
 	// the page Load and pushes each result onto the LoadCtx parent stack.
 	LayoutLoaders []LayoutLoadHandler
+	// Options carries the route's effective page options after the
+	// codegen-time cascade resolves layout overrides into a single
+	// PageOptions value. The pipeline reads SSR/CSR/TrailingSlash
+	// directly from this field; no per-request layout walk is needed.
+	Options kit.PageOptions
 }
