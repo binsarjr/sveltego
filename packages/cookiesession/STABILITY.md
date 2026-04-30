@@ -13,6 +13,8 @@ Tiers per [RFC #97](https://github.com/binsarjr/sveltego/issues/97). Pre-`v0.1` 
 - `cookiesession.Codec` — interface; Encrypt/Decrypt contract may gain options in #198.
 - `cookiesession.NewCodec` — factory; signature frozen for #198.
 - `cookiesession.Secret` — struct; ID+Key fields stable.
+- `cookiesession.Session[T]` — generic struct; methods stable for #199 (Handle middleware).
+- `cookiesession.Options` — configuration struct for Session creation.
 
 ## Deprecated
 
