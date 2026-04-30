@@ -34,6 +34,10 @@ func emitElement(b *Builder, e *ast.Element) {
 		emitSvelteComponent(b, e)
 		return
 	}
+	if e.Name == imageElementName {
+		emitImage(b, e)
+		return
+	}
 	if isComponentName(e.Name) {
 		if strings.Contains(e.Name, ".") {
 			emitNestedComponent(b, e)

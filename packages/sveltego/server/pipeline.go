@@ -296,7 +296,7 @@ func isDataJSONRequest(r *http.Request) bool {
 // together — used here as a proxy for "no options were resolved" so
 // the legacy render path stays the default for older manifests.
 func optionsAllowSSR(opts kit.PageOptions) bool {
-	if opts == (kit.PageOptions{}) {
+	if opts.Equal(kit.PageOptions{}) {
 		return true
 	}
 	return opts.SSR

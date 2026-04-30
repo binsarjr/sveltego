@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/binsarjr/sveltego/internal/images"
 )
 
 // Builder accumulates generated Go source with line and indentation
@@ -50,6 +52,10 @@ type Builder struct {
 	// srcPath is the relative .svelte source path written into span
 	// comments. Set once from Options.Filename before the first emit.
 	srcPath string
+	// imageVariants maps each <Image src=...> path to its build-time
+	// generated variant set. emitImage consults this table to resolve
+	// the hashed URLs and intrinsic dimensions written into the page.
+	imageVariants map[string]images.Result
 }
 
 // Line appends s as one indented source line.

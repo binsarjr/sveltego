@@ -51,6 +51,14 @@ func (ts TrailingSlash) String() string {
 // at request time. PrerenderProtected (#187) instructs the prerender
 // pipeline to still emit the static HTML, but the runtime mux gates it
 // behind the configured PrerenderAuthGate before serving.
+//
+// ImageWidths configures the variant widths produced by the build-time
+// image pipeline for <Image src="..."> elements (#92). Empty applies the
+// framework default (320, 640, 1280); the field is global rather than
+// per-route because the variants live in a shared static/_app/immutable/
+// pool and cache best when the width set is stable. Only the project
+// root's default value is consulted; per-route overrides are ignored
+// because the pool is not partitioned by route.
 type PageOptions struct {
 	Prerender          bool
 	PrerenderAuto      bool
@@ -60,6 +68,7 @@ type PageOptions struct {
 	SSROnly            bool
 	CSRF               bool
 	TrailingSlash      TrailingSlash
+	ImageWidths        []int
 }
 
 // DefaultPageOptions returns the framework defaults: SSR, CSR, and CSRF
@@ -73,6 +82,31 @@ func DefaultPageOptions() PageOptions {
 		CSRF:          true,
 		TrailingSlash: TrailingSlashNever,
 	}
+}
+
+// Equal reports whether base and other carry the same options. It exists
+// because PageOptions includes a slice (ImageWidths) which the language
+// rejects in == comparisons.
+func (base PageOptions) Equal(other PageOptions) bool {
+	if base.Prerender != other.Prerender ||
+		base.PrerenderAuto != other.PrerenderAuto ||
+		base.PrerenderProtected != other.PrerenderProtected ||
+		base.SSR != other.SSR ||
+		base.CSR != other.CSR ||
+		base.SSROnly != other.SSROnly ||
+		base.CSRF != other.CSRF ||
+		base.TrailingSlash != other.TrailingSlash {
+		return false
+	}
+	if len(base.ImageWidths) != len(other.ImageWidths) {
+		return false
+	}
+	for i, w := range base.ImageWidths {
+		if w != other.ImageWidths[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // Merge returns base overlaid with override. Each scalar field in

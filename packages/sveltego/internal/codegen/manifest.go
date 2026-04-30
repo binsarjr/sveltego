@@ -249,7 +249,7 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 	if opts.RouteOptions != nil {
 		def := kit.DefaultPageOptions()
 		for _, e := range entries {
-			if v, ok := opts.RouteOptions[e.route.Pattern]; ok && v != def {
+			if v, ok := opts.RouteOptions[e.route.Pattern]; ok && !v.Equal(def) {
 				hasNonDefaultOptions = true
 				break
 			}
@@ -659,7 +659,7 @@ func emitOptionsField(b *Builder, pattern string, routeOptions map[string]kit.Pa
 	if !ok {
 		opts = kit.DefaultPageOptions()
 	}
-	if opts == (kit.DefaultPageOptions()) {
+	if opts.Equal(kit.DefaultPageOptions()) {
 		return
 	}
 	b.Linef("Options: %s,", formatPageOptions(opts))
