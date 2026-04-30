@@ -18,6 +18,13 @@ type RouterOptions struct {
 	// remains in its own Vite chunk; navigation only pulls in the chunk
 	// for the destination route.
 	Routes map[string]string
+	// SnapshotRoutes flags route patterns whose +page.svelte exports a
+	// `snapshot` from `<script module>`. The generated router pulls the
+	// export from the module record returned by the dynamic import and
+	// runs capture()/restore() across SPA navigations (#84). Patterns
+	// missing from this map are treated as snapshot-free; the router
+	// skips the dynamic-import lookup entirely for them.
+	SnapshotRoutes map[string]bool
 }
 
 // GenerateRouter returns the contents of a per-app SPA router module that
@@ -75,7 +82,9 @@ func GenerateRouter(opts RouterOptions) string {
 	b.WriteString("  type: 'link' | 'goto' | 'popstate' | 'form';\n")
 	b.WriteString("};\n\n")
 
-	b.WriteString("type Loader = () => Promise<{ default: any }>;\n\n")
+	b.WriteString("type Snapshot = { capture?: () => unknown; restore?: (state: unknown) => void };\n")
+	b.WriteString("type LoadedModule = { default: any; snapshot?: Snapshot };\n")
+	b.WriteString("type Loader = () => Promise<LoadedModule>;\n\n")
 
 	b.WriteString("const loaders: Record<string, Loader> = {\n")
 	for _, k := range sortedKeys(opts.Routes) {
@@ -83,8 +92,25 @@ func GenerateRouter(opts RouterOptions) string {
 	}
 	b.WriteString("};\n\n")
 
+	b.WriteString("const snapshotRoutes: Record<string, true> = {\n")
+	for _, k := range sortedSnapshotKeys(opts.SnapshotRoutes) {
+		fmt.Fprintf(&b, "  %q: true,\n", k)
+	}
+	b.WriteString("};\n\n")
+
 	b.WriteString(routerRuntime)
 	return b.String()
+}
+
+func sortedSnapshotKeys(m map[string]bool) []string {
+	keys := make([]string, 0, len(m))
+	for k, v := range m {
+		if v {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func sortedKeys(m map[string]string) []string {
@@ -100,14 +126,31 @@ func sortedKeys(m map[string]string) []string {
 // that does not depend on the per-app route set. Keeping it as a single
 // const keeps GenerateRouter readable and lets the Go side hold one
 // canonical TS source the codegen wraps around.
+//
+// Snapshot lifecycle (#84): each history entry can carry a snapshot
+// captured from the active page before navigation. snapshots is a Map
+// keyed by the leaving entry's history id so back/forward navigation
+// can hand the stored value to the destination page's snapshot.restore.
+// In-memory storage is required: history.state cannot reliably hold the
+// outgoing snapshot because by the time popstate fires the browser has
+// already swapped to the destination entry's state — replaceState would
+// corrupt it. Storage is bounded by the navigator session; the browser
+// imposes no fixed cap, but callers should still keep snapshots small
+// (history.state's ~640KB Chromium / ~16MiB Firefox limits are a
+// reasonable upper bound to design for if you want forward-compat with
+// a future history.state-backed implementation). sveltego does not
+// compress. Snapshots survive back/forward but not full reloads —
+// reload-persistence is out of scope for v0.3.
 const routerRuntime = `let mounted: any = null;
 let manifest: ManifestEntry[] = [];
 let activeAbort: AbortController | null = null;
 const cache = new Map<string, Payload>();
-const chunkCache = new Map<string, Promise<{ default: any }>>();
+const chunkCache = new Map<string, Promise<LoadedModule>>();
 const scrolls = new Map<number, [number, number]>();
+const snapshots = new Map<number, unknown>();
 let nextHistoryId = 1;
 let currentHistoryId = 0;
+let currentSnapshot: Snapshot | null = null;
 const PREFETCH_CACHE_MAX = 30;
 const PREFETCH_HOVER_DELAY_MS = 150;
 
@@ -131,9 +174,15 @@ let leaveCallbacks: Array<() => void> = [];
 // server can't loop the SPA router forever. Matches SvelteKit's default.
 const MAX_REDIRECTS = 5;
 
-export function startRouter(initial: { component: any; payload: Payload; target: HTMLElement }): void {
+export function startRouter(initial: {
+  component: any;
+  payload: Payload;
+  target: HTMLElement;
+  snapshot?: Snapshot;
+}): void {
   mounted = initial.component;
   manifest = initial.payload.manifest ?? [];
+  currentSnapshot = initial.snapshot ?? null;
   // Take ownership of scroll restoration so back/forward replays the
   // saved offsets instead of letting the browser race the mount.
   if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
@@ -266,6 +315,7 @@ async function navigate(url: URL, opts: NavigateOpts): Promise<void> {
   // Snapshot the outgoing scroll offset before swapping pages so popstate
   // back/forward can restore it.
   saveScroll();
+  captureSnapshot();
 
   const fromURL = new URL(location.href);
   const navInfo: Navigation = {
@@ -299,7 +349,7 @@ async function navigate(url: URL, opts: NavigateOpts): Promise<void> {
 
   const entry = matchManifest(url.pathname);
   const routeId = entry?.pattern ?? payload.routeId;
-  let mod: { default: any };
+  let mod: LoadedModule;
   try {
     mod = await loadChunk(routeId);
   } catch {
@@ -333,6 +383,13 @@ async function navigate(url: URL, opts: NavigateOpts): Promise<void> {
   });
   (window as any).__sveltego__ = payload;
   activeKey = key;
+  // Update the active snapshot accessor before any restore call so a
+  // page that captures during restore (rare, but allowed) sees its own
+  // hooks rather than the previous route's.
+  currentSnapshot = snapshotRoutes[routeId] ? mod.snapshot ?? null : null;
+  if (opts.fromPop && opts.restoreId) {
+    restoreSnapshot(opts.restoreId);
+  }
 
   if (opts.fromPop && opts.restoreId) {
     const saved = scrolls.get(opts.restoreId);
@@ -342,6 +399,25 @@ async function navigate(url: URL, opts: NavigateOpts): Promise<void> {
   }
   activeAbort = null;
   runAfterHooks(navInfo);
+}
+
+function captureSnapshot(): void {
+  if (!currentSnapshot || typeof currentSnapshot.capture !== 'function') return;
+  try {
+    snapshots.set(currentHistoryId, currentSnapshot.capture());
+  } catch (err) {
+    console.error('[sveltego] snapshot capture failed:', err);
+  }
+}
+
+function restoreSnapshot(historyId: number): void {
+  if (!currentSnapshot || typeof currentSnapshot.restore !== 'function') return;
+  if (!snapshots.has(historyId)) return;
+  try {
+    currentSnapshot.restore(snapshots.get(historyId));
+  } catch (err) {
+    console.error('[sveltego] snapshot restore failed:', err);
+  }
 }
 
 function canonical(pathSearch: string): string {
@@ -360,7 +436,7 @@ async function fetchPayload(url: URL, signal?: AbortSignal, speculative = false)
   return (await res.json()) as Payload;
 }
 
-function loadChunk(routeId: string): Promise<{ default: any }> {
+function loadChunk(routeId: string): Promise<LoadedModule> {
   let p = chunkCache.get(routeId);
   if (p) return p;
   const loader = loaders[routeId];

@@ -210,6 +210,48 @@ func TestScriptUnsupportedLangIsError(t *testing.T) {
 	}
 }
 
+func TestScriptModule(t *testing.T) {
+	frag := parseOK(t, `<script module>export const snapshot = {};</script>`)
+	s := frag.Children[0].(*ast.Script)
+	if !s.Module {
+		t.Fatalf("expected Module=true: %+v", s)
+	}
+	if s.Lang != "" {
+		t.Fatalf("expected default lang for module script: %q", s.Lang)
+	}
+	if s.Body != `export const snapshot = {};` {
+		t.Fatalf("body mismatch: %q", s.Body)
+	}
+}
+
+func TestScriptModuleAcceptsTSLang(t *testing.T) {
+	frag := parseOK(t, `<script module lang="ts">export const snapshot: any = {};</script>`)
+	s := frag.Children[0].(*ast.Script)
+	if !s.Module || s.Lang != "ts" {
+		t.Fatalf("expected module + lang=ts: %+v", s)
+	}
+}
+
+func TestScriptModuleRejectsGoLang(t *testing.T) {
+	_, errs := Parse([]byte(`<script module lang="go">var X = 1</script>`))
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d (%v)", len(errs), errs)
+	}
+}
+
+func TestScriptRegularRejectsModuleAttr(t *testing.T) {
+	// `<script module>` is the canonical Svelte 5 module-context form;
+	// the legacy `<script context="module">` is intentionally not
+	// accepted. A bare module attribute on a regular Go script is
+	// treated as module + default lang, which is the same path the
+	// JS-only snapshot block goes through.
+	frag := parseOK(t, `<script module>console.log(1)</script>`)
+	s := frag.Children[0].(*ast.Script)
+	if !s.Module {
+		t.Fatalf("expected module=true: %+v", s)
+	}
+}
+
 func TestStyle(t *testing.T) {
 	frag := parseOK(t, `<style>a > b { color: red; }</style>`)
 	st := frag.Children[0].(*ast.Style)

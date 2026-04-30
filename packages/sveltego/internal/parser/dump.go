@@ -114,7 +114,11 @@ func dumpNode(b *strings.Builder, n ast.Node, depth int) {
 	case *ast.Render:
 		fmt.Fprintf(b, "Render %s expr=%q\n", posStr(v.P), v.Expr)
 	case *ast.Script:
-		fmt.Fprintf(b, "Script %s lang=%q body=%q\n", posStr(v.P), v.Lang, v.Body)
+		if v.Module {
+			fmt.Fprintf(b, "Script %s module lang=%q body=%q\n", posStr(v.P), v.Lang, v.Body)
+		} else {
+			fmt.Fprintf(b, "Script %s lang=%q body=%q\n", posStr(v.P), v.Lang, v.Body)
+		}
 	case *ast.Style:
 		fmt.Fprintf(b, "Style %s body=%q\n", posStr(v.P), v.Body)
 	case *ast.Comment:
