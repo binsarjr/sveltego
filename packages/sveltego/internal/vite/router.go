@@ -123,6 +123,13 @@ const depRegistry = new Map<string, Set<string>>();
 // uses it to decide which payloads must be refetched immediately
 // vs simply evicted.
 let activeKey: string = '';
+// leaveCallbacks holds OnLeave registrations for the currently mounted
+// page/layout. Fired in registration order at the next navigation
+// commit, then cleared so a remount does not see prior callbacks.
+let leaveCallbacks: Array<() => void> = [];
+// MAX_REDIRECTS caps the chain fetchSPA follows so a misconfigured
+// server can't loop the SPA router forever. Matches SvelteKit's default.
+const MAX_REDIRECTS = 5;
 
 export function startRouter(initial: { component: any; payload: Payload; target: HTMLElement }): void {
   mounted = initial.component;
@@ -142,6 +149,24 @@ export function startRouter(initial: { component: any; payload: Payload; target:
   window.addEventListener('beforeunload', saveScroll);
 
   installPrefetch();
+
+  // Expose programmatic surface to siblings (enhance runtime, user code)
+  // without forcing them into the router import graph.
+  (window as any).__sveltego_router__ = {
+    goto,
+    fetchSPA,
+    onLeave,
+    matchManifest,
+    invalidate,
+    invalidateAll,
+    preloadData,
+    preloadCode,
+    pushState,
+    replaceState,
+    beforeNavigate,
+    afterNavigate,
+    onNavigate,
+  };
 }
 
 function saveScroll(): void {
@@ -292,6 +317,7 @@ async function navigate(url: URL, opts: NavigateOpts): Promise<void> {
   }
 
   const target = document.body;
+  fireLeaveCallbacks();
   if (mounted) {
     try {
       unmount(mounted);
@@ -529,6 +555,66 @@ export function afterNavigate(fn: (nav: Navigation) => void): () => void {
 export function onNavigate(fn: (nav: Navigation) => void | Promise<void>): () => void {
   onNavHooks.add(fn);
   return () => onNavHooks.delete(fn);
+}
+
+// onLeave registers a cleanup callback to fire once when the next
+// navigation commits away from the currently mounted page or layout.
+// Use it to cancel in-flight subscriptions, clear intervals, or detach
+// listeners that the page set up during its lifetime. Mirrors the
+// SvelteKit ` + "`onLeave`" + ` proposal (#172).
+export function onLeave(fn: () => void): void {
+  if (typeof fn !== 'function') return;
+  leaveCallbacks.push(fn);
+}
+
+function fireLeaveCallbacks(): void {
+  const fns = leaveCallbacks;
+  leaveCallbacks = [];
+  for (const fn of fns) {
+    try {
+      fn();
+    } catch (e) {
+      console.error('[sveltego] onLeave callback threw', e);
+    }
+  }
+}
+
+// fetchSPA wraps fetch and follows 3xx responses via the SPA router when
+// the Location header points at a known internal route. External
+// targets and responses carrying X-Sveltego-Reload: 1 fall back to a
+// full document load. Same-origin redirects to non-SPA paths chain
+// through fetchSPA up to MAX_REDIRECTS so a server cannot loop the
+// client.
+export async function fetchSPA(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const reqInit: RequestInit = { ...(init ?? {}), redirect: 'manual' };
+  let current: Response = await fetch(input, reqInit);
+  for (let hop = 0; hop < MAX_REDIRECTS; hop++) {
+    if (!isRedirect(current.status)) return current;
+    const loc = current.headers.get('location');
+    if (!loc) return current;
+    if (current.headers.get('x-sveltego-reload') === '1') {
+      location.assign(loc);
+      return current;
+    }
+    const target = new URL(loc, location.href);
+    if (target.origin !== location.origin) {
+      location.assign(target.href);
+      return current;
+    }
+    if (matchManifest(target.pathname)) {
+      await goto(target);
+      return current;
+    }
+    // Same-origin but not a SPA route — could be another +server.go that
+    // itself redirects. Re-fetch to allow chaining; cap protects loops.
+    current = await fetch(target.href, reqInit);
+  }
+  console.warn('[sveltego] fetchSPA exceeded redirect cap (' + String(MAX_REDIRECTS) + ')');
+  return current;
+}
+
+function isRedirect(status: number): boolean {
+  return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
 }
 
 // installPrefetch wires the data-sveltego-prefetch="hover|tap|viewport"

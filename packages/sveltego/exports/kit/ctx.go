@@ -176,6 +176,16 @@ func (c *LoadCtx) CollectDeps() []string {
 	return c.deps
 }
 
+// OnLeave registers a cleanup callback to fire when the next client-side
+// navigation commits away from this layout/page. On the server it is a
+// deliberate no-op: Loads do not outlive the request, so cleanup belongs
+// to defer. The hook exists for surface symmetry with the client-side
+// $app/navigation runtime, which surfaces the same name on its load
+// context. See #172.
+func (c *LoadCtx) OnLeave(_ func()) {
+	// Intentionally empty on the server.
+}
+
 // Speculative reports whether this Load was triggered by a speculative
 // prefetch rather than a real navigation. Use it to skip expensive work
 // (analytics recording, rate-limit counters, cache warming) that should

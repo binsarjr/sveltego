@@ -281,3 +281,102 @@ func TestGenerateClientEntry_importsRouter(t *testing.T) {
 		}
 	}
 }
+
+// TestGenerateRouter_onLeave verifies the OnLeave hook surface from #172:
+// pages register cleanup callbacks via onLeave(fn), callbacks fire once
+// on the next navigation commit, and the registry is cleared after
+// firing so a remount does not see stale callbacks from a prior visit.
+func TestGenerateRouter_onLeave(t *testing.T) {
+	t.Parallel()
+
+	src := GenerateRouter(RouterOptions{Routes: map[string]string{}})
+	for _, want := range []string{
+		"export function onLeave(fn: () => void)",
+		"leaveCallbacks.push(fn)",
+		"function fireLeaveCallbacks()",
+		"leaveCallbacks = [];",
+		"fireLeaveCallbacks();",
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("router missing onLeave plumbing %q", want)
+		}
+	}
+	// Callbacks must fire BEFORE the new component mounts so the outgoing
+	// page sees a consistent DOM during cleanup. fireLeaveCallbacks() must
+	// appear before the unmount/mount block.
+	idxFire := strings.Index(src, "fireLeaveCallbacks();")
+	idxMount := strings.Index(src, "mounted = mount(mod.default")
+	if idxFire < 0 || idxMount < 0 || idxFire >= idxMount {
+		t.Fatalf("fireLeaveCallbacks must precede mount; got fire=%d mount=%d", idxFire, idxMount)
+	}
+}
+
+// TestGenerateRouter_redirectFollow verifies #181: fetchSPA detects 3xx,
+// follows internal Locations via goto, falls back to location.assign for
+// external targets and X-Sveltego-Reload responses, and caps the
+// redirect chain so a server cannot loop the client forever.
+func TestGenerateRouter_redirectFollow(t *testing.T) {
+	t.Parallel()
+
+	src := GenerateRouter(RouterOptions{Routes: map[string]string{}})
+	for _, want := range []string{
+		"export async function fetchSPA",
+		"redirect: 'manual'",
+		"x-sveltego-reload",
+		"location.assign(loc)",
+		"location.assign(target.href)",
+		"matchManifest(target.pathname)",
+		"await goto(target)",
+		"MAX_REDIRECTS",
+		"function isRedirect(status: number)",
+		"status === 301",
+		"status === 302",
+		"status === 303",
+		"status === 307",
+		"status === 308",
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("router missing redirect-follow plumbing %q", want)
+		}
+	}
+}
+
+// TestGenerateRouter_windowSurface pins the window.__sveltego_router__
+// shape so siblings (enhance runtime, user code) can call goto and
+// matchManifest without joining the router import graph.
+func TestGenerateRouter_windowSurface(t *testing.T) {
+	t.Parallel()
+
+	src := GenerateRouter(RouterOptions{Routes: map[string]string{}})
+	for _, want := range []string{
+		"__sveltego_router__",
+		"goto,",
+		"fetchSPA,",
+		"onLeave,",
+		"matchManifest,",
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("router missing window surface %q", want)
+		}
+	}
+}
+
+// TestGenerateEnhance_redirectFollowsSPA pins the enhance runtime: when
+// the action envelope reports a redirect with an internal target and the
+// router exposes goto, we SPA-navigate; otherwise we fall back to a full
+// load. This is the form-action POST -> +server.go 303 path from #181.
+func TestGenerateEnhance_redirectFollowsSPA(t *testing.T) {
+	t.Parallel()
+
+	src := GenerateEnhanceRuntime()
+	for _, want := range []string{
+		"__sveltego_router__",
+		"router.matchManifest",
+		"router.goto",
+		"window.location.href = result.location",
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("enhance runtime missing redirect-follow plumbing %q", want)
+		}
+	}
+}
