@@ -23,12 +23,15 @@ type entry struct {
 // layoutImport pairs a layout package path with the import alias used
 // for it inside the generated manifest. hasServer reports whether the
 // layout dir owns a layout.server.go; the manifest emits a load adapter
-// only for those. Hoisted to package scope so the adapter emitter can
-// consume the same slice.
+// only for those. hasHead reports whether the layout template emits a
+// Head method; the manifest emits a head adapter and a LayoutHeads slot
+// for it. Hoisted to package scope so the adapter emitter can consume
+// the same slice.
 type layoutImport struct {
 	pkgPath   string
 	alias     string
 	hasServer bool
+	hasHead   bool
 }
 
 // errorImport pairs an error-page package path with the import alias
@@ -56,6 +59,15 @@ type ManifestOptions struct {
 	// (the manifest defaults at runtime). Build resolves the cascade
 	// ahead of time so the manifest emitter does no I/O.
 	RouteOptions map[string]kit.PageOptions
+	// PageHeads tracks every page package that emits a Head method.
+	// Keys are ScannedRoute.PackagePath; manifest emits a head__<alias>
+	// adapter and a Head field on the route entry only for keys present
+	// here.
+	PageHeads map[string]bool
+	// LayoutHeads tracks every layout package that emits a Head method.
+	// Keys are layout PackagePath; the manifest emits a head__layout__
+	// <alias> adapter and a LayoutHeads slot for keys present here.
+	LayoutHeads map[string]bool
 }
 
 // GenerateManifest emits a deterministic, gofmt-clean Go source file
@@ -138,6 +150,7 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 	}
 	for i := range layoutImports {
 		layoutImports[i].hasServer = layoutHasServer[layoutImports[i].pkgPath]
+		layoutImports[i].hasHead = opts.LayoutHeads[layoutImports[i].pkgPath]
 	}
 	sort.Slice(layoutImports, func(i, j int) bool {
 		return layoutImports[i].pkgPath < layoutImports[j].pkgPath
@@ -264,7 +277,9 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 	// happens inside the adapter so a dispatcher mismatch fails fast
 	// with a descriptive error instead of a panic.
 	emitRenderAdapters(&b, entries)
+	emitHeadAdapters(&b, entries, opts.PageHeads)
 	emitLayoutAdapters(&b, layoutImports)
+	emitLayoutHeadAdapters(&b, layoutImports)
 	emitErrorAdapters(&b, errorImports)
 
 	b.Line("// Routes returns the route table consumed by router.NewTree.")
@@ -275,13 +290,13 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 	} else {
 		b.Line("return []router.Route{")
 		b.Indent()
-		layoutInfoFor := func(pkgPath string) (alias string, hasServer bool) {
+		layoutInfoFor := func(pkgPath string) (alias string, hasServer, hasHead bool) {
 			for _, li := range layoutImports {
 				if li.pkgPath == pkgPath {
-					return li.alias, li.hasServer
+					return li.alias, li.hasServer, li.hasHead
 				}
 			}
-			return "", false
+			return "", false, false
 		}
 		errorAliasFor := func(pkgPath string) string {
 			for _, ei := range errorImports {
@@ -292,7 +307,7 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 			return ""
 		}
 		for _, e := range entries {
-			emitRouteEntry(&b, e.route, e.alias, layoutInfoFor, errorAliasFor, opts.RouteOptions)
+			emitRouteEntry(&b, e.route, e.alias, layoutInfoFor, errorAliasFor, opts.RouteOptions, opts.PageHeads)
 		}
 		b.Dedent()
 		b.Line("}")
@@ -401,6 +416,70 @@ func emitLayoutAdapters(b *Builder, imports []layoutImport) {
 	}
 }
 
+// emitHeadAdapters writes one `head__<alias>` function per Page
+// route whose template emits a Head method. Each adapter widens the
+// typed PageData parameter to router.PageHeadHandler shape using the
+// same type-assert-or-error pattern as render__<alias>.
+func emitHeadAdapters(b *Builder, entries []entry, pageHeads map[string]bool) {
+	if len(pageHeads) == 0 {
+		return
+	}
+	for _, e := range entries {
+		if !e.route.HasPage || !pageHeads[e.route.PackagePath] {
+			continue
+		}
+		b.Linef("// head__%s adapts %s.Page{}.Head to router.PageHeadHandler.", e.alias, e.alias)
+		b.Linef("func head__%s(w *render.Writer, ctx *kit.RenderCtx, data any) error {", e.alias)
+		b.Indent()
+		b.Linef("var typed %s.PageData", e.alias)
+		b.Line("if data != nil {")
+		b.Indent()
+		b.Linef("v, ok := data.(%s.PageData)", e.alias)
+		b.Line("if !ok {")
+		b.Indent()
+		b.Linef(`return fmt.Errorf("sveltego: route %%q: PageData type mismatch (got %%T, want %s.PageData)", %s, data)`, e.alias, quoteGo(e.route.Pattern))
+		b.Dedent()
+		b.Line("}")
+		b.Line("typed = v")
+		b.Dedent()
+		b.Line("}")
+		b.Linef("return %s.Page{}.Head(w, ctx, typed)", e.alias)
+		b.Dedent()
+		b.Line("}")
+		b.Line("")
+	}
+}
+
+// emitLayoutHeadAdapters writes one `head__layout__<alias>` function per
+// layout package whose template emits a Head method. Mirrors the layout
+// render adapter but binds Layout{}.Head and the LayoutData type.
+func emitLayoutHeadAdapters(b *Builder, imports []layoutImport) {
+	for _, li := range imports {
+		if !li.hasHead {
+			continue
+		}
+		b.Linef("// head__layout__%s adapts %s.Layout{}.Head to router.LayoutHeadHandler.", li.alias, li.alias)
+		b.Linef("func head__layout__%s(w *render.Writer, ctx *kit.RenderCtx, data any) error {", li.alias)
+		b.Indent()
+		b.Linef("var typed %s.LayoutData", li.alias)
+		b.Line("if data != nil {")
+		b.Indent()
+		b.Linef("v, ok := data.(%s.LayoutData)", li.alias)
+		b.Line("if !ok {")
+		b.Indent()
+		b.Linef(`return fmt.Errorf("sveltego: layout %%q: LayoutData type mismatch (got %%T, want %s.LayoutData)", %s, data)`, li.alias, quoteGo(li.pkgPath))
+		b.Dedent()
+		b.Line("}")
+		b.Line("typed = v")
+		b.Dedent()
+		b.Line("}")
+		b.Linef("return %s.Layout{}.Head(w, ctx, typed)", li.alias)
+		b.Dedent()
+		b.Line("}")
+		b.Line("")
+	}
+}
+
 // emitErrorAdapters writes one `renderError__<alias>` function per
 // unique error-page package. The adapter forwards (ctx, w, safe) to
 // ErrorPage{}.Render with no widening; kit.SafeError is shared across
@@ -417,7 +496,7 @@ func emitErrorAdapters(b *Builder, imports []errorImport) {
 	}
 }
 
-func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutInfoFor func(string) (string, bool), errorAliasFor func(string) string, routeOptions map[string]kit.PageOptions) {
+func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutInfoFor func(string) (string, bool, bool), errorAliasFor func(string) string, routeOptions map[string]kit.PageOptions, pageHeads map[string]bool) {
 	b.Line("{")
 	b.Indent()
 	b.Linef("Pattern: %s,", quoteGo(r.Pattern))
@@ -427,6 +506,9 @@ func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutIn
 		b.Linef("Server: %s.Handlers,", alias)
 	case r.HasPage:
 		b.Linef("Page: render__%s,", alias)
+		if pageHeads[r.PackagePath] {
+			b.Linef("Head: head__%s,", alias)
+		}
 	}
 	if r.HasPageServer {
 		b.Linef("Load: %s.Load,", alias)
@@ -436,7 +518,7 @@ func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutIn
 		b.Line("LayoutChain: []router.LayoutHandler{")
 		b.Indent()
 		for _, p := range r.LayoutPackagePaths {
-			la, _ := layoutInfoFor(p)
+			la, _, _ := layoutInfoFor(p)
 			if la == "" {
 				continue
 			}
@@ -446,22 +528,43 @@ func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutIn
 		b.Line("},")
 
 		anyServer := false
+		anyHead := false
 		for _, p := range r.LayoutPackagePaths {
-			if _, hs := layoutInfoFor(p); hs {
+			_, hs, hh := layoutInfoFor(p)
+			if hs {
 				anyServer = true
-				break
+			}
+			if hh {
+				anyHead = true
 			}
 		}
 		if anyServer {
 			b.Line("LayoutLoaders: []router.LayoutLoadHandler{")
 			b.Indent()
 			for _, p := range r.LayoutPackagePaths {
-				la, hs := layoutInfoFor(p)
+				la, hs, _ := layoutInfoFor(p)
 				if la == "" {
 					continue
 				}
 				if hs {
 					b.Linef("loadLayout__%s,", la)
+				} else {
+					b.Line("nil,")
+				}
+			}
+			b.Dedent()
+			b.Line("},")
+		}
+		if anyHead {
+			b.Line("LayoutHeads: []router.LayoutHeadHandler{")
+			b.Indent()
+			for _, p := range r.LayoutPackagePaths {
+				la, _, hh := layoutInfoFor(p)
+				if la == "" {
+					continue
+				}
+				if hh {
+					b.Linef("head__layout__%s,", la)
 				} else {
 					b.Line("nil,")
 				}

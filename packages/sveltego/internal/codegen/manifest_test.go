@@ -118,6 +118,77 @@ func TestGenerateManifest_DiagnosticsSurfaced(t *testing.T) {
 	}
 }
 
+// TestGenerateManifest_PageHead exercises the head adapter + Head field
+// emission when a page route declares a Head method via PageHeads.
+func TestGenerateManifest_PageHead(t *testing.T) {
+	t.Parallel()
+	scan := scanFixture(t, "simple")
+	pageHeads := map[string]bool{}
+	for _, r := range scan.Routes {
+		if r.HasPage {
+			pageHeads[r.PackagePath] = true
+		}
+	}
+	out, err := GenerateManifest(scan, ManifestOptions{
+		PackageName: "gen",
+		ModulePath:  "myapp",
+		GenRoot:     ".gen",
+		PageHeads:   pageHeads,
+	})
+	if err != nil {
+		t.Fatalf("GenerateManifest: %v", err)
+	}
+	s := string(out)
+	for _, want := range []string{
+		"func head__",
+		".Page{}.Head(",
+		"Head:",
+		"head__page_routes",
+	} {
+		if !bytes.Contains(out, []byte(want)) {
+			t.Errorf("missing %q in:\n%s", want, s)
+		}
+	}
+}
+
+// TestGenerateManifest_LayoutHead exercises the layout-head adapter +
+// LayoutHeads field emission when a layout package declares a Head
+// method via LayoutHeads.
+func TestGenerateManifest_LayoutHead(t *testing.T) {
+	t.Parallel()
+	scan := scanFixture(t, "layout-chain")
+	layoutHeads := map[string]bool{}
+	seen := map[string]struct{}{}
+	for _, r := range scan.Routes {
+		for _, p := range r.LayoutPackagePaths {
+			if _, ok := seen[p]; ok {
+				continue
+			}
+			seen[p] = struct{}{}
+			layoutHeads[p] = true
+		}
+	}
+	out, err := GenerateManifest(scan, ManifestOptions{
+		PackageName: "gen",
+		ModulePath:  "myapp",
+		GenRoot:     ".gen",
+		LayoutHeads: layoutHeads,
+	})
+	if err != nil {
+		t.Fatalf("GenerateManifest: %v", err)
+	}
+	s := string(out)
+	for _, want := range []string{
+		"func head__layout__",
+		".Layout{}.Head(",
+		"LayoutHeads: []router.LayoutHeadHandler{",
+	} {
+		if !bytes.Contains(out, []byte(want)) {
+			t.Errorf("missing %q in:\n%s", want, s)
+		}
+	}
+}
+
 func scanFixture(t *testing.T, name string) *routescan.ScanResult {
 	t.Helper()
 	abs, err := filepath.Abs(filepath.Join("..", "routescan", "testdata", name))

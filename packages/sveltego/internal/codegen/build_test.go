@@ -396,6 +396,64 @@ func Load(ctx *kit.LoadCtx) (LayoutData, error) {
 	}
 }
 
+// TestBuild_EmitsSvelteHead covers #51 end-to-end: a +page.svelte and
+// +layout.svelte that each declare <svelte:head> produce Head methods
+// in their gen packages and matching head adapters + Head/LayoutHeads
+// fields in the manifest.
+func TestBuild_EmitsSvelteHead(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/app\n\ngo 1.22\n")
+	writeFile(t, filepath.Join(root, "src", "routes", "+layout.svelte"),
+		`<svelte:head><meta name="theme" content="dark"></svelte:head>
+<header>root</header><slot />`+"\n")
+	writeFile(t, filepath.Join(root, "src", "routes", "+page.svelte"),
+		`<svelte:head><title>Home</title></svelte:head>
+<h1>Home</h1>`+"\n")
+
+	if _, err := Build(BuildOptions{ProjectRoot: root}); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	pagePath := filepath.Join(root, ".gen", "routes", "page.gen.go")
+	layoutPath := filepath.Join(root, ".gen", "routes", "layout.gen.go")
+	manifest := filepath.Join(root, ".gen", "manifest.gen.go")
+
+	pageBytes, err := os.ReadFile(pagePath)
+	if err != nil {
+		t.Fatalf("read page: %v", err)
+	}
+	if !bytes.Contains(pageBytes, []byte("func (p Page) Head(")) {
+		t.Errorf("page missing Head method:\n%s", pageBytes)
+	}
+	layoutBytes, err := os.ReadFile(layoutPath)
+	if err != nil {
+		t.Fatalf("read layout: %v", err)
+	}
+	if !bytes.Contains(layoutBytes, []byte("func (l Layout) Head(")) {
+		t.Errorf("layout missing Head method:\n%s", layoutBytes)
+	}
+
+	manifestBytes, err := os.ReadFile(manifest)
+	if err != nil {
+		t.Fatalf("read manifest: %v", err)
+	}
+	for _, want := range []string{
+		"func head__page_routes(",
+		"func head__layout__page_routes(",
+		"head__page_routes",
+		"LayoutHeads: []router.LayoutHeadHandler{",
+	} {
+		if !bytes.Contains(manifestBytes, []byte(want)) {
+			t.Errorf("manifest missing %q:\n%s", want, manifestBytes)
+		}
+	}
+
+	for _, p := range []string{pagePath, layoutPath, manifest} {
+		assertParsesAsGo(t, p)
+	}
+}
+
 func TestBuild_EmbedSkippedWhenNoAssets(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
