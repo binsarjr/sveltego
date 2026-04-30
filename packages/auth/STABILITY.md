@@ -67,6 +67,18 @@ while the major version is 0.
 - `New(accountSID, authToken, fromNumber, ...Option) *Sender` — constructor.
 - `WithHTTPClient`, `WithBaseURL` — functional options.
 
+### Subpackage: `auth/storage/sql`
+
+- `Store` — `database/sql`-backed auth.Storage implementation; construct via `New`.
+- `New(db *sql.DB, dialect Dialect) *Store` — constructor.
+- `Dialect` — enum identifying the target database engine (Postgres, MySQL, SQLite).
+- `Schema(dialect Dialect) string` — returns the DDL to create the auth tables for the given dialect.
+
+### Subpackage: `auth/storage/pgx`
+
+- `Store` — native pgx v5 auth.Storage implementation for PostgreSQL; construct via `New`.
+- `New(pool *pgxpool.Pool) *Store` — constructor.
+
 ## Deprecated
 
 (none yet)
