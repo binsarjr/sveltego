@@ -53,7 +53,9 @@ type ActionsHandler func() any
 // manifest. The router never invokes the handler refs; that is the
 // dispatcher's job.
 type Route struct {
-	// ID is an 8-char FNV-1a hash of Pattern populated by NewTree.
+	// ID is an 8-char hex tag derived from an FNV-1a 32-bit hash of Pattern,
+	// populated by NewTree. It is a tag for logging and manifest correlation,
+	// NOT a collision-free identity. Use Pattern as the unique key.
 	ID string
 	// Pattern is the SvelteKit-style canonical path, e.g. "/post/[id]/[...rest]".
 	Pattern string
