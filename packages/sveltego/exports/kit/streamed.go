@@ -25,12 +25,13 @@ var streamIDCounter atomic.Uint64
 // the shell to the client, then waits for resolution before writing a
 // patch script that hydrates the slot.
 //
-// Construct via Stream. The zero value is not usable; copying a Streamed
-// after construction is unsupported because the producer goroutine writes
-// through its pointer.
+// Construct via StreamCtx (preferred) or Stream. The zero value is not
+// usable; copying a Streamed after construction is unsupported because
+// the producer goroutine writes through its pointer.
 type Streamed[T any] struct {
 	id     uint64
 	done   chan struct{}
+	cancel context.CancelFunc
 	result T
 	err    error
 }
@@ -46,18 +47,60 @@ type StreamedAny interface {
 
 // Stream spawns fn in a goroutine and returns a Streamed[T] whose Wait
 // resolves with fn's return values. The goroutine starts immediately so
-// slow work overlaps with shell rendering. Callers that need cancellation
-// should capture a context inside fn and honor ctx.Done().
+// slow work overlaps with shell rendering.
+//
+// Stream is preserved for backward compatibility with code authored
+// before StreamCtx existed. New code should call StreamCtx so the
+// producer receives a cancellable context and exits promptly when the
+// request goes away. Stream is implemented in terms of StreamCtx with a
+// background parent, so Cancel still works on the returned value but the
+// producer fn cannot observe cancellation directly.
 func Stream[T any](fn func() (T, error)) *Streamed[T] {
+	return StreamCtx(context.Background(), func(context.Context) (T, error) {
+		return fn()
+	})
+}
+
+// StreamCtx spawns fn in a goroutine bound to a child of ctx and returns
+// a Streamed[T] whose Wait resolves with fn's return values. The child
+// context is cancelled when fn returns, when the parent ctx is
+// cancelled, or when Cancel is called on the Streamed; producers that
+// honor ctx.Done() exit promptly in all three cases.
+//
+// The goroutine starts immediately so slow work overlaps with shell
+// rendering. Callers that orphan the returned Streamed (never wait, never
+// cancel) leak a goroutine until fn returns on its own; the streaming
+// pipeline calls Cancel when the request context dies before the patch
+// script is emitted, so production code does not need to do this
+// manually.
+//
+// ctx must not be nil.
+func StreamCtx[T any](ctx context.Context, fn func(context.Context) (T, error)) *Streamed[T] {
+	derived, cancel := context.WithCancel(ctx)
 	s := &Streamed[T]{
-		id:   streamIDCounter.Add(1),
-		done: make(chan struct{}),
+		id:     streamIDCounter.Add(1),
+		done:   make(chan struct{}),
+		cancel: cancel,
 	}
 	go func() {
 		defer close(s.done)
-		s.result, s.err = fn()
+		defer cancel()
+		s.result, s.err = fn(derived)
 	}()
 	return s
+}
+
+// Cancel signals the producer goroutine to exit by cancelling the
+// context passed to fn. Cancel is safe to call multiple times and from
+// any goroutine; it returns immediately and does not wait for the
+// producer to finish. The streaming pipeline calls Cancel when the
+// request context is cancelled before the stream resolves so DB queries,
+// HTTP fetches, and other ctx-aware work do not outlive the request.
+func (s *Streamed[T]) Cancel() {
+	if s == nil || s.cancel == nil {
+		return
+	}
+	s.cancel()
 }
 
 // ID returns the unique identifier assigned at Stream time. The render

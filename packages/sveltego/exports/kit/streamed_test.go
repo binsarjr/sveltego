@@ -3,6 +3,9 @@ package kit_test
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -121,4 +124,122 @@ func TestStreamConcurrentReaders(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+}
+
+func TestStreamCtx_PropagatesCancellation(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	exited := make(chan error, 1)
+	s := kit.StreamCtx(ctx, func(c context.Context) (int, error) {
+		<-c.Done()
+		exited <- c.Err()
+		return 0, c.Err()
+	})
+	cancel()
+	select {
+	case err := <-exited:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("producer ctx.Err = %v, want Canceled", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("producer did not exit within 1s after parent cancel")
+	}
+	got, err := s.Wait(context.Background(), time.Second)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Wait err = %v, want Canceled", err)
+	}
+	if got != 0 {
+		t.Fatalf("Wait value = %d, want 0", got)
+	}
+}
+
+func TestStreamCtx_CancelMethod(t *testing.T) {
+	t.Parallel()
+	exited := make(chan struct{})
+	s := kit.StreamCtx(context.Background(), func(c context.Context) (int, error) {
+		<-c.Done()
+		close(exited)
+		return 0, c.Err()
+	})
+	s.Cancel()
+	select {
+	case <-exited:
+	case <-time.After(time.Second):
+		t.Fatal("producer did not exit within 1s after Cancel()")
+	}
+	// Cancel must be idempotent.
+	s.Cancel()
+	s.Cancel()
+}
+
+func TestStreamCtx_NilCancelOnNilStreamed(t *testing.T) {
+	t.Parallel()
+	var s *kit.Streamed[int]
+	s.Cancel() // must not panic
+}
+
+// TestStreamCtx_NoLeakAfterRequestCancel simulates the streaming
+// pipeline contract: a slow producer is started inside an HTTP handler,
+// the client disconnects (request ctx cancels), and the goroutine
+// receives the cancellation through StreamCtx and exits. Verifies the
+// goroutine count returns to baseline.
+func TestStreamCtx_NoLeakAfterRequestCancel(t *testing.T) {
+	t.Parallel()
+
+	producerStarted := make(chan struct{})
+	producerExited := make(chan struct{})
+
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		_ = kit.StreamCtx(r.Context(), func(c context.Context) (int, error) {
+			close(producerStarted)
+			<-c.Done()
+			close(producerExited)
+			return 0, c.Err()
+		})
+		// Block until r.Context() fires so the producer outlives the
+		// handler entry but exits via ctx cancel, mirroring the leak
+		// scenario from issue #211.
+		<-r.Context().Done()
+	}))
+	defer srv.Close()
+
+	baseline := runtime.NumGoroutine()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	reqDone := make(chan struct{})
+	go func() {
+		defer close(reqDone)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL, nil)
+		if err != nil {
+			return
+		}
+		resp, err := srv.Client().Do(req)
+		if err == nil {
+			resp.Body.Close()
+		}
+	}()
+
+	select {
+	case <-producerStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("producer never started")
+	}
+
+	cancel()
+
+	select {
+	case <-producerExited:
+	case <-time.After(2 * time.Second):
+		t.Fatal("producer goroutine did not exit after request cancellation")
+	}
+	<-reqDone
+
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if runtime.NumGoroutine() <= baseline+2 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("goroutine leak: baseline=%d current=%d", baseline, runtime.NumGoroutine())
 }

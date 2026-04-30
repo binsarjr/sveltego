@@ -119,3 +119,60 @@ func TestDefaultCSPDirectives_ReturnsCopy(t *testing.T) {
 		}
 	}
 }
+
+func TestCSPTemplate_BuildMatchesBuildCSPHeader(t *testing.T) {
+	t.Parallel()
+	cfg := CSPConfig{
+		Mode: CSPStrict,
+		Directives: map[string][]string{
+			"img-src": {"'self'", "https://cdn.example.com"},
+		},
+		ReportTo: "csp-endpoint",
+	}
+	tpl := NewCSPTemplate(cfg)
+	for _, nonce := range []string{"abc", "deadbeef", "z9z9z9z9"} {
+		if got, want := tpl.Build(nonce), BuildCSPHeader(cfg, nonce); got != want {
+			t.Errorf("Build(%q) = %q, want %q", nonce, got, want)
+		}
+	}
+}
+
+func TestBuildCSPHeader_CachedAcrossCalls(t *testing.T) {
+	t.Parallel()
+	cfg := CSPConfig{
+		Mode:       CSPStrict,
+		Directives: map[string][]string{"img-src": {"'self'", "data:"}},
+		ReportTo:   "endpoint-1",
+	}
+	first := BuildCSPHeader(cfg, "n1")
+	second := BuildCSPHeader(cfg, "n2")
+	// Differ only by nonce splice; everything else must match.
+	if len(first) != len(second) {
+		t.Fatalf("length differs: %d vs %d (%q vs %q)", len(first), len(second), first, second)
+	}
+	for i := 0; i < len(first); i++ {
+		if first[i] != second[i] {
+			// First diff position should fall inside the script-src
+			// nonce token. Allow it; everything else must agree.
+			before := first[:i]
+			if !strings.Contains(before, "script-src 'nonce-") {
+				t.Fatalf("diff before nonce slot at %d: %q vs %q", i, first, second)
+			}
+			break
+		}
+	}
+}
+
+func TestBuildCSPHeader_ZeroAllocOnCacheHit(t *testing.T) {
+	// AllocsPerRun must not run in parallel — it disables GC.
+	cfg := CSPConfig{Mode: CSPStrict, ReportTo: "alloc-test"}
+	BuildCSPHeader(cfg, "warmup") // prime cache
+	allocs := testing.AllocsPerRun(100, func() {
+		_ = BuildCSPHeader(cfg, "n0")
+	})
+	// Hot path: cspCacheKey builds one string, sync.Map.Load is
+	// alloc-free on hit, Build does one string concat. Budget 3.
+	if allocs > 3 {
+		t.Errorf("hot-path allocs = %.1f, want <= 3", allocs)
+	}
+}
