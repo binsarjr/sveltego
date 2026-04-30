@@ -235,7 +235,7 @@ PRs land via the **GitHub merge queue**. To queue a PR for merge:
 gh pr merge <num> --auto --squash --delete-branch
 ```
 
-Required checks: `lint-and-test (ubuntu-latest, go1.23.x)`, `changes (path-aware fan-out)`, `commit-lint`, `agents-sync (AGENTS.md drift)`, `isolated-modules (GOWORK=off)`.
+Required checks: `lint-and-test (ubuntu-latest, go1.23.x)`, `changes (path-aware fan-out)`, `commit-lint`, `agents-sync (AGENTS.md drift)`. (`isolated-modules` runs on `push`/`merge_group` for extra coverage but is not a required gate.)
 
 Concurrency: PR runs cancel-in-progress; main and merge_group runs always complete. Do not use `--admin` to bypass the queue.
 

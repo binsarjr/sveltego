@@ -376,7 +376,10 @@ gh pr merge <num> --auto --squash --delete-branch
 | `changes (path-aware fan-out)` | Path-filter fan-out |
 | `commit-lint` | Conventional Commits validation |
 | `agents-sync (AGENTS.md drift)` | AI doc sync drift check |
-| `isolated-modules (GOWORK=off)` | Per-module isolation build |
+
+`isolated-modules` runs on `push` and `merge_group` for extra coverage but
+is not a required gate (it would block PRs since it doesn't run on
+`pull_request`).
 
 ### Concurrency rules
 
