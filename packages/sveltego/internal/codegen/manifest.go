@@ -20,11 +20,14 @@ type entry struct {
 }
 
 // layoutImport pairs a layout package path with the import alias used
-// for it inside the generated manifest. Hoisted to package scope so the
-// adapter emitter can consume the same slice.
+// for it inside the generated manifest. hasServer reports whether the
+// layout dir owns a layout.server.go; the manifest emits a load adapter
+// only for those. Hoisted to package scope so the adapter emitter can
+// consume the same slice.
 type layoutImport struct {
-	pkgPath string
-	alias   string
+	pkgPath   string
+	alias     string
+	hasServer bool
 }
 
 // ManifestOptions configures [GenerateManifest].
@@ -99,11 +102,17 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 	}
 
 	// Reserve aliases for layout-only packages (layout dirs touched by a
-	// route whose own dir does not contribute an entry above).
+	// route whose own dir does not contribute an entry above). Layouts
+	// with a sibling layout.server.go also get a hasServer flag so the
+	// emitter knows whether to wire LayoutLoaders.
 	var layoutImports []layoutImport
 	seenLayoutPkg := make(map[string]struct{})
+	layoutHasServer := make(map[string]bool)
 	for _, r := range scan.Routes {
-		for _, p := range r.LayoutPackagePaths {
+		for i, p := range r.LayoutPackagePaths {
+			if i < len(r.LayoutServerFiles) && r.LayoutServerFiles[i] != "" {
+				layoutHasServer[p] = true
+			}
 			if _, ok := seenLayoutPkg[p]; ok {
 				continue
 			}
@@ -111,6 +120,9 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 			alias := uniqueAlias(p)
 			layoutImports = append(layoutImports, layoutImport{pkgPath: p, alias: alias})
 		}
+	}
+	for i := range layoutImports {
+		layoutImports[i].hasServer = layoutHasServer[layoutImports[i].pkgPath]
 	}
 	sort.Slice(layoutImports, func(i, j int) bool {
 		return layoutImports[i].pkgPath < layoutImports[j].pkgPath
@@ -200,16 +212,16 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 	} else {
 		b.Line("return []router.Route{")
 		b.Indent()
-		layoutAliasFor := func(pkgPath string) string {
+		layoutInfoFor := func(pkgPath string) (alias string, hasServer bool) {
 			for _, li := range layoutImports {
 				if li.pkgPath == pkgPath {
-					return li.alias
+					return li.alias, li.hasServer
 				}
 			}
-			return ""
+			return "", false
 		}
 		for _, e := range entries {
-			emitRouteEntry(&b, e.route, e.alias, layoutAliasFor)
+			emitRouteEntry(&b, e.route, e.alias, layoutInfoFor)
 		}
 		b.Dedent()
 		b.Line("}")
@@ -284,7 +296,10 @@ func emitRenderAdapters(b *Builder, entries []entry) {
 
 // emitLayoutAdapters writes one `render__layout__<alias>` function per
 // unique layout package. Each adapter widens Layout{}.Render's typed
-// LayoutData to the `any`-shaped router.LayoutHandler.
+// LayoutData to the `any`-shaped router.LayoutHandler. Layout packages
+// with a sibling layout.server.go additionally receive a load adapter
+// `loadLayout__<alias>` that wraps the wire-emitted LayoutLoad to
+// satisfy router.LayoutLoadHandler.
 func emitLayoutAdapters(b *Builder, imports []layoutImport) {
 	for _, li := range imports {
 		b.Linef("// render__layout__%s adapts %s.Layout{}.Render to router.LayoutHandler.", li.alias, li.alias)
@@ -306,10 +321,16 @@ func emitLayoutAdapters(b *Builder, imports []layoutImport) {
 		b.Dedent()
 		b.Line("}")
 		b.Line("")
+
+		if li.hasServer {
+			b.Linef("// loadLayout__%s adapts %s.LayoutLoad to router.LayoutLoadHandler.", li.alias, li.alias)
+			b.Linef("func loadLayout__%s(ctx *kit.LoadCtx) (any, error) { return %s.LayoutLoad(ctx) }", li.alias, li.alias)
+			b.Line("")
+		}
 	}
 }
 
-func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutAliasFor func(string) string) {
+func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutInfoFor func(string) (string, bool)) {
 	b.Line("{")
 	b.Indent()
 	b.Linef("Pattern: %s,", quoteGo(r.Pattern))
@@ -328,7 +349,7 @@ func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutAl
 		b.Line("LayoutChain: []router.LayoutHandler{")
 		b.Indent()
 		for _, p := range r.LayoutPackagePaths {
-			la := layoutAliasFor(p)
+			la, _ := layoutInfoFor(p)
 			if la == "" {
 				continue
 			}
@@ -336,6 +357,31 @@ func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutAl
 		}
 		b.Dedent()
 		b.Line("},")
+
+		anyServer := false
+		for _, p := range r.LayoutPackagePaths {
+			if _, hs := layoutInfoFor(p); hs {
+				anyServer = true
+				break
+			}
+		}
+		if anyServer {
+			b.Line("LayoutLoaders: []router.LayoutLoadHandler{")
+			b.Indent()
+			for _, p := range r.LayoutPackagePaths {
+				la, hs := layoutInfoFor(p)
+				if la == "" {
+					continue
+				}
+				if hs {
+					b.Linef("loadLayout__%s,", la)
+				} else {
+					b.Line("nil,")
+				}
+			}
+			b.Dedent()
+			b.Line("},")
+		}
 	}
 	b.Dedent()
 	b.Line("},")

@@ -302,6 +302,100 @@ func TestBuild_EmitsLayoutChain(t *testing.T) {
 	}
 }
 
+// TestBuild_EmitsLayoutServer covers Phase 0k-B: a +layout.server.go
+// adjacent to +layout.svelte produces a layoutsrc mirror, a sibling
+// wire_layout.gen.go in the gen package, a typed LayoutData alias from
+// the inferred Load() return, and a manifest LayoutLoaders entry.
+func TestBuild_EmitsLayoutServer(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/app\n\ngo 1.22\n")
+	writeFile(t, filepath.Join(root, "src", "routes", "+layout.svelte"),
+		`<header>root</header><slot />`+"\n")
+	writeFile(t, filepath.Join(root, "src", "routes", "layout.server.go"),
+		`//go:build sveltego
+
+package routes
+
+import "github.com/binsarjr/sveltego/exports/kit"
+
+func Load(ctx *kit.LoadCtx) (LayoutData, error) {
+	return struct{ User string }{User: "alice"}, nil
+}
+`)
+	writeFile(t, filepath.Join(root, "src", "routes", "dash", "+layout.svelte"),
+		`<nav>dash</nav><slot />`+"\n")
+	writeFile(t, filepath.Join(root, "src", "routes", "dash", "+page.svelte"),
+		`<h1>Dash</h1>`+"\n")
+
+	if _, err := Build(BuildOptions{ProjectRoot: root}); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	rootLayout := filepath.Join(root, ".gen", "routes", "layout.gen.go")
+	mirror := filepath.Join(root, ".gen", "layoutsrc", "routes", "layout_server.go")
+	wire := filepath.Join(root, ".gen", "routes", "wire_layout.gen.go")
+	manifest := filepath.Join(root, ".gen", "manifest.gen.go")
+	for _, p := range []string{rootLayout, mirror, wire, manifest} {
+		if _, err := os.Stat(p); err != nil {
+			t.Errorf("expected %s to exist: %v", p, err)
+		}
+	}
+
+	rootBytes, err := os.ReadFile(rootLayout)
+	if err != nil {
+		t.Fatalf("read root layout: %v", err)
+	}
+	for _, want := range []string{
+		"type LayoutData = struct {",
+		"User string",
+	} {
+		if !bytes.Contains(rootBytes, []byte(want)) {
+			t.Errorf("root layout missing %q:\n%s", want, rootBytes)
+		}
+	}
+
+	mirrorBytes, err := os.ReadFile(mirror)
+	if err != nil {
+		t.Fatalf("read layout mirror: %v", err)
+	}
+	if bytes.Contains(mirrorBytes, []byte("//go:build")) {
+		t.Errorf("layout mirror retained build constraint:\n%s", mirrorBytes)
+	}
+	if !bytes.Contains(mirrorBytes, []byte("package routes")) {
+		t.Errorf("layout mirror package clause not rewritten:\n%s", mirrorBytes)
+	}
+
+	wireBytes, err := os.ReadFile(wire)
+	if err != nil {
+		t.Fatalf("read layout wire: %v", err)
+	}
+	if !bytes.Contains(wireBytes, []byte(`usersrc "example.com/app/.gen/layoutsrc/routes"`)) {
+		t.Errorf("layout wire missing mirror import:\n%s", wireBytes)
+	}
+	if !bytes.Contains(wireBytes, []byte("func LayoutLoad(ctx *kit.LoadCtx)")) {
+		t.Errorf("layout wire missing LayoutLoad wrapper:\n%s", wireBytes)
+	}
+
+	manifestBytes, err := os.ReadFile(manifest)
+	if err != nil {
+		t.Fatalf("read manifest: %v", err)
+	}
+	for _, want := range []string{
+		`func loadLayout__page_routes(`,
+		`LayoutLoaders: []router.LayoutLoadHandler{`,
+		`loadLayout__page_routes,`,
+	} {
+		if !bytes.Contains(manifestBytes, []byte(want)) {
+			t.Errorf("manifest missing %q:\n%s", want, manifestBytes)
+		}
+	}
+
+	for _, p := range []string{rootLayout, mirror, wire, manifest} {
+		assertParsesAsGo(t, p)
+	}
+}
+
 func TestBuild_EmbedSkippedWhenNoAssets(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

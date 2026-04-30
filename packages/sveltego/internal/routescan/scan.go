@@ -210,6 +210,7 @@ func buildRoute(routesDir, dir string, files map[string]struct{}, dirsWithLayout
 
 	chain := buildLayoutChain(routesDir, dir, dirsWithLayout)
 	chainPkgs := make([]string, 0, len(chain))
+	chainServers := make([]string, 0, len(chain))
 	for _, c := range chain {
 		pkg, encErr := encodeLayoutPackagePath(routesDir, c)
 		if encErr != nil {
@@ -217,6 +218,12 @@ func buildRoute(routesDir, dir string, files map[string]struct{}, dirsWithLayout
 			continue
 		}
 		chainPkgs = append(chainPkgs, pkg)
+		serverPath := filepath.Join(c, "layout.server.go")
+		if _, err := os.Stat(serverPath); err == nil {
+			chainServers = append(chainServers, serverPath)
+		} else {
+			chainServers = append(chainServers, "")
+		}
 	}
 
 	route := &ScannedRoute{
@@ -227,6 +234,7 @@ func buildRoute(routesDir, dir string, files map[string]struct{}, dirsWithLayout
 		PackagePath:        packagePath,
 		LayoutChain:        chain,
 		LayoutPackagePaths: chainPkgs,
+		LayoutServerFiles:  chainServers,
 		HasPage:            has(files, "+page.svelte"),
 		HasLayout:          has(files, "+layout.svelte"),
 		HasError:           has(files, "+error.svelte"),
