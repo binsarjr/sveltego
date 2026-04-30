@@ -39,8 +39,9 @@ type Scenario struct {
 }
 
 // Run executes one ServeHTTP round-trip and returns the recorded response
-// body length. Callers reset the recorder between iterations so the
-// allocation count stays stable.
+// body length. The body is reset before serving so callers may reuse a
+// recorder across iterations without unbounded growth; testing.B callers
+// pass a fresh recorder per iteration so per-iter alloc counts are honest.
 func (s Scenario) Run(rec *httptest.ResponseRecorder) int {
 	rec.Body.Reset()
 	s.Server.ServeHTTP(rec, s.Request)
