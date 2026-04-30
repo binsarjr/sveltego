@@ -5,6 +5,32 @@ import (
 	"net/url"
 )
 
+// HeaderWriter exposes Set/Add/Del on a response header map. Returned by
+// [LoadCtx.Header]; backed by the same http.Header the pipeline merges
+// into the final response, so all mutations are immediately visible.
+type HeaderWriter struct {
+	h http.Header
+}
+
+// Set replaces all values for key with a single value, mirroring
+// [net/http.Header.Set]. Use [HeaderWriter.Add] to append instead.
+func (hw *HeaderWriter) Set(key, value string) {
+	hw.h.Set(key, value)
+}
+
+// Add appends value to the existing values for key, mirroring
+// [net/http.Header.Add]. Multiple calls with the same key accumulate
+// values, which is the correct behavior for headers such as Set-Cookie,
+// Link, and Vary.
+func (hw *HeaderWriter) Add(key, value string) {
+	hw.h.Add(key, value)
+}
+
+// Del removes all values for key, mirroring [net/http.Header.Del].
+func (hw *HeaderWriter) Del(key string) {
+	hw.h.Del(key)
+}
+
 // RenderCtx is the request-scoped context handed to generated Render
 // methods across the SSR lifecycle (Load, Render, Hooks).
 type RenderCtx struct {
@@ -29,6 +55,7 @@ type LoadCtx struct {
 	Cookies *Cookies
 	Request *http.Request
 	parents []any
+	headers http.Header
 }
 
 // Parent returns the immediate parent layout's loaded data, or nil when
@@ -46,6 +73,25 @@ func (c *LoadCtx) Parent() any {
 // parent via [LoadCtx.Parent]. User code never calls this.
 func (c *LoadCtx) PushParent(data any) {
 	c.parents = append(c.parents, data)
+}
+
+// Header returns the response-header writer for this Load invocation.
+// Callers use Set to replace a header, Add to append (e.g. multiple
+// Set-Cookie or Vary entries), and Del to remove. All mutations are
+// merged into the final HTTP response by the pipeline.
+func (c *LoadCtx) Header() *HeaderWriter {
+	if c.headers == nil {
+		c.headers = http.Header{}
+	}
+	return &HeaderWriter{h: c.headers}
+}
+
+// CollectHeaders returns the accumulated response headers set during Load.
+// The pipeline calls this after the full load chain completes and merges
+// the result into the kit.Response.Headers map. User code never calls
+// this directly.
+func (c *LoadCtx) CollectHeaders() http.Header {
+	return c.headers
 }
 
 // NewRenderCtx builds a RenderCtx for the given request, response, and

@@ -314,9 +314,10 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 	var (
 		data        any
 		layoutDatas []any
+		lctx        *kit.LoadCtx
 	)
 	if route.Load != nil || hasAnyLayoutLoader(route.LayoutLoaders) {
-		lctx := kit.NewLoadCtx(r, ev.Params)
+		lctx = kit.NewLoadCtx(r, ev.Params)
 		lctx.Locals = ev.Locals
 		lctx.Cookies = ev.Cookies
 		layoutDatas = make([]any, len(route.LayoutChain))
@@ -376,6 +377,11 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 		if err != nil {
 			return nil, err
 		}
+		if lctx != nil {
+			for k, vs := range lctx.CollectHeaders() {
+				w.Header()[k] = vs
+			}
+		}
 		if err := s.renderStreaming(w, r, ev, inner, streams, status, headBytes); err != nil {
 			return nil, err
 		}
@@ -407,6 +413,11 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 
 	body := buf.Bytes()
 	headers := http.Header{}
+	if lctx != nil {
+		for k, vs := range lctx.CollectHeaders() {
+			headers[k] = vs
+		}
+	}
 	headers.Set("Content-Type", "text/html; charset=utf-8")
 	headers.Set("Content-Length", strconv.Itoa(len(body)))
 	status := http.StatusOK
