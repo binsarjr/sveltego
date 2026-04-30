@@ -55,6 +55,14 @@ type HandleFn func(ev *RequestEvent, resolve ResolveFn) (*Response, error)
 // The short-circuit does NOT re-enter HandleError (no infinite loop).
 type HandleErrorFn func(ev *RequestEvent, err error) (SafeError, error)
 
+// HandleActionFn is the signature of the optional HandleAction hook. The
+// pipeline calls it for every form action POST, passing the resolved
+// action name and the matched ActionFn as next. Returning without calling
+// next short-circuits the action (useful for CSRF rejection or rate
+// limiting). Calling next(ev) runs the action and lets middleware observe
+// or transform the result.
+type HandleActionFn func(ev *RequestEvent, actionName string, next ActionFn) ActionResult
+
 // HandleFetchFn is the signature of the optional HandleFetch hook. The
 // pipeline plugs it into RequestEvent.Fetch so outbound HTTP traffic
 // from Load and route handlers can be intercepted.
@@ -112,6 +120,12 @@ func IdentityHandle(ev *RequestEvent, resolve ResolveFn) (*Response, error) {
 	return resolve(ev)
 }
 
+// IdentityHandleAction is the default HandleAction hook. It calls next
+// and returns its result unchanged without any cross-cutting logic.
+func IdentityHandleAction(ev *RequestEvent, _ string, next ActionFn) ActionResult {
+	return next(ev)
+}
+
 // IdentityHandleError is the default HandleError hook. It maps any error
 // to a generic 500 SafeError without exposing internal detail.
 func IdentityHandleError(_ *RequestEvent, _ error) (SafeError, error) {
@@ -157,11 +171,12 @@ func Sequence(handlers ...HandleFn) HandleFn {
 // the value to the server. User code in src/hooks.server.go does not
 // touch this type; the build wires it for them.
 type Hooks struct {
-	Handle      HandleFn
-	HandleError HandleErrorFn
-	HandleFetch HandleFetchFn
-	Reroute     RerouteFn
-	Init        InitFn
+	Handle       HandleFn
+	HandleError  HandleErrorFn
+	HandleFetch  HandleFetchFn
+	HandleAction HandleActionFn
+	Reroute      RerouteFn
+	Init         InitFn
 }
 
 // DefaultHooks returns a Hooks bundle filled with identity defaults so a
@@ -169,11 +184,12 @@ type Hooks struct {
 // identity passthrough and the rest are absent.
 func DefaultHooks() Hooks {
 	return Hooks{
-		Handle:      IdentityHandle,
-		HandleError: IdentityHandleError,
-		HandleFetch: IdentityHandleFetch,
-		Reroute:     IdentityReroute,
-		Init:        IdentityInit,
+		Handle:       IdentityHandle,
+		HandleError:  IdentityHandleError,
+		HandleFetch:  IdentityHandleFetch,
+		HandleAction: IdentityHandleAction,
+		Reroute:      IdentityReroute,
+		Init:         IdentityInit,
 	}
 }
 
@@ -189,6 +205,9 @@ func (h Hooks) WithDefaults() Hooks {
 	}
 	if h.HandleFetch == nil {
 		h.HandleFetch = IdentityHandleFetch
+	}
+	if h.HandleAction == nil {
+		h.HandleAction = IdentityHandleAction
 	}
 	if h.Reroute == nil {
 		h.Reroute = IdentityReroute
