@@ -318,13 +318,65 @@ func (s *Server) renderEmptyShell() *kit.Response {
 // outer→inner order when LayoutData is non-nil). Form carries ActionData
 // from a POST action on the same request. RouteID is the canonical route
 // pattern used by the client router to look up the component. URL is the
-// full request URL string.
+// full request URL string. Manifest is non-empty only on the initial
+// SSR render so the SPA router (#37) can match link URLs and pick the
+// right route module on subsequent navigations; __data.json fetches omit
+// it because the client already has it from the first paint.
 type clientPayload struct {
-	RouteID    string `json:"routeId"`
-	Data       any    `json:"data"`
-	LayoutData []any  `json:"layoutData,omitempty"`
-	Form       any    `json:"form"`
-	URL        string `json:"url"`
+	RouteID    string                `json:"routeId"`
+	Data       any                   `json:"data"`
+	LayoutData []any                 `json:"layoutData,omitempty"`
+	Form       any                   `json:"form"`
+	URL        string                `json:"url"`
+	Manifest   []clientManifestEntry `json:"manifest,omitempty"`
+}
+
+// clientManifestEntry is one route descriptor shipped to the client SPA
+// router. Pattern is the SvelteKit-canonical pattern (the same string
+// used as RouteID), Segments is the parsed form so the client can match
+// URLs without re-parsing the bracket syntax. Only routes with a Page
+// handler are emitted; pure +server.go routes do not participate in SPA
+// navigation.
+type clientManifestEntry struct {
+	Pattern  string                  `json:"pattern"`
+	Segments []clientManifestSegment `json:"segments"`
+}
+
+// clientManifestSegment mirrors router.Segment for the wire. Kind uses
+// the same numeric values as router.SegmentKind so the client can switch
+// on it directly: 0=static, 1=param, 2=optional, 3=rest.
+type clientManifestSegment struct {
+	Kind  uint8  `json:"kind"`
+	Name  string `json:"name,omitempty"`
+	Value string `json:"value,omitempty"`
+}
+
+// buildClientManifest walks routes and returns the SPA router manifest
+// ordered the same way the server tree was built (router preserves the
+// caller-supplied order after sorting for specificity). Routes without a
+// Page handler are skipped so the client never tries to mount a server-only
+// route. The result is cached on the Server at New time.
+func buildClientManifest(routes []router.Route) []clientManifestEntry {
+	out := make([]clientManifestEntry, 0, len(routes))
+	for i := range routes {
+		r := &routes[i]
+		if r.Page == nil {
+			continue
+		}
+		segs := make([]clientManifestSegment, len(r.Segments))
+		for j, s := range r.Segments {
+			segs[j] = clientManifestSegment{
+				Kind:  uint8(s.Kind),
+				Name:  s.Name,
+				Value: s.Value,
+			}
+		}
+		out = append(out, clientManifestEntry{
+			Pattern:  r.Pattern,
+			Segments: segs,
+		})
+	}
+	return out
 }
 
 // marshalPayload encodes p as JSON and escapes sequences that would break
@@ -635,6 +687,7 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 		return nil, err
 	}
 	payload := buildClientPayload(r, route, data, layoutDatas, form)
+	payload.Manifest = s.clientManifest
 	emitPayloadScriptTag(buf, payload)
 	buf.WriteString(s.shellTail)
 
