@@ -487,3 +487,56 @@ func TestMatch_ConcurrentSafe(t *testing.T) {
 		<-done
 	}
 }
+
+// TestMatch_HeapTruncateBoundary exercises matchState.truncate at the
+// exact maxStackParams boundary after the overflow heap has been
+// populated. With ten param segments where only the last differs,
+// matching the second pattern forces backtracking that unwinds through
+// truncate(to=9), truncate(to=8) and finally truncate(to<8). Regresses
+// the previous tangled overC counter that could panic if drop > overC.
+func TestMatch_HeapTruncateBoundary(t *testing.T) {
+	tree := mustBuild(t, []router.Route{
+		mkRoute(t, "/[a]/[b]/[c]/[d]/[e]/[f]/[g]/[h]/[i]/x"),
+		mkRoute(t, "/[a]/[b]/[c]/[d]/[e]/[f]/[g]/[h]/[i]/y"),
+	})
+	r, params, ok := tree.Match("/1/2/3/4/5/6/7/8/9/y")
+	if !ok {
+		t.Fatalf("no match for 10-segment path")
+	}
+	if r.Pattern != "/[a]/[b]/[c]/[d]/[e]/[f]/[g]/[h]/[i]/y" {
+		t.Errorf("Pattern = %q", r.Pattern)
+	}
+	want := map[string]string{
+		"a": "1", "b": "2", "c": "3", "d": "4", "e": "5",
+		"f": "6", "g": "7", "h": "8", "i": "9",
+	}
+	for k, v := range want {
+		if got := params[k]; got != v {
+			t.Errorf("params[%q] = %q, want %q", k, got, v)
+		}
+	}
+}
+
+// TestMatch_HeapTruncateRebuild forces the heap branch to populate,
+// fail, and then a fresh match on the same Tree to succeed. The
+// underlying matchState is per-call but the test guards against state
+// leaks between matches if the implementation ever pools it.
+func TestMatch_HeapTruncateRebuild(t *testing.T) {
+	tree := mustBuild(t, []router.Route{
+		mkRoute(t, "/[a]/[b]/[c]/[d]/[e]/[f]/[g]/[h]/[i]/x"),
+		mkRoute(t, "/short/[id]"),
+	})
+	if _, _, ok := tree.Match("/1/2/3/4/5/6/7/8/9/nope"); ok {
+		t.Fatalf("expected no match for 10-segment miss")
+	}
+	r, params, ok := tree.Match("/short/42")
+	if !ok {
+		t.Fatalf("no match for /short/42")
+	}
+	if r.Pattern != "/short/[id]" {
+		t.Errorf("Pattern = %q", r.Pattern)
+	}
+	if params["id"] != "42" {
+		t.Errorf("id = %q", params["id"])
+	}
+}

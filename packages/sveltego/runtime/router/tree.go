@@ -1,9 +1,11 @@
 package router
 
 import (
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"hash/fnv"
+	"io"
 	"sort"
 	"strconv"
 )
@@ -277,12 +279,9 @@ func sortAll(n *node) {
 }
 
 func routeID(pattern string) string {
-	h := fnv.New64a()
-	_, _ = h.Write([]byte(pattern))
-	var buf [8]byte
-	sum := h.Sum64()
-	for i := 0; i < 8; i++ {
-		buf[7-i] = byte(sum >> (i * 8))
-	}
-	return hex.EncodeToString(buf[:4])
+	h := fnv.New32a()
+	_, _ = io.WriteString(h, pattern)
+	var buf [4]byte
+	binary.BigEndian.PutUint32(buf[:], h.Sum32())
+	return hex.EncodeToString(buf[:])
 }

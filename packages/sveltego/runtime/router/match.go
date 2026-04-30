@@ -19,10 +19,9 @@ type capture struct {
 // from Match's stack frame and never escape, so the matcher itself
 // allocates zero on the static and param hot paths.
 type matchState struct {
-	caps  [maxStackParams]capture
-	n     int
-	overC int
-	over  []capture
+	caps [maxStackParams]capture
+	n    int
+	over []capture
 }
 
 func (s *matchState) push(c capture) {
@@ -32,18 +31,19 @@ func (s *matchState) push(c capture) {
 		return
 	}
 	s.over = append(s.over, c)
-	s.overC++
 	s.n++
 }
 
+// truncate restores the state to the size it had before some pushes
+// were made. The invariant maintained is len(s.over) == max(0, s.n -
+// maxStackParams).
 func (s *matchState) truncate(to int) {
-	if to >= maxStackParams && s.overC > 0 {
-		drop := s.n - to
-		s.overC -= drop
-		s.over = s.over[:s.overC]
-	} else if to < maxStackParams && s.overC > 0 {
-		s.overC = 0
-		s.over = s.over[:0]
+	over := to - maxStackParams
+	if over < 0 {
+		over = 0
+	}
+	if over < len(s.over) {
+		s.over = s.over[:over]
 	}
 	s.n = to
 }
