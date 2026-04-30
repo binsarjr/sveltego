@@ -26,10 +26,13 @@ type Server struct {
 	cfg   Config
 	tools map[string]Tool
 
-	mu         sync.Mutex
-	out        *json.Encoder
-	outWriter  io.Writer
-	cachedDocs *DocsIndex
+	mu        sync.Mutex
+	out       *json.Encoder
+	outWriter io.Writer
+
+	docsOnce sync.Once
+	docsIdx  *DocsIndex
+	docsErr  error
 }
 
 // Tool describes a single MCP tool: schema for clients and a handler
