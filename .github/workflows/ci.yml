@@ -1,8 +1,8 @@
 # CI budget split (Phase 0p):
 #
-# - PR runs (lite): 1 OS × 1 Go (ubuntu-latest, 1.23.x) + changes +
+# - PR runs (lite): 1 OS × 1 Go (ubuntu-latest, 1.25.x) + changes +
 #   commit-lint + agents-sync. Roughly 4 jobs per push.
-# - Push to main (full): 3 OS × 2 Go matrix + isolated-modules +
+# - Push to main (full): 3 OS × 1 Go (1.25.x, matching go.work) + isolated-modules +
 #   playground-smoke + agents-sync + changes. Full coverage at merge.
 # - Docs-only diffs (`**.md`, `tasks/**`, `docs/**`) skip CI entirely
 #   via paths-ignore.
@@ -77,7 +77,7 @@ jobs:
               - '.github/workflows/**'
               - 'test-utils/**'
 
-  # Lite matrix on PRs: ubuntu-latest, go1.23.x. ~1 job.
+  # Lite matrix on PRs: ubuntu-latest, go1.25.x. ~1 job.
   lint-and-test-pr:
     name: lint-and-test (${{ matrix.os }}, go${{ matrix.go }})
     if: github.event_name == 'pull_request'
@@ -86,7 +86,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        go: ['1.23.x']
+        go: ['1.25.x']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -334,14 +334,14 @@ jobs:
           done
 
       - name: Upload coverage to Codecov
-        if: matrix.os == 'ubuntu-latest' && matrix.go == '1.23.x'
+        if: matrix.os == 'ubuntu-latest' && matrix.go == '1.25.x'
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           directory: coverage
           fail_ci_if_error: false
 
-  # Full matrix on push to main: 3 OS × 2 Go. ~6 jobs.
+  # Full matrix on push to main: 3 OS × 1 Go (1.25.x, matching go.work). ~3 jobs.
   lint-and-test-main:
     name: lint-and-test (${{ matrix.os }}, go${{ matrix.go }})
     if: github.event_name == 'push'
@@ -350,7 +350,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        go: ['1.22.x', '1.23.x']
+        go: ['1.25.x']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -598,7 +598,7 @@ jobs:
           done
 
       - name: Upload coverage to Codecov
-        if: matrix.os == 'ubuntu-latest' && matrix.go == '1.23.x'
+        if: matrix.os == 'ubuntu-latest' && matrix.go == '1.25.x'
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -618,7 +618,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.22.x'
+          go-version: '1.25.x'
           cache: false
 
       - name: Cache Go module and build artifacts
@@ -627,9 +627,9 @@ jobs:
           path: |
             ~/go/pkg/mod
             ~/.cache/go-build
-          key: ${{ runner.os }}-go-1.22.x-isolated-${{ hashFiles('**/go.sum') }}
+          key: ${{ runner.os }}-go-1.25.x-isolated-${{ hashFiles('**/go.sum') }}
           restore-keys: |
-            ${{ runner.os }}-go-1.22.x-isolated-
+            ${{ runner.os }}-go-1.25.x-isolated-
 
       - name: Build and test each module in isolation
         shell: bash
@@ -697,7 +697,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.23.x'
+          go-version: '1.25.x'
           cache: false
 
       - name: Compile + Build
