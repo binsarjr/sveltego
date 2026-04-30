@@ -14,6 +14,11 @@ import (
 	page_routes_dash_team_billing "myapp/.gen/routes/dash/team/billing"
 )
 
+// HasServiceWorker reports whether the project declares src/service-worker.ts.
+// The runtime reads this constant to decide whether to emit the auto-registration
+// <script> tag (#89).
+const HasServiceWorker = false
+
 // Route ID constants for type-safe linking. Pass to kit.Link instead of a
 // raw string so route renames surface as compile errors.
 const (

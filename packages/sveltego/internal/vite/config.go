@@ -26,6 +26,13 @@ type ConfigOptions struct {
 	// a hashed asset filename in the manifest. Path is relative to the
 	// project root, e.g. "src/app.css".
 	CSSEntry string
+	// ServiceWorkerEntry, when non-empty, is the path (relative to the
+	// project root) of the user's src/service-worker.ts source. The
+	// generator emits a second Rollup build for it that outputs an
+	// unhashed `service-worker.js` directly under static/, so the
+	// runtime can register it at the document root scope ("/"). Empty
+	// disables the service-worker build entirely (#89).
+	ServiceWorkerEntry string
 }
 
 // GenerateConfig returns the contents of a vite.config.gen.js that
@@ -71,7 +78,20 @@ func GenerateConfig(opts ConfigOptions) string {
 	if opts.CSSEntry != "" {
 		fmt.Fprintf(&b, "        %q: path.resolve(__dirname, %q),\n", "app", opts.CSSEntry)
 	}
+	if opts.ServiceWorkerEntry != "" {
+		fmt.Fprintf(&b, "        %q: path.resolve(__dirname, %q),\n", "service-worker", opts.ServiceWorkerEntry)
+	}
 	b.WriteString("      },\n")
+	if opts.ServiceWorkerEntry != "" {
+		// Keep service-worker.js unhashed and one directory above outDir so
+		// it lives at the site root (/service-worker.js). Route chunks keep
+		// the default hashed filename pattern.
+		b.WriteString("      output: {\n")
+		b.WriteString("        entryFileNames: (chunk) => chunk.name === 'service-worker' ? '../service-worker.js' : 'immutable/[name].[hash].js',\n")
+		b.WriteString("        chunkFileNames: 'immutable/[name].[hash].js',\n")
+		b.WriteString("        assetFileNames: 'immutable/assets/[name].[hash][extname]',\n")
+		b.WriteString("      },\n")
+	}
 	b.WriteString("    },\n")
 	b.WriteString("  },\n")
 	b.WriteString("});\n")

@@ -72,6 +72,12 @@ type ManifestOptions struct {
 	// key (e.g. "routes/+page"). When present the manifest emits a
 	// ClientKey field on each matching router.Route.
 	ClientKeys map[string]string
+	// HasServiceWorker, when true, makes the manifest declare a
+	// `const HasServiceWorker = true` so the server runtime can gate the
+	// auto-registration <script> on file presence (#89). Defaults to
+	// false — the constant is still emitted so server code can read it
+	// unconditionally without a build-tag dance.
+	HasServiceWorker bool
 }
 
 // GenerateManifest emits a deterministic, gofmt-clean Go source file
@@ -274,6 +280,15 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 	}
 	b.Dedent()
 	b.Line(")")
+	b.Line("")
+
+	// HasServiceWorker is read by the runtime to decide whether to inject
+	// the auto-registration <script> for /service-worker.js. Always
+	// emitted so server code can reference it without a build-tag dance.
+	b.Linef("// HasServiceWorker reports whether the project declares src/service-worker.ts.")
+	b.Linef("// The runtime reads this constant to decide whether to emit the auto-registration")
+	b.Linef("// <script> tag (#89).")
+	b.Linef("const HasServiceWorker = %t", opts.HasServiceWorker)
 	b.Line("")
 
 	// Emit one RouteID<Slug> constant per linkable route so user code can

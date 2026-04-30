@@ -101,6 +101,14 @@ type Config struct {
 	// ViteBase is the URL base path for Vite assets, e.g. "/static/_app".
 	// Defaults to "/static/_app" when ViteManifest is non-empty.
 	ViteBase string
+	// ServiceWorker enables the auto-registration <script> for
+	// /service-worker.js on every SSR-rendered page. Wire it from the
+	// generated `gen.HasServiceWorker` constant; users opt out with
+	// `Config{ServiceWorker: false}` even when the file exists. The
+	// emitted script is feature-gated on `'serviceWorker' in navigator`
+	// so non-supporting browsers no-op silently. Scope is rooted at "/"
+	// so SPA navigation under any sub-path is covered (#89).
+	ServiceWorker bool
 }
 
 // Server is the http.Handler implementation that drives a sveltego app.
@@ -126,6 +134,11 @@ type Server struct {
 	// viteManifest holds parsed Vite chunk metadata for asset tag injection.
 	viteManifest viteManifestMap
 	viteBase     string
+
+	// serviceWorker is the precomputed registration <script> tag emitted
+	// before </body> when Config.ServiceWorker is true. Empty disables the
+	// runtime injection entirely (#89).
+	serviceWorker string
 
 	// clientManifest is the SPA route table embedded in the initial SSR
 	// payload so the client SPA router can match link URLs and look up
@@ -207,6 +220,10 @@ func New(cfg Config) (*Server, error) {
 		viteBase = "/static/_app"
 	}
 
+	swTag := ""
+	if cfg.ServiceWorker {
+		swTag = serviceWorkerRegisterScript
+	}
 	done := make(chan struct{})
 	srv := &Server{
 		tree:            tree,
@@ -221,6 +238,7 @@ func New(cfg Config) (*Server, error) {
 		shellTail:       tail,
 		viteManifest:    vm,
 		viteBase:        viteBase,
+		serviceWorker:   swTag,
 		clientManifest:  buildClientManifest(tree.Routes()),
 		initDone:        done,
 		initTimeout:     initTimeout,
