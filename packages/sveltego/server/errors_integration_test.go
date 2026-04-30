@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -401,5 +402,186 @@ func TestErrorPreservesHeaders_HandleError(t *testing.T) {
 	}
 	if got := resp.Header.Get("X-Error-ID"); got != "err-42" {
 		t.Errorf("X-Error-ID = %q, want %q", got, "err-42")
+	}
+}
+
+// slugSegments returns the segment list for a /item/[slug] pattern.
+func slugSegments() []router.Segment {
+	return []router.Segment{
+		{Kind: router.SegmentStatic, Value: "item"},
+		{Kind: router.SegmentParam, Name: "slug"},
+	}
+}
+
+// TestErrorBoundary_RawParamsPreserved asserts that the error-boundary
+// RenderCtx receives the same RawParams the success path would see.
+// Before this fix the error path left RawParams nil, so ctx.RawParams["slug"]
+// silently returned "". After the fix both paths carry the same value from
+// ev.RawParams (populated by rawParamsFromPath after a successful route match).
+func TestErrorBoundary_RawParamsPreserved(t *testing.T) {
+	t.Parallel()
+
+	// Capture what the success path stores so we can assert the error path
+	// matches it exactly, regardless of whether the value is encoded or not.
+	var successRaw string
+	var errorRaw string
+
+	srvSuccess := newTestServer(t, []router.Route{{
+		Pattern:  "/item/[slug]",
+		Segments: slugSegments(),
+		Page: func(w *render.Writer, ctx *kit.RenderCtx, _ any) error {
+			successRaw = ctx.RawParams["slug"]
+			w.WriteString("ok")
+			return nil
+		},
+	}})
+	srvSuccess.hooks = kit.DefaultHooks()
+	tsSuccess := httptest.NewServer(srvSuccess)
+	t.Cleanup(tsSuccess.Close)
+	respS, err := http.Get(tsSuccess.URL + "/item/hello%20world")
+	if err != nil {
+		t.Fatalf("GET success: %v", err)
+	}
+	io.ReadAll(respS.Body) //nolint:errcheck
+	respS.Body.Close()
+
+	boundary := func(w *render.Writer, ctx *kit.RenderCtx, _ kit.SafeError) error {
+		errorRaw = ctx.RawParams["slug"]
+		w.WriteString("error")
+		return nil
+	}
+
+	srvError := newTestServer(t, []router.Route{{
+		Pattern:  "/item/[slug]",
+		Segments: slugSegments(),
+		Page:     staticPage("item"),
+		Load: func(_ *kit.LoadCtx) (any, error) {
+			return nil, errors.New("load failed")
+		},
+		Error: boundary,
+	}})
+	hooks := kit.Hooks{
+		HandleError: func(_ *kit.RequestEvent, err error) (kit.SafeError, error) {
+			return kit.SafeError{Code: http.StatusInternalServerError, Message: err.Error()}, nil
+		},
+	}
+	srvError.hooks = hooks.WithDefaults()
+	tsError := httptest.NewServer(srvError)
+	t.Cleanup(tsError.Close)
+
+	respE, err := http.Get(tsError.URL + "/item/hello%20world")
+	if err != nil {
+		t.Fatalf("GET error: %v", err)
+	}
+	t.Cleanup(func() { respE.Body.Close() })
+	io.ReadAll(respE.Body) //nolint:errcheck
+
+	if respE.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", respE.StatusCode)
+	}
+	// The core invariant: error path RawParams must match success path RawParams.
+	// Before this fix errorRaw was "" (nil map); now it equals successRaw.
+	if errorRaw != successRaw {
+		t.Errorf("error-path RawParams[slug] = %q, success-path = %q; they must match", errorRaw, successRaw)
+	}
+	if errorRaw == "" {
+		t.Error("RawParams[slug] is empty on error path, want a non-empty param value")
+	}
+}
+
+// TestRenderCtx_OriginalURL_SuccessPath asserts that OriginalURL is wired
+// into the success-path RenderCtx and equals the inbound URL when no
+// Reroute hook fires.
+func TestRenderCtx_OriginalURL_SuccessPath(t *testing.T) {
+	t.Parallel()
+
+	var gotOriginal *url.URL
+	page := func(w *render.Writer, ctx *kit.RenderCtx, _ any) error {
+		gotOriginal = ctx.OriginalURL
+		w.WriteString("ok")
+		return nil
+	}
+
+	srv := newTestServer(t, []router.Route{{
+		Pattern:  "/about",
+		Segments: segmentsFor("/about"),
+		Page:     page,
+	}})
+	srv.hooks = kit.DefaultHooks()
+
+	ts := httptest.NewServer(srv)
+	t.Cleanup(ts.Close)
+
+	resp, err := http.Get(ts.URL + "/about")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	t.Cleanup(func() { resp.Body.Close() })
+	io.ReadAll(resp.Body) //nolint:errcheck
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200", resp.StatusCode)
+	}
+	if gotOriginal == nil || gotOriginal.Path != "/about" {
+		t.Errorf("OriginalURL = %v, want path /about", gotOriginal)
+	}
+}
+
+// TestErrorBoundary_OriginalURL_PreservedThroughReroute asserts that
+// OriginalURL in an error-boundary RenderCtx reflects the inbound URL
+// before Reroute rewrote the match path, so +error.svelte templates can
+// always recover the URL the browser actually sent.
+func TestErrorBoundary_OriginalURL_PreservedThroughReroute(t *testing.T) {
+	t.Parallel()
+
+	var gotOriginal *url.URL
+	var gotURL *url.URL
+	boundary := func(w *render.Writer, ctx *kit.RenderCtx, _ kit.SafeError) error {
+		gotOriginal = ctx.OriginalURL
+		gotURL = ctx.URL
+		w.WriteString("error")
+		return nil
+	}
+
+	hooks := kit.Hooks{
+		Reroute: func(u *url.URL) string {
+			if strings.HasPrefix(u.Path, "/legacy/") {
+				return strings.Replace(u.Path, "/legacy/", "/", 1)
+			}
+			return ""
+		},
+		HandleError: func(_ *kit.RequestEvent, err error) (kit.SafeError, error) {
+			return kit.SafeError{Code: http.StatusInternalServerError, Message: err.Error()}, nil
+		},
+	}
+
+	srv := newHookServer(t, hooks, []router.Route{{
+		Pattern:  "/about",
+		Segments: segmentsFor("/about"),
+		Page:     staticPage("about"),
+		Load: func(_ *kit.LoadCtx) (any, error) {
+			return nil, errors.New("load failed")
+		},
+		Error: boundary,
+	}})
+
+	ts := httptest.NewServer(srv)
+	t.Cleanup(ts.Close)
+
+	resp, err := http.Get(ts.URL + "/legacy/about")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	t.Cleanup(func() { resp.Body.Close() })
+	io.ReadAll(resp.Body) //nolint:errcheck
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", resp.StatusCode)
+	}
+	if gotOriginal == nil || gotOriginal.Path != "/legacy/about" {
+		t.Errorf("OriginalURL = %v, want path /legacy/about", gotOriginal)
+	}
+	if gotURL == nil || gotURL.Path != "/legacy/about" {
+		t.Errorf("URL = %v, want path /legacy/about (ev.URL is the inbound URL)", gotURL)
 	}
 }
