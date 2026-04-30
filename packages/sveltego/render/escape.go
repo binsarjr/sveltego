@@ -63,6 +63,59 @@ func appendEscapeAttr(dst []byte, s string) []byte {
 	return dst
 }
 
+// appendEscapeTextBytes mirrors appendEscapeText for an existing []byte
+// source. Used by the default branch of WriteEscape so a fmt.Appendf
+// result can be escaped without the extra []byte->string copy.
+func appendEscapeTextBytes(dst, s []byte) []byte {
+	i := indexTextSpecialBytes(s)
+	if i < 0 {
+		return append(dst, s...)
+	}
+	dst = append(dst, s[:i]...)
+	for ; i < len(s); i++ {
+		switch s[i] {
+		case '&':
+			dst = append(dst, escAmp...)
+		case '<':
+			dst = append(dst, escLt...)
+		case '>':
+			dst = append(dst, escGt...)
+		case '"':
+			dst = append(dst, escQuot...)
+		case '\'':
+			dst = append(dst, escApos...)
+		default:
+			dst = append(dst, s[i])
+		}
+	}
+	return dst
+}
+
+// appendEscapeAttrBytes mirrors appendEscapeAttr for an existing []byte
+// source.
+func appendEscapeAttrBytes(dst, s []byte) []byte {
+	i := indexAttrSpecialBytes(s)
+	if i < 0 {
+		return append(dst, s...)
+	}
+	dst = append(dst, s[:i]...)
+	for ; i < len(s); i++ {
+		switch s[i] {
+		case '&':
+			dst = append(dst, escAmp...)
+		case '<':
+			dst = append(dst, escLt...)
+		case '>':
+			dst = append(dst, escGt...)
+		case '"':
+			dst = append(dst, escQuot...)
+		default:
+			dst = append(dst, s[i])
+		}
+	}
+	return dst
+}
+
 func indexTextSpecial(s string) int {
 	for i := range len(s) {
 		switch s[i] {
@@ -74,6 +127,26 @@ func indexTextSpecial(s string) int {
 }
 
 func indexAttrSpecial(s string) int {
+	for i := range len(s) {
+		switch s[i] {
+		case '&', '<', '>', '"':
+			return i
+		}
+	}
+	return -1
+}
+
+func indexTextSpecialBytes(s []byte) int {
+	for i := range len(s) {
+		switch s[i] {
+		case '&', '<', '>', '"', '\'':
+			return i
+		}
+	}
+	return -1
+}
+
+func indexAttrSpecialBytes(s []byte) int {
 	for i := range len(s) {
 		switch s[i] {
 		case '&', '<', '>', '"':

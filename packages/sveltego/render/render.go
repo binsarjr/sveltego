@@ -7,6 +7,29 @@ import (
 	"sync"
 )
 
+// jsonEncoder pools a json.Encoder bound to a settable target. Encoders
+// retain their writer permanently, so we wrap *Writer in an adapter
+// whose target swaps per Encode call. Reusing the encoder skips per-call
+// allocation of the encoder's internal state.
+type jsonEncoder struct {
+	target *Writer
+	enc    *json.Encoder
+}
+
+func (j *jsonEncoder) Write(p []byte) (int, error) {
+	j.target.buf = append(j.target.buf, p...)
+	return len(p), nil
+}
+
+var jsonPool = sync.Pool{
+	New: func() any {
+		j := &jsonEncoder{}
+		j.enc = json.NewEncoder(j)
+		j.enc.SetEscapeHTML(true)
+		return j
+	},
+}
+
 const defaultBufCap = 4096
 
 // Writer accumulates HTML into an internal buffer. Designed for per-request
@@ -57,9 +80,18 @@ func (w *Writer) WriteRaw(s string) {
 	w.buf = append(w.buf, s...)
 }
 
+// WriteRawBytes appends a pre-trusted []byte. Equivalent to WriteRaw but
+// avoids the []byte->string conversion at call sites that already hold
+// bytes (e.g. the head splice on the render hot path).
+func (w *Writer) WriteRawBytes(p []byte) {
+	w.buf = append(w.buf, p...)
+}
+
 // WriteEscape appends v HTML-escaped for text context. Numeric and bool
 // values bypass fmt to avoid allocations on the hot path. nil emits an
-// empty string.
+// empty string. A value that implements both error and fmt.Stringer is
+// rendered via Error(); types that need Stringer precedence should not
+// also satisfy error.
 func (w *Writer) WriteEscape(v any) {
 	switch x := v.(type) {
 	case nil:
@@ -99,12 +131,13 @@ func (w *Writer) WriteEscape(v any) {
 	case fmt.Stringer:
 		w.buf = appendEscapeText(w.buf, x.String())
 	default:
-		w.buf = appendEscapeText(w.buf, fmt.Sprint(v))
+		w.buf = appendEscapeTextBytes(w.buf, fmt.Appendf(nil, "%v", v))
 	}
 }
 
 // WriteEscapeAttr appends v escaped for an attribute value. Codegen wraps
-// attribute values in double quotes outside this call.
+// attribute values in double quotes outside this call. error precedes
+// fmt.Stringer; see WriteEscape.
 func (w *Writer) WriteEscapeAttr(v any) {
 	switch x := v.(type) {
 	case nil:
@@ -144,7 +177,7 @@ func (w *Writer) WriteEscapeAttr(v any) {
 	case fmt.Stringer:
 		w.buf = appendEscapeAttr(w.buf, x.String())
 	default:
-		w.buf = appendEscapeAttr(w.buf, fmt.Sprint(v))
+		w.buf = appendEscapeAttrBytes(w.buf, fmt.Appendf(nil, "%v", v))
 	}
 }
 
@@ -152,9 +185,12 @@ func (w *Writer) WriteEscapeAttr(v any) {
 // embedding inside a <script> tag. The encoder's default HTML escaping
 // rewrites <, >, &, U+2028, U+2029 inside strings to \u escapes.
 func (w *Writer) WriteJSON(v any) error {
-	enc := json.NewEncoder((*bufWriter)(w))
-	enc.SetEscapeHTML(true)
-	if err := enc.Encode(v); err != nil {
+	j, _ := jsonPool.Get().(*jsonEncoder)
+	j.target = w
+	err := j.enc.Encode(v)
+	j.target = nil
+	jsonPool.Put(j)
+	if err != nil {
 		return fmt.Errorf("render: encode json: %w", err)
 	}
 	if n := len(w.buf); n > 0 && w.buf[n-1] == '\n' {
@@ -178,13 +214,4 @@ func (w *Writer) Len() int {
 // Reset truncates the buffer to zero length, retaining capacity.
 func (w *Writer) Reset() {
 	w.buf = w.buf[:0]
-}
-
-// bufWriter adapts *Writer to io.Writer for json.Encoder without exposing
-// the Write method on the public Writer surface.
-type bufWriter Writer
-
-func (b *bufWriter) Write(p []byte) (int, error) {
-	b.buf = append(b.buf, p...)
-	return len(p), nil
 }

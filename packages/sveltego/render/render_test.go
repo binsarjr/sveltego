@@ -41,6 +41,49 @@ func TestWriteRaw(t *testing.T) {
 	}
 }
 
+func TestWriteRawBytes(t *testing.T) {
+	w := render.New()
+	w.WriteRawBytes([]byte("<script>x()</script>"))
+	if got, want := string(w.Bytes()), "<script>x()</script>"; got != want {
+		t.Errorf("Bytes = %q, want %q", got, want)
+	}
+}
+
+func TestWriteRawBytes_Empty(t *testing.T) {
+	w := render.New()
+	w.WriteRawBytes(nil)
+	w.WriteRawBytes([]byte{})
+	if w.Len() != 0 {
+		t.Errorf("Len = %d, want 0", w.Len())
+	}
+}
+
+type errStringer struct {
+	msg string
+	str string
+}
+
+func (e errStringer) Error() string  { return e.msg }
+func (e errStringer) String() string { return e.str }
+
+func TestWriteEscape_ErrorPrecedesStringer(t *testing.T) {
+	v := errStringer{msg: "boom", str: "polite"}
+	w := render.New()
+	w.WriteEscape(v)
+	if got, want := string(w.Bytes()), "boom"; got != want {
+		t.Errorf("WriteEscape = %q, want %q (error must precede Stringer)", got, want)
+	}
+}
+
+func TestWriteEscapeAttr_ErrorPrecedesStringer(t *testing.T) {
+	v := errStringer{msg: "boom", str: "polite"}
+	w := render.New()
+	w.WriteEscapeAttr(v)
+	if got, want := string(w.Bytes()), "boom"; got != want {
+		t.Errorf("WriteEscapeAttr = %q, want %q (error must precede Stringer)", got, want)
+	}
+}
+
 func TestWriteEscape(t *testing.T) {
 	cases := []struct {
 		name string
