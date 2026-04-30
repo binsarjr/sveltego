@@ -3,6 +3,7 @@ package kit_test
 import (
 	"context"
 	"errors"
+	"iter"
 	"net/http"
 	"net/http/httptest"
 	"runtime"
@@ -242,4 +243,159 @@ func TestStreamCtx_NoLeakAfterRequestCancel(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("goroutine leak: baseline=%d current=%d", baseline, runtime.NumGoroutine())
+}
+
+// --- StreamedChan tests ---
+
+// TestStreamedChan_ThreeValues verifies that all three values pushed into the
+// channel reach the resolved result (last one wins, matching the drain contract).
+func TestStreamedChan_ThreeValues(t *testing.T) {
+	t.Parallel()
+	ch := make(chan int, 3)
+	ch <- 1
+	ch <- 2
+	ch <- 3
+	close(ch)
+
+	s := kit.StreamedChan(context.Background(), ch)
+	got, err := s.Wait(context.Background(), time.Second)
+	if err != nil {
+		t.Fatalf("Wait err = %v", err)
+	}
+	if got != 3 {
+		t.Fatalf("got %d, want 3 (last value)", got)
+	}
+}
+
+// TestStreamedChan_CtxCancelMidStream verifies that cancelling the request
+// context stops draining and surfaces context.Canceled.
+func TestStreamedChan_CtxCancelMidStream(t *testing.T) {
+	t.Parallel()
+
+	// Unbuffered so the drain blocks after reading the first value.
+	ch := make(chan int)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	s := kit.StreamedChan(ctx, ch)
+
+	// Send first value, then cancel before sending more.
+	ch <- 10
+	cancel()
+
+	_, err := s.Wait(context.Background(), 2*time.Second)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+
+	// Drain any leftover read attempt by closing the channel so the goroutine
+	// doesn't leak across test boundaries.
+	close(ch)
+}
+
+// TestStreamedChan_EmptyChannel resolves with zero and nil when the channel
+// is closed before any value arrives.
+func TestStreamedChan_EmptyChannel(t *testing.T) {
+	t.Parallel()
+	ch := make(chan string)
+	close(ch)
+
+	s := kit.StreamedChan(context.Background(), ch)
+	got, err := s.Wait(context.Background(), time.Second)
+	if err != nil {
+		t.Fatalf("Wait err = %v", err)
+	}
+	if got != "" {
+		t.Fatalf("got %q, want empty string", got)
+	}
+}
+
+// --- StreamedSeq tests ---
+
+// intSeq returns an iter.Seq2[int, error] that yields the given values with
+// nil errors, making it easy to drive StreamedSeq in tests.
+func intSeq(vals ...int) iter.Seq2[int, error] {
+	return func(yield func(int, error) bool) {
+		for _, v := range vals {
+			if !yield(v, nil) {
+				return
+			}
+		}
+	}
+}
+
+// TestStreamedSeq_LastValueWins confirms that StreamedSeq resolves with the
+// final yielded element (last write wins, matching the drain contract).
+func TestStreamedSeq_LastValueWins(t *testing.T) {
+	t.Parallel()
+	s := kit.StreamedSeq(context.Background(), intSeq(10, 20, 30))
+	got, err := s.Wait(context.Background(), time.Second)
+	if err != nil {
+		t.Fatalf("Wait err = %v", err)
+	}
+	if got != 30 {
+		t.Fatalf("got %d, want 30", got)
+	}
+}
+
+// TestStreamedSeq_ErrorTerminates verifies that the first non-nil error from
+// the iterator becomes the resolved error and stops further iteration.
+func TestStreamedSeq_ErrorTerminates(t *testing.T) {
+	t.Parallel()
+	boom := errors.New("seq error")
+	seq := func(yield func(int, error) bool) {
+		yield(1, nil)
+		yield(2, boom) // should stop here
+		yield(3, nil)  // must not be reached
+	}
+	s := kit.StreamedSeq(context.Background(), seq)
+	_, err := s.Wait(context.Background(), time.Second)
+	if !errors.Is(err, boom) {
+		t.Fatalf("err = %v, want %v", err, boom)
+	}
+}
+
+// TestStreamedSeq_CtxCancelStopsIteration confirms that a pre-cancelled
+// context causes StreamedSeq to stop after the first yield and surface
+// context.Canceled. Using an already-cancelled context makes the test
+// deterministic: the Done channel is closed before the drain goroutine
+// ever calls yield, so the first yield's cancellation check fires
+// immediately.
+func TestStreamedSeq_CtxCancelStopsIteration(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately so Done is already closed
+
+	reached := 0
+	seq := func(yield func(int, error) bool) {
+		for i := range 10 {
+			reached++
+			if !yield(i, nil) {
+				return
+			}
+		}
+	}
+
+	s := kit.StreamedSeq(ctx, seq)
+	_, err := s.Wait(context.Background(), 2*time.Second)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+	// The drain must have stopped before processing all 10 values.
+	if reached >= 10 {
+		t.Fatalf("seq was not stopped early: reached %d iterations", reached)
+	}
+}
+
+// TestStreamedSeq_EmptySeq resolves with zero and nil for an empty iterator.
+func TestStreamedSeq_EmptySeq(t *testing.T) {
+	t.Parallel()
+	empty := func(yield func(int, error) bool) {}
+	s := kit.StreamedSeq(context.Background(), iter.Seq2[int, error](empty))
+	got, err := s.Wait(context.Background(), time.Second)
+	if err != nil {
+		t.Fatalf("Wait err = %v", err)
+	}
+	if got != 0 {
+		t.Fatalf("got %d, want 0", got)
+	}
 }

@@ -1,6 +1,6 @@
 module github.com/binsarjr/sveltego
 
-go 1.22
+go 1.23
 
 require (
 	github.com/binsarjr/sveltego/test-utils v0.0.0-00010101000000-000000000000
