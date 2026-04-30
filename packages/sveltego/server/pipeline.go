@@ -7,11 +7,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 	"unsafe"
 
@@ -412,6 +416,9 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 			}
 		}
 		if err := s.renderStreaming(w, r, ev, inner, streams, status, headBytes); err != nil {
+			if errors.Is(err, kit.ErrClientGone) {
+				return nil, errStreamingWrote
+			}
 			return nil, err
 		}
 		return nil, errStreamingWrote
@@ -524,11 +531,40 @@ func appendStreams(dst []streamedField, v any) []streamedField {
 	return dst
 }
 
+// isClientGone reports whether err signals that the client closed the
+// connection. Covers broken pipe, use of closed network connection, and
+// context cancellation caused by the request going away — all of which
+// are normal events that should not pollute error logs.
+func isClientGone(ctx context.Context, err error) bool {
+	if err == nil {
+		return false
+	}
+	if ctx.Err() != nil {
+		return true
+	}
+	if errors.Is(err, syscall.EPIPE) ||
+		errors.Is(err, syscall.ECONNRESET) ||
+		errors.Is(err, io.ErrClosedPipe) ||
+		errors.Is(err, net.ErrClosed) {
+		return true
+	}
+	var netErr *net.OpError
+	if errors.As(err, &netErr) {
+		return true
+	}
+	return false
+}
+
 // renderStreaming writes the chunked HTML response to w. It flushes the
 // shell + page body first, then waits on each stream in registration
 // order, emitting a __sveltego__resolve script per resolution. The
 // shellTail closes the document only after every stream resolves or
 // fails, so the response body is well-formed HTML even on timeout.
+//
+// When a write fails because the client disconnected, renderStreaming
+// cancels any pending streams, logs once at debug level, and returns
+// kit.ErrClientGone. The caller must treat that as errStreamingWrote so
+// HandleError is not invoked — a disconnect is not a server fault.
 func (s *Server) renderStreaming(w http.ResponseWriter, r *http.Request, ev *kit.RequestEvent, inner func(*render.Writer) error, streams []streamedField, status int, headBytes []byte) error {
 	if ev.Cookies != nil {
 		ev.Cookies.Apply(w)
@@ -549,20 +585,59 @@ func (s *Server) renderStreaming(w http.ResponseWriter, r *http.Request, ev *kit
 	if err := inner(buf); err != nil {
 		return err
 	}
+
+	ctx := r.Context()
+
 	if err := buf.FlushTo(w); err != nil {
+		if isClientGone(ctx, err) {
+			s.cancelStreams(streams)
+			s.Logger.DebugContext(ctx, "streaming: client disconnected before shell flush")
+			return kit.ErrClientGone
+		}
 		return err
 	}
 
-	ctx := r.Context()
 	for _, f := range streams {
 		emitResolveScript(ctx, buf, f.id, f.stream, s.streamTimeout)
+		// ctx.Err() is set when the client disconnected and WaitAny
+		// returned early. The resolve script carries an error payload
+		// that we don't need to flush — log once and bail.
+		if ctx.Err() != nil {
+			s.cancelStreams(streams)
+			s.Logger.DebugContext(ctx, "streaming: client disconnected mid-stream",
+				slog.Uint64("stream_id", f.id))
+			return kit.ErrClientGone
+		}
 		if err := buf.FlushTo(w); err != nil {
+			if isClientGone(ctx, err) {
+				s.cancelStreams(streams)
+				s.Logger.DebugContext(ctx, "streaming: client disconnected mid-stream (write)",
+					slog.Uint64("stream_id", f.id))
+				return kit.ErrClientGone
+			}
 			return err
 		}
 	}
 
 	buf.WriteString(s.shellTail)
-	return buf.FlushTo(w)
+	if err := buf.FlushTo(w); err != nil {
+		if isClientGone(ctx, err) {
+			s.Logger.DebugContext(ctx, "streaming: client disconnected before shell tail")
+			return kit.ErrClientGone
+		}
+		return err
+	}
+	return nil
+}
+
+// cancelStreams cancels any pending stream producers so goroutines don't
+// outlive the request when the client disconnects mid-stream.
+func (s *Server) cancelStreams(streams []streamedField) {
+	for _, f := range streams {
+		if c, ok := f.stream.(interface{ Cancel() }); ok {
+			c.Cancel()
+		}
+	}
 }
 
 // emitResolveScript writes a single <script>__sveltego__resolve(id, ...)</script>
