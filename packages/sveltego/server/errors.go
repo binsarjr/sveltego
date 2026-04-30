@@ -26,12 +26,6 @@ type httpStatuser interface {
 	HTTPStatus() int
 }
 
-// notFound writes a plain-text 404 for an unmatched path.
-func (s *Server) notFound(w http.ResponseWriter, r *http.Request) {
-	s.Logger.Info("server: route not found", logKeyMethod, r.Method, logKeyPath, r.URL.Path)
-	writePlain(w, http.StatusNotFound, "404 not found\n")
-}
-
 // methodNotAllowed writes a plain-text 405 with the Allow header for
 // a +server.go route that lacks a handler for the request method.
 func (s *Server) methodNotAllowed(w http.ResponseWriter, r *http.Request, allowed []string) {
@@ -40,30 +34,36 @@ func (s *Server) methodNotAllowed(w http.ResponseWriter, r *http.Request, allowe
 	writePlain(w, http.StatusMethodNotAllowed, "405 method not allowed\n")
 }
 
-// handleLoadError converts a Load() error into a plain-text response.
-// Sentinel types (kit.RedirectErr, kit.HTTPErr, kit.FailErr) take
-// precedence: redirect needs the Location header, HTTPErr writes the
-// caller's message, FailErr outside an action context warns and 500s.
-// Other errors implementing HTTPStatus() drive the status code; the
-// rest fall through to 500.
-func (s *Server) handleLoadError(w http.ResponseWriter, r *http.Request, err error) {
+// handlePipelineError converts an error returned from anywhere inside
+// the Handle pipeline (Handle itself, Load, Render, sentinel from
+// resolve) into an HTTP response. Sentinel types route deterministically;
+// everything else falls through to the user's HandleError hook (or the
+// kit identity default) which produces a SafeError consumed by the
+// generic writer.
+func (s *Server) handlePipelineError(w http.ResponseWriter, r *http.Request, ev *kit.RequestEvent, err error) {
 	var redir *kit.RedirectErr
 	if errors.As(err, &redir) {
-		s.Logger.Info("server: load redirect",
+		s.Logger.Info("server: pipeline redirect",
 			logKeyMethod, r.Method,
 			logKeyPath, r.URL.Path,
 			logKeyStatus, redir.Code,
 			logKeyLocation, redir.Location)
+		if ev != nil && ev.Cookies != nil {
+			ev.Cookies.Apply(w)
+		}
 		http.Redirect(w, r, redir.Location, redir.Code)
 		return
 	}
 	var herr *kit.HTTPErr
 	if errors.As(err, &herr) {
-		s.Logger.Info("server: load http error",
+		s.Logger.Info("server: pipeline http error",
 			logKeyMethod, r.Method,
 			logKeyPath, r.URL.Path,
 			logKeyStatus, herr.Code,
 			logKeyError, herr.Message)
+		if ev != nil && ev.Cookies != nil {
+			ev.Cookies.Apply(w)
+		}
 		writePlain(w, herr.Code, herr.Message+"\n")
 		return
 	}
@@ -77,28 +77,49 @@ func (s *Server) handleLoadError(w http.ResponseWriter, r *http.Request, err err
 		return
 	}
 
-	status := http.StatusInternalServerError
-	var hs httpStatuser
-	if errors.As(err, &hs) {
-		status = hs.HTTPStatus()
+	// Treat a SafeError thrown directly (e.g. "404 not found" sentinel
+	// returned by resolve) as canonical without a second HandleError
+	// pass — it's already user-shaped.
+	var safeDirect kit.SafeError
+	if errors.As(err, &safeDirect) {
+		s.writeSafeError(w, r, safeDirect, err)
+		return
 	}
-	s.Logger.Error("server: load failed",
-		logKeyMethod, r.Method,
-		logKeyPath, r.URL.Path,
-		logKeyError, err.Error(),
-		logKeyStatus, status)
-	writePlain(w, status, http.StatusText(status)+"\n")
+
+	safe := s.hooks.HandleError(ev, err)
+
+	// Preserve the legacy httpStatuser observation: when the user did
+	// not author HandleError, the identity default returns 500 — but
+	// pre-hooks behavior promoted any error implementing HTTPStatus()
+	// to that status. Honor that path so existing user errors that
+	// expose a status keep doing so.
+	if safe.Code == http.StatusInternalServerError && safe.Message == http.StatusText(http.StatusInternalServerError) {
+		var hs httpStatuser
+		if errors.As(err, &hs) {
+			safe.Code = hs.HTTPStatus()
+			safe.Message = http.StatusText(safe.Code)
+		}
+	}
+	s.writeSafeError(w, r, safe, err)
 }
 
-// handleRenderError writes a plain-text 500 when a Page handler errors.
-// The buffer is discarded by the caller; nothing is written before the
-// header is set, so WriteHeader is safe here.
-func (s *Server) handleRenderError(w http.ResponseWriter, r *http.Request, err error) {
-	s.Logger.Error("server: render failed",
+// writeSafeError flushes a SafeError to the response and logs it once.
+func (s *Server) writeSafeError(w http.ResponseWriter, r *http.Request, safe kit.SafeError, original error) {
+	status := safe.HTTPStatus()
+	msg := safe.Message
+	if msg == "" {
+		msg = http.StatusText(status)
+	}
+	logger := s.Logger.Error
+	if status >= 400 && status < 500 {
+		logger = s.Logger.Info
+	}
+	logger("server: pipeline error",
 		logKeyMethod, r.Method,
 		logKeyPath, r.URL.Path,
-		logKeyError, err.Error())
-	writePlain(w, http.StatusInternalServerError, "500 internal server error\n")
+		logKeyStatus, status,
+		logKeyError, original.Error())
+	writePlain(w, status, msg+"\n")
 }
 
 func writePlain(w http.ResponseWriter, status int, body string) {

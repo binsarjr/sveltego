@@ -1,9 +1,10 @@
 // Package server is the runtime entry point a sveltego app composes in
 // its main package: feed it the codegen-emitted route slice, the user's
-// app.html shell, and an optional matchers map, and it returns an
-// http.Handler that runs the SvelteKit-shaped Match → Load → Render
-// → Response pipeline. Hooks, layouts, and form actions are deliberately
-// not in scope for the Phase 0 MVP.
+// app.html shell, and an optional matchers and hooks bundle, and it
+// returns an http.Handler that runs the SvelteKit-shaped Reroute → Handle
+// → Match → Load → Render → Response pipeline. Form actions remain out
+// of scope for Phase 0; layouts and hooks (Handle, HandleError,
+// HandleFetch, Reroute, Init) are wired.
 package server
 
 import (
@@ -15,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/binsarjr/sveltego/exports/kit"
 	"github.com/binsarjr/sveltego/exports/kit/params"
 	"github.com/binsarjr/sveltego/runtime/router"
 )
@@ -36,12 +38,17 @@ type Config struct {
 	Shell string
 	// Logger receives lifecycle and error events. Defaults to slog.Default.
 	Logger *slog.Logger
+	// Hooks is the optional hook bundle. nil fields fall back to the kit
+	// identity defaults; pass kit.Hooks{} or gen.Hooks() to wire user
+	// hooks discovered by codegen.
+	Hooks kit.Hooks
 }
 
 // Server is the http.Handler implementation that drives a sveltego app.
 type Server struct {
 	tree   *router.Tree
 	Logger *slog.Logger
+	hooks  kit.Hooks
 
 	shellHead string
 	shellMid  string
@@ -81,6 +88,7 @@ func New(cfg Config) (*Server, error) {
 	return &Server{
 		tree:      tree,
 		Logger:    logger,
+		hooks:     cfg.Hooks.WithDefaults(),
 		shellHead: head,
 		shellMid:  mid,
 		shellTail: tail,
@@ -99,8 +107,12 @@ func (s *Server) Handler() http.Handler {
 }
 
 // ListenAndServe binds the server to addr and serves until Shutdown is
-// called or the listener errors.
+// called or the listener errors. The Init hook (when configured) runs
+// once before the listener binds; an error from Init aborts startup.
 func (s *Server) ListenAndServe(addr string) error {
+	if err := s.runInit(context.Background()); err != nil {
+		return err
+	}
 	s.mu.Lock()
 	srv := &http.Server{
 		Addr:              addr,
@@ -111,6 +123,26 @@ func (s *Server) ListenAndServe(addr string) error {
 	s.mu.Unlock()
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("server: listen and serve: %w", err)
+	}
+	return nil
+}
+
+// Init runs the configured Init hook with ctx. Useful for callers that
+// want to control startup (signal handling, custom listener) outside of
+// ListenAndServe. ListenAndServe calls this internally with a
+// context.Background() before binding.
+func (s *Server) Init(ctx context.Context) error {
+	return s.runInit(ctx)
+}
+
+// runInit invokes the Init hook and wraps its error with a stable prefix
+// so callers can distinguish startup failures from listener errors.
+func (s *Server) runInit(ctx context.Context) error {
+	if s.hooks.Init == nil {
+		return nil
+	}
+	if err := s.hooks.Init(ctx); err != nil {
+		return fmt.Errorf("server: init hook: %w", err)
 	}
 	return nil
 }

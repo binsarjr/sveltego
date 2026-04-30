@@ -170,6 +170,14 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 		return nil, fmt.Errorf("codegen: write manifest: %w", err)
 	}
 
+	hookSet, err := scanHooksServer(opts.ProjectRoot)
+	if err != nil {
+		return nil, err
+	}
+	if err := emitHooks(opts.ProjectRoot, outDir, modulePath, "gen", hookSet); err != nil {
+		return nil, err
+	}
+
 	if err := emitEmbedStub(opts.ProjectRoot, outAbs); err != nil {
 		return nil, err
 	}
