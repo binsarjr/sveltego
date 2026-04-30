@@ -1,1 +1,1 @@
-{@const total := a + b}{total}
+{#if Show}{@const total := a + b}{total}{/if}

@@ -14,8 +14,9 @@ func (p Page) Render(w *render.Writer, ctx *kit.RenderCtx, data PageData) error 
 	_ = ctx
 	_ = data
 	if Show {
-		total := a + b
-		w.WriteEscape(total)
+		a := 1
+		b := 2
+		w.WriteEscape(a + b)
 	}
 	return nil
 }

@@ -82,6 +82,7 @@ func Generate(frag *ast.Fragment, opts Options) ([]byte, error) {
 	b.Indent()
 	b.Line("_ = ctx")
 	b.Line("_ = data")
+	rejectRootConst(&b, frag.Children)
 	emitChildren(&b, frag.Children)
 	b.Line("return nil")
 	b.Dedent()
@@ -150,6 +151,7 @@ func GenerateLayout(frag *ast.Fragment, opts LayoutOptions) ([]byte, error) {
 	b.Line("_ = ctx")
 	b.Line("_ = data")
 	b.Line("_ = children")
+	rejectRootConst(&b, frag.Children)
 	emitChildren(&b, frag.Children)
 	b.Line("return nil")
 	b.Dedent()
@@ -204,6 +206,22 @@ func mergeImports(scriptImports, pageDataImports []string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// rejectRootConst latches a CodegenError when {@const} appears as a
+// direct child of the template root. Svelte requires {@const} to live
+// inside a block (e.g. {#each}, {#if}); a root-level declaration has no
+// surrounding scope to attach to and is rejected at codegen time.
+func rejectRootConst(b *Builder, children []ast.Node) {
+	for _, c := range children {
+		if cn, ok := c.(*ast.Const); ok {
+			b.Fail(&CodegenError{
+				Pos: cn.P,
+				Msg: "{@const} not allowed at template root; place inside {#each}, {#if}, or another block",
+			})
+			return
+		}
+	}
 }
 
 // emitChildren walks a sibling list and dispatches by node kind. Adjacent

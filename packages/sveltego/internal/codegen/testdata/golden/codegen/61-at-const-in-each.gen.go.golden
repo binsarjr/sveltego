@@ -13,9 +13,13 @@ type PageData = struct{}
 func (p Page) Render(w *render.Writer, ctx *kit.RenderCtx, data PageData) error {
 	_ = ctx
 	_ = data
-	if Show {
-		total := a + b
+	for _, item := range Items {
+		total := item.Price * item.Qty
+		w.WriteString(`<li>`)
+		w.WriteEscape(item.Name)
+		w.WriteString(`: `)
 		w.WriteEscape(total)
+		w.WriteString(`</li>`)
 	}
 	return nil
 }

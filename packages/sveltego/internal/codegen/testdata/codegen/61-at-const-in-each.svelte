@@ -1,0 +1,1 @@
+{#each Items as item}{@const total := item.Price * item.Qty}<li>{item.Name}: {total}</li>{/each}

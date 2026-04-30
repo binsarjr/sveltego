@@ -161,6 +161,44 @@ func TestValidateStmt(t *testing.T) {
 	}
 }
 
+func TestGenerate_RejectsRootConst(t *testing.T) {
+	frag := &ast.Fragment{
+		Children: []ast.Node{
+			&ast.Const{P: ast.Pos{Line: 3, Col: 5}, Stmt: "x := 1"},
+		},
+	}
+	_, err := Generate(frag, Options{PackageName: "page"})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	var ce *CodegenError
+	if !errors.As(err, &ce) {
+		t.Fatalf("got %T, want *CodegenError", err)
+	}
+	if ce.Pos.Line != 3 || ce.Pos.Col != 5 {
+		t.Errorf("pos = %v, want 3:5", ce.Pos)
+	}
+	if !strings.Contains(ce.Msg, "{@const} not allowed at template root") {
+		t.Errorf("msg = %q, want substring %q", ce.Msg, "{@const} not allowed at template root")
+	}
+}
+
+func TestGenerateLayout_RejectsRootConst(t *testing.T) {
+	frag := &ast.Fragment{
+		Children: []ast.Node{
+			&ast.Const{P: ast.Pos{Line: 1, Col: 1}, Stmt: "x := 1"},
+		},
+	}
+	_, err := GenerateLayout(frag, LayoutOptions{PackageName: "layout"})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	var ce *CodegenError
+	if !errors.As(err, &ce) {
+		t.Fatalf("got %T, want *CodegenError", err)
+	}
+}
+
 func TestFixtures(t *testing.T) {
 	root := "testdata/codegen"
 	var matches []string
