@@ -115,6 +115,8 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 	routeCount := 0
 	emittedLayouts := make(map[string]struct{})
 	emittedErrors := make(map[string]struct{})
+	pageHeads := make(map[string]bool)
+	layoutHeads := make(map[string]bool)
 	for _, route := range scan.Routes {
 		if route.HasError {
 			if _, done := emittedErrors[route.Dir]; !done {
@@ -126,11 +128,14 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 		}
 		switch {
 		case route.HasPage:
-			refs, err := emitPage(opts.ProjectRoot, outDir, modulePath, route)
+			refs, hasHead, err := emitPage(opts.ProjectRoot, outDir, modulePath, route)
 			if err != nil {
 				return nil, err
 			}
 			libRefs += refs
+			if hasHead {
+				pageHeads[route.PackagePath] = true
+			}
 			routeCount++
 		case route.HasServer:
 			if err := emitRESTRoute(opts.ProjectRoot, outDir, modulePath, route); err != nil {
@@ -153,8 +158,12 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 			if i < len(route.LayoutServerFiles) {
 				serverFile = route.LayoutServerFiles[i]
 			}
-			if err := emitLayout(opts.ProjectRoot, outDir, layoutDir, pkgPath, pkgName, serverFile); err != nil {
+			hasHead, err := emitLayout(opts.ProjectRoot, outDir, layoutDir, pkgPath, pkgName, serverFile)
+			if err != nil {
 				return nil, err
+			}
+			if hasHead {
+				layoutHeads[pkgPath] = true
 			}
 			if serverFile != "" {
 				if err := emitLayoutMirrorAndWire(opts.ProjectRoot, outDir, modulePath, pkgPath, pkgName, serverFile); err != nil {
@@ -175,6 +184,8 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 		ModulePath:   modulePath,
 		GenRoot:      outDir,
 		RouteOptions: routeOptions,
+		PageHeads:    pageHeads,
+		LayoutHeads:  layoutHeads,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("codegen: generate manifest: %w", err)
@@ -223,10 +234,12 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 
 // emitPage parses one +page.svelte, applies $lib import rewriting on the
 // hoisted script body, runs the generator, and writes the result. The
-// returned count is 1 when at least one $lib literal was rewritten in
-// this file, 0 otherwise — the caller aggregates across routes to
-// decide whether the missing-lib warning fires.
-func emitPage(projectRoot, outDir, modulePath string, route routescan.ScannedRoute) (int, error) {
+// first returned int is 1 when at least one $lib literal was rewritten
+// in this file, 0 otherwise — the caller aggregates across routes to
+// decide whether the missing-lib warning fires. The bool reports
+// whether the page contributed a Head method (drives manifest
+// HeadFn wiring).
+func emitPage(projectRoot, outDir, modulePath string, route routescan.ScannedRoute) (int, bool, error) {
 	pageName := "+page.svelte"
 	if route.HasReset {
 		pageName = "+page@" + route.ResetTarget + ".svelte"
@@ -234,14 +247,14 @@ func emitPage(projectRoot, outDir, modulePath string, route routescan.ScannedRou
 	pagePath := filepath.Join(route.Dir, pageName)
 	src, err := os.ReadFile(pagePath) //nolint:gosec // path comes from scanner walk under projectRoot
 	if err != nil {
-		return 0, fmt.Errorf("codegen: read %s: %w", pagePath, err)
+		return 0, false, fmt.Errorf("codegen: read %s: %w", pagePath, err)
 	}
 	rewritten, hits := rewriteLibImports(string(src), modulePath)
 	src = []byte(rewritten)
 
 	frag, perrs := parser.Parse(src)
 	if len(perrs) > 0 {
-		return 0, fmt.Errorf("codegen: parse %s: %w", pagePath, perrs)
+		return 0, false, fmt.Errorf("codegen: parse %s: %w", pagePath, perrs)
 	}
 
 	opts := Options{PackageName: route.PackageName}
@@ -249,27 +262,30 @@ func emitPage(projectRoot, outDir, modulePath string, route routescan.ScannedRou
 		opts.ServerFilePath = filepath.Join(route.Dir, "page.server.go")
 		actionInfo, err := scanActions(opts.ServerFilePath)
 		if err != nil {
-			return 0, err
+			return 0, false, err
 		}
 		opts.HasActions = actionInfo.HasActions
 	}
 	out, err := Generate(frag, opts)
 	if err != nil {
-		return 0, fmt.Errorf("codegen: generate %s: %w", pagePath, err)
+		return 0, false, fmt.Errorf("codegen: generate %s: %w", pagePath, err)
 	}
+
+	hasHead, _ := extractHeadChildren(frag.Children)
 
 	relPkg := strings.TrimPrefix(route.PackagePath, ".gen/")
 	target := filepath.Join(projectRoot, outDir, filepath.FromSlash(relPkg), "page.gen.go")
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-		return 0, fmt.Errorf("codegen: mkdir %s: %w", filepath.Dir(target), err)
+		return 0, false, fmt.Errorf("codegen: mkdir %s: %w", filepath.Dir(target), err)
 	}
 	if err := os.WriteFile(target, out, genFileMode); err != nil {
-		return 0, fmt.Errorf("codegen: write %s: %w", target, err)
+		return 0, false, fmt.Errorf("codegen: write %s: %w", target, err)
 	}
+	libRefs := 0
 	if hits {
-		return 1, nil
+		libRefs = 1
 	}
-	return 0, nil
+	return libRefs, len(hasHead) > 0, nil
 }
 
 // emitEmbedStub writes <outAbs>/embed.go only when at least one of the
@@ -450,32 +466,33 @@ func emitErrorPage(projectRoot, outDir, errorDir, pkgPath, pkgName string) error
 // silently ignores files whose name starts with "_". serverFile, when
 // non-empty, points at a sibling layout.server.go whose Load() inline
 // struct return is used to infer LayoutData fields.
-func emitLayout(projectRoot, outDir, layoutDir, pkgPath, pkgName, serverFile string) error {
+func emitLayout(projectRoot, outDir, layoutDir, pkgPath, pkgName, serverFile string) (bool, error) {
 	layoutPath, err := resolveLayoutSource(layoutDir)
 	if err != nil {
-		return err
+		return false, err
 	}
 	src, err := os.ReadFile(layoutPath) //nolint:gosec // path comes from scanner walk under projectRoot
 	if err != nil {
-		return fmt.Errorf("codegen: read %s: %w", layoutPath, err)
+		return false, fmt.Errorf("codegen: read %s: %w", layoutPath, err)
 	}
 	frag, perrs := parser.Parse(src)
 	if len(perrs) > 0 {
-		return fmt.Errorf("codegen: parse %s: %w", layoutPath, perrs)
+		return false, fmt.Errorf("codegen: parse %s: %w", layoutPath, perrs)
 	}
 	out, err := GenerateLayout(frag, LayoutOptions{PackageName: pkgName, ServerFilePath: serverFile})
 	if err != nil {
-		return fmt.Errorf("codegen: generate %s: %w", layoutPath, err)
+		return false, fmt.Errorf("codegen: generate %s: %w", layoutPath, err)
 	}
+	hasHead, _ := extractHeadChildren(frag.Children)
 	relPkg := strings.TrimPrefix(pkgPath, ".gen/")
 	target := filepath.Join(projectRoot, outDir, filepath.FromSlash(relPkg), "layout.gen.go")
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-		return fmt.Errorf("codegen: mkdir %s: %w", filepath.Dir(target), err)
+		return false, fmt.Errorf("codegen: mkdir %s: %w", filepath.Dir(target), err)
 	}
 	if err := os.WriteFile(target, out, genFileMode); err != nil {
-		return fmt.Errorf("codegen: write %s: %w", target, err)
+		return false, fmt.Errorf("codegen: write %s: %w", target, err)
 	}
-	return nil
+	return len(hasHead) > 0, nil
 }
 
 // emitLayoutMirrorAndWire writes the user-source mirror for one layout

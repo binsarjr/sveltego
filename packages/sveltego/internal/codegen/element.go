@@ -35,6 +35,10 @@ func emitElement(b *Builder, e *ast.Element) {
 		return
 	}
 	if isComponentName(e.Name) {
+		if strings.Contains(e.Name, ".") {
+			emitNestedComponent(b, e)
+			return
+		}
 		emitComponentCall(b, e)
 		return
 	}

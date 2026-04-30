@@ -342,16 +342,28 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 		if form != nil && form.code != 0 {
 			status = form.code
 		}
-		if err := s.renderStreaming(w, r, ev, inner, streams, status); err != nil {
+		headBytes, err := gatherHead(rctx, route, data, layoutDatas)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.renderStreaming(w, r, ev, inner, streams, status, headBytes); err != nil {
 			return nil, err
 		}
 		return nil, errStreamingWrote
+	}
+
+	headBytes, err := gatherHead(rctx, route, data, layoutDatas)
+	if err != nil {
+		return nil, err
 	}
 
 	buf := render.Acquire()
 	defer render.Release(buf)
 
 	buf.WriteString(s.shellHead)
+	if len(headBytes) > 0 {
+		buf.WriteRaw(string(headBytes))
+	}
 	buf.WriteString(s.shellMid)
 	if err := inner(buf); err != nil {
 		return nil, err
@@ -429,7 +441,7 @@ func appendStreams(dst []streamedField, v any) []streamedField {
 // order, emitting a __sveltego__resolve script per resolution. The
 // shellTail closes the document only after every stream resolves or
 // fails, so the response body is well-formed HTML even on timeout.
-func (s *Server) renderStreaming(w http.ResponseWriter, r *http.Request, ev *kit.RequestEvent, inner func(*render.Writer) error, streams []streamedField, status int) error {
+func (s *Server) renderStreaming(w http.ResponseWriter, r *http.Request, ev *kit.RequestEvent, inner func(*render.Writer) error, streams []streamedField, status int, headBytes []byte) error {
 	if ev.Cookies != nil {
 		ev.Cookies.Apply(w)
 	}
@@ -442,6 +454,9 @@ func (s *Server) renderStreaming(w http.ResponseWriter, r *http.Request, ev *kit
 	defer render.Release(buf)
 
 	buf.WriteString(s.shellHead)
+	if len(headBytes) > 0 {
+		buf.WriteRaw(string(headBytes))
+	}
 	buf.WriteString(s.shellMid)
 	if err := inner(buf); err != nil {
 		return err

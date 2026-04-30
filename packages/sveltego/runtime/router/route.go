@@ -10,11 +10,22 @@ import (
 // PageHandler renders a +page.svelte for the given context and load data.
 type PageHandler func(w *render.Writer, ctx *kit.RenderCtx, data any) error
 
+// PageHeadHandler renders a page's <svelte:head> contributions into a
+// side buffer. The pipeline gathers the layout chain's head outputs and
+// the page's head into one buffer that injects between <head> and
+// </head>. nil entries denote pages without any head content.
+type PageHeadHandler func(w *render.Writer, ctx *kit.RenderCtx, data any) error
+
 // LayoutHandler renders a +layout.svelte. It composes outer layouts around
 // inner content by writing its template up to <slot />, invoking children,
 // then writing the rest. children is non-nil; layout templates dispatch
 // the slot lowering through it.
 type LayoutHandler func(w *render.Writer, ctx *kit.RenderCtx, data any, children func(*render.Writer) error) error
+
+// LayoutHeadHandler renders a layout's <svelte:head> contributions into
+// a side buffer. Runs in lockstep with LayoutChain; nil entries denote
+// layouts without any head content.
+type LayoutHeadHandler func(w *render.Writer, ctx *kit.RenderCtx, data any) error
 
 // ErrorHandler renders a +error.svelte. It receives the SafeError produced
 // by HandleError and writes the error template into w. The pipeline wraps
@@ -65,6 +76,14 @@ type Route struct {
 	// +layout.server.go. The pipeline invokes them outer -> inner before
 	// the page Load and pushes each result onto the LoadCtx parent stack.
 	LayoutLoaders []LayoutLoadHandler
+	// Head is non-nil when the page contributes <svelte:head> content.
+	// The pipeline calls it after the layout chain's head handlers and
+	// before injecting the merged buffer into the document <head>.
+	Head PageHeadHandler
+	// LayoutHeads runs in lockstep with LayoutChain. Index i holds the
+	// head handler for layout chain[i] or nil when that layout has no
+	// <svelte:head> content.
+	LayoutHeads []LayoutHeadHandler
 	// Options carries the route's effective page options after the
 	// codegen-time cascade resolves layout overrides into a single
 	// PageOptions value. The pipeline reads SSR/CSR/TrailingSlash
