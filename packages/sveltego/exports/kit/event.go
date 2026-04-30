@@ -1,8 +1,10 @@
 package kit
 
 import (
+	"context"
 	"net/http"
 	"net/url"
+	"sync"
 )
 
 // RequestEvent is the request-scoped value handed to hooks.Handle and the
@@ -40,6 +42,50 @@ type RequestEvent struct {
 	// fetcher is the chained HandleFetch implementation. nil means
 	// "use http.DefaultClient.Do".
 	fetcher HandleFetchFn
+
+	// afterMu guards afterFns so concurrent Handle hooks can call After
+	// without a data race.
+	afterMu  sync.Mutex
+	afterFns []func(context.Context)
+}
+
+// After queues fn for execution after the HTTP response has been flushed
+// to the client. All queued functions run sequentially in registration
+// order, each receiving a fresh context derived from the server's
+// after-drain context (typically with a 30 s timeout). Errors returned
+// by fn are logged; they do not affect the already-sent response.
+//
+// After is safe for concurrent use: multiple hooks or goroutines may call
+// it simultaneously.
+func (e *RequestEvent) After(fn func(context.Context)) {
+	if fn == nil {
+		return
+	}
+	e.afterMu.Lock()
+	e.afterFns = append(e.afterFns, fn)
+	e.afterMu.Unlock()
+}
+
+// DrainAfter executes every fn queued by After using ctx as the parent
+// context. Each callback runs sequentially. If ctx is already done before
+// drain starts, no callbacks are run. This is called by the pipeline after
+// writeResponse and is not part of the public API.
+func DrainAfter(ctx context.Context, ev *RequestEvent) {
+	if ev == nil {
+		return
+	}
+	ev.afterMu.Lock()
+	fns := ev.afterFns
+	ev.afterFns = nil
+	ev.afterMu.Unlock()
+	for _, fn := range fns {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		fn(ctx)
+	}
 }
 
 // ResponseHeader returns the mutable response header map for this event.
