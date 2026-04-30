@@ -397,8 +397,11 @@ func emitClientEntry(projectRoot, outDir, routesDir string, route routescan.Scan
 
 	entryRelFromRoot := filepath.ToSlash(filepath.Join(outDir, "client", routeKey, "entry.ts"))
 	depth := len(strings.Split(filepath.ToSlash(filepath.Dir(entryRelFromRoot)), "/"))
-	relRouteDir := filepath.ToSlash(relDir)
-	svelteSrc := relRouteDir + "/" + pageName
+	routeDirFromRoot, err := filepath.Rel(projectRoot, route.Dir)
+	if err != nil {
+		return "", fmt.Errorf("codegen: client entry svelte rel path: %w", err)
+	}
+	svelteSrc := filepath.ToSlash(routeDirFromRoot) + "/" + pageName
 	relSvelte := vite.RelativeSveltePath(svelteSrc, depth)
 
 	src := vite.GenerateClientEntry(relSvelte)
