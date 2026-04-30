@@ -331,6 +331,7 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 		lctx = kit.NewLoadCtx(r, ev.Params)
 		lctx.Locals = ev.Locals
 		lctx.Cookies = ev.Cookies
+		lctx.SetResponseHeader(ev.ResponseHeader())
 		layoutDatas = make([]any, len(route.LayoutChain))
 		for i, layoutLoad := range route.LayoutLoaders {
 			if layoutLoad == nil {

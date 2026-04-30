@@ -51,8 +51,13 @@ func (s *Server) handlePipelineError(w http.ResponseWriter, r *http.Request, ev 
 			logKeyPath, r.URL.Path,
 			logKeyStatus, redir.Code,
 			logKeyLocation, redir.Location)
-		if ev != nil && ev.Cookies != nil {
-			ev.Cookies.Apply(w)
+		if ev != nil {
+			if ev.Cookies != nil {
+				ev.Cookies.Apply(w)
+			}
+			for k, vs := range ev.ResponseHeader() {
+				w.Header()[k] = vs
+			}
 		}
 		if redir.ForceReload {
 			w.Header().Set("X-Sveltego-Reload", "1")
@@ -67,8 +72,13 @@ func (s *Server) handlePipelineError(w http.ResponseWriter, r *http.Request, ev 
 			logKeyPath, r.URL.Path,
 			logKeyStatus, herr.Code,
 			logKeyError, herr.Message)
-		if ev != nil && ev.Cookies != nil {
-			ev.Cookies.Apply(w)
+		if ev != nil {
+			if ev.Cookies != nil {
+				ev.Cookies.Apply(w)
+			}
+			for k, vs := range ev.ResponseHeader() {
+				w.Header()[k] = vs
+			}
 		}
 		writePlain(w, herr.Code, herr.Message+"\n")
 		return
@@ -114,7 +124,7 @@ func (s *Server) handlePipelineError(w http.ResponseWriter, r *http.Request, ev 
 // writer that has handled error responses since Phase 0h.
 func (s *Server) respondWithError(w http.ResponseWriter, r *http.Request, ev *kit.RequestEvent, route *router.Route, safe kit.SafeError, original error) {
 	if route == nil || route.Error == nil {
-		s.writeSafeError(w, r, safe, original)
+		s.writeSafeError(w, r, ev, safe, original)
 		return
 	}
 	if err := s.renderErrorBoundary(w, r, ev, route, safe, original); err != nil {
@@ -122,7 +132,7 @@ func (s *Server) respondWithError(w http.ResponseWriter, r *http.Request, ev *ki
 			logKeyMethod, r.Method,
 			logKeyPath, r.URL.Path,
 			logKeyError, err.Error())
-		s.writeSafeError(w, r, safe, original)
+		s.writeSafeError(w, r, ev, safe, original)
 	}
 }
 
@@ -171,8 +181,13 @@ func (s *Server) renderErrorBoundary(w http.ResponseWriter, r *http.Request, ev 
 	buf.WriteString(s.shellTail)
 
 	body := buf.Bytes()
-	if ev != nil && ev.Cookies != nil {
-		ev.Cookies.Apply(w)
+	if ev != nil {
+		if ev.Cookies != nil {
+			ev.Cookies.Apply(w)
+		}
+		for k, vs := range ev.ResponseHeader() {
+			w.Header()[k] = vs
+		}
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
@@ -193,7 +208,9 @@ func (s *Server) renderErrorBoundary(w http.ResponseWriter, r *http.Request, ev 
 }
 
 // writeSafeError flushes a SafeError to the response and logs it once.
-func (s *Server) writeSafeError(w http.ResponseWriter, r *http.Request, safe kit.SafeError, original error) {
+// Cookies and user-set response headers from ev are applied before WriteHeader
+// so they appear on error responses just as they would on success responses.
+func (s *Server) writeSafeError(w http.ResponseWriter, r *http.Request, ev *kit.RequestEvent, safe kit.SafeError, original error) {
 	status := safe.HTTPStatus()
 	msg := safe.Message
 	if msg == "" {
@@ -208,6 +225,14 @@ func (s *Server) writeSafeError(w http.ResponseWriter, r *http.Request, safe kit
 		logKeyPath, r.URL.Path,
 		logKeyStatus, status,
 		logKeyError, original.Error())
+	if ev != nil {
+		if ev.Cookies != nil {
+			ev.Cookies.Apply(w)
+		}
+		for k, vs := range ev.ResponseHeader() {
+			w.Header()[k] = vs
+		}
+	}
 	writePlain(w, status, msg+"\n")
 }
 

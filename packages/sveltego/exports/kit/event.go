@@ -27,9 +27,24 @@ type RequestEvent struct {
 	// Empty means "no rewrite" — the router uses URL.Path.
 	MatchPath string
 
+	// responseHeader collects headers the user wants applied to the response,
+	// including on error paths. Lazily initialized by ResponseHeader().
+	responseHeader http.Header
+
 	// fetcher is the chained HandleFetch implementation. nil means
 	// "use http.DefaultClient.Do".
 	fetcher HandleFetchFn
+}
+
+// ResponseHeader returns the mutable response header map for this event.
+// Headers set here are applied to every response, including error responses,
+// so user code can set WWW-Authenticate on 401s or clear cookies on errors.
+// The map is lazily initialized on first call.
+func (e *RequestEvent) ResponseHeader() http.Header {
+	if e.responseHeader == nil {
+		e.responseHeader = http.Header{}
+	}
+	return e.responseHeader
 }
 
 // NewRequestEvent constructs an event for r. Locals is initialized

@@ -276,3 +276,130 @@ func TestErrorBoundary_BoundaryRenderFailureFallsBack(t *testing.T) {
 		t.Errorf("body missing original error message: %s", body)
 	}
 }
+
+// TestErrorPreservesHeadersAndCookies_PlainPath verifies that cookies and
+// user-set response headers survive the writeSafeError path (no error boundary).
+// Covers the WWW-Authenticate + Set-Cookie pattern from sveltejs/kit#9188.
+func TestErrorPreservesHeadersAndCookies_PlainPath(t *testing.T) {
+	t.Parallel()
+	srv := newTestServer(t, []router.Route{{
+		Pattern:  "/",
+		Segments: segmentsFor("/"),
+		Page:     staticPage("home"),
+		Load: func(lctx *kit.LoadCtx) (any, error) {
+			lctx.Cookies.Delete("session", kit.CookieOpts{})
+			lctx.SetHeader("WWW-Authenticate", "Bearer")
+			return nil, kit.Error(http.StatusUnauthorized, "unauthorized")
+		},
+	}})
+	srv.hooks = kit.DefaultHooks()
+
+	ts := httptest.NewServer(srv)
+	t.Cleanup(ts.Close)
+
+	resp, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	t.Cleanup(func() { resp.Body.Close() })
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("status = %d, want 401", resp.StatusCode)
+	}
+	if got := resp.Header.Get("WWW-Authenticate"); got != "Bearer" {
+		t.Errorf("WWW-Authenticate = %q, want %q", got, "Bearer")
+	}
+	cookies := resp.Header.Values("Set-Cookie")
+	if len(cookies) == 0 {
+		t.Error("no Set-Cookie header on error response, want session deletion cookie")
+	}
+	var foundDeletion bool
+	for _, ck := range cookies {
+		if strings.Contains(ck, "session=") && strings.Contains(ck, "Max-Age=0") {
+			foundDeletion = true
+		}
+	}
+	if !foundDeletion {
+		t.Errorf("Set-Cookie headers %v do not contain a session deletion cookie", cookies)
+	}
+}
+
+// TestErrorPreservesHeadersAndCookies_BoundaryPath verifies that cookies and
+// user-set response headers survive the renderErrorBoundary path.
+func TestErrorPreservesHeadersAndCookies_BoundaryPath(t *testing.T) {
+	t.Parallel()
+	srv := newTestServer(t, []router.Route{{
+		Pattern:  "/",
+		Segments: segmentsFor("/"),
+		Page:     staticPage("home"),
+		Load: func(lctx *kit.LoadCtx) (any, error) {
+			lctx.Cookies.Delete("session", kit.CookieOpts{})
+			lctx.SetHeader("WWW-Authenticate", "Bearer")
+			return nil, errors.New("unauthorized internal")
+		},
+		Error: errorBoundary("root"),
+	}})
+	hooks := kit.Hooks{
+		HandleError: func(_ *kit.RequestEvent, _ error) kit.SafeError {
+			return kit.SafeError{Code: http.StatusUnauthorized, Message: "unauthorized"}
+		},
+	}
+	srv.hooks = hooks.WithDefaults()
+
+	ts := httptest.NewServer(srv)
+	t.Cleanup(ts.Close)
+
+	resp, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	t.Cleanup(func() { resp.Body.Close() })
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("status = %d, want 401", resp.StatusCode)
+	}
+	if got := resp.Header.Get("WWW-Authenticate"); got != "Bearer" {
+		t.Errorf("WWW-Authenticate = %q, want %q", got, "Bearer")
+	}
+	cookies := resp.Header.Values("Set-Cookie")
+	if len(cookies) == 0 {
+		t.Error("no Set-Cookie header on error boundary response, want session deletion cookie")
+	}
+}
+
+// TestErrorPreservesHeaders_HandleError verifies that headers set on
+// RequestEvent.ResponseHeader() inside HandleError appear in the 500 response.
+func TestErrorPreservesHeaders_HandleError(t *testing.T) {
+	t.Parallel()
+	srv := newTestServer(t, []router.Route{{
+		Pattern:  "/",
+		Segments: segmentsFor("/"),
+		Page:     staticPage("home"),
+		Load: func(_ *kit.LoadCtx) (any, error) {
+			return nil, errors.New("internal boom")
+		},
+	}})
+	hooks := kit.Hooks{
+		HandleError: func(ev *kit.RequestEvent, _ error) kit.SafeError {
+			ev.ResponseHeader().Set("X-Error-ID", "err-42")
+			return kit.SafeError{Code: http.StatusInternalServerError, Message: "internal server error"}
+		},
+	}
+	srv.hooks = hooks.WithDefaults()
+
+	ts := httptest.NewServer(srv)
+	t.Cleanup(ts.Close)
+
+	resp, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	t.Cleanup(func() { resp.Body.Close() })
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", resp.StatusCode)
+	}
+	if got := resp.Header.Get("X-Error-ID"); got != "err-42" {
+		t.Errorf("X-Error-ID = %q, want %q", got, "err-42")
+	}
+}
