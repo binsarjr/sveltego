@@ -186,7 +186,7 @@ func (s *Streamed[T]) WaitAny(ctx context.Context, timeout time.Duration) (any, 
 func StreamedSeq[T any](ctx context.Context, seq iter.Seq2[T, error]) *Streamed[T] {
 	return StreamCtx(ctx, func(c context.Context) (T, error) {
 		var (
-			last    T
+			last     T
 			firstErr error
 		)
 		// Call seq directly with a custom yield so we can return false to
