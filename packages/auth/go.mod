@@ -3,7 +3,7 @@ module github.com/binsarjr/sveltego/auth
 go 1.23
 
 require (
-	github.com/jackc/pgx/v5 v5.9.2
+	github.com/jackc/pgx/v5 v5.7.4
 	golang.org/x/crypto v0.50.0
 	modernc.org/sqlite v1.50.0
 )
