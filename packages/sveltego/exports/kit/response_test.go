@@ -43,6 +43,18 @@ func TestText_setsHeaders(t *testing.T) {
 	}
 }
 
+func TestXML_setsHeaders(t *testing.T) {
+	t.Parallel()
+	body := []byte(`<?xml version="1.0"?><root/>`)
+	res := XML(http.StatusOK, body)
+	if string(res.Body) != string(body) {
+		t.Fatalf("body = %q", res.Body)
+	}
+	if got := res.Headers.Get("Content-Type"); got != "application/xml; charset=utf-8" {
+		t.Fatalf("content-type = %q", got)
+	}
+}
+
 func TestNoContent_status(t *testing.T) {
 	t.Parallel()
 	res := NoContent()

@@ -42,6 +42,10 @@ type Config struct {
 	// identity defaults; pass kit.Hooks{} or gen.Hooks() to wire user
 	// hooks discovered by codegen.
 	Hooks kit.Hooks
+	// CSP enables per-request nonce generation and a matching
+	// Content-Security-Policy header. The zero value (Mode CSPOff)
+	// disables the middleware so existing behavior is preserved.
+	CSP kit.CSPConfig
 }
 
 // Server is the http.Handler implementation that drives a sveltego app.
@@ -49,6 +53,7 @@ type Server struct {
 	tree   *router.Tree
 	Logger *slog.Logger
 	hooks  kit.Hooks
+	csp    kit.CSPConfig
 
 	shellHead string
 	shellMid  string
@@ -89,6 +94,7 @@ func New(cfg Config) (*Server, error) {
 		tree:      tree,
 		Logger:    logger,
 		hooks:     cfg.Hooks.WithDefaults(),
+		csp:       cfg.CSP,
 		shellHead: head,
 		shellMid:  mid,
 		shellTail: tail,
