@@ -10,7 +10,7 @@ summary: sveltego build, .gen output, Vite client bundle, single-binary deploy.
 
 ## Pipeline
 
-1. Scan `src/routes/**` for `+page.svelte`, `+page.server.go`, `+layout.svelte`, `+layout.server.go`, `+server.go`, `+error.svelte`.
+1. Scan `src/routes/**` for `+page.svelte`, `page.server.go`, `+layout.svelte`, `layout.server.go`, `server.go`, `+error.svelte`.
 2. Parse `.svelte` files via the sveltego parser; validate Go expressions in mustaches via `go/parser.ParseExpr`.
 3. Emit `.gen/*.go` — one Go file per template, plus a manifest registering routes, layouts, and page options.
 4. Run Vite to produce the client hydration bundle (`dist/`).
@@ -33,7 +33,7 @@ The `.gen/` directory is gitignored; it is regenerated on every build.
 
 ## Page options
 
-Declare per-page options as exported constants in `+page.server.go` or `+layout.server.go`:
+Declare per-page options as exported constants in `page.server.go` or `layout.server.go`:
 
 ```go
 //go:build sveltego

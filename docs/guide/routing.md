@@ -1,7 +1,7 @@
 ---
 title: Routing
 order: 20
-summary: File-based routing — +page.svelte, +page.server.go, +server.go, params, groups.
+summary: File-based routing — +page.svelte, page.server.go, server.go, params, groups.
 ---
 
 # Routing
@@ -13,10 +13,10 @@ sveltego uses file-based routing under `src/routes/`. The conventions match Svel
 | File | Purpose |
 |---|---|
 | `+page.svelte` | SSR template. Mustache expressions are Go. |
-| `+page.server.go` | Page server module: `Load`, `Actions`. |
+| `page.server.go` | Page server module: `Load`, `Actions`. No `+` prefix; identified by `//go:build sveltego`. |
 | `+layout.svelte` | Layout chain. Wraps descendant `+page.svelte`. |
-| `+layout.server.go` | Layout-level `Load` cascading to children. |
-| `+server.go` | REST endpoints (`GET`, `POST`, ...). No template. |
+| `layout.server.go` | Layout-level `Load` cascading to children. No `+` prefix. |
+| `server.go` | REST endpoints (`GET`, `POST`, ...). No template, no `+` prefix. |
 | `+error.svelte` | Error boundary for the subtree. |
 | `+page@.svelte` | Layout reset — opt out of the parent chain. |
 
@@ -56,7 +56,7 @@ Reference it as `[id=hex]`.
 
 ## Endpoints
 
-`+server.go` exposes named handlers per HTTP method:
+`server.go` exposes named handlers per HTTP method:
 
 ```go
 //go:build sveltego

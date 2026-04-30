@@ -11,10 +11,10 @@ summary: File names, build tag, generated output, and the route-matching contrac
 ```
 src/routes/
   +page.svelte               # SSR template
-  +page.server.go            # Load(), Actions       (//go:build sveltego)
+  page.server.go             # Load(), Actions       (//go:build sveltego)
   +layout.svelte             # layout chain
-  +layout.server.go          # parent data flow      (//go:build sveltego)
-  +server.go                 # REST endpoints        (//go:build sveltego)
+  layout.server.go           # parent data flow      (//go:build sveltego)
+  server.go                  # REST endpoints        (//go:build sveltego)
   +error.svelte              # error boundary
   (group)/                   # route group, no URL segment
   +page@.svelte              # layout reset
@@ -60,10 +60,10 @@ Two builds of the same source produce byte-identical `.gen/` output. Golden test
 
 ## File naming gotchas
 
-- `+page.svelte` — leading `+` is required.
-- `+page.server.go` — note the `.server.` infix and the `+`.
-- `page.server.go` (no `+`) is treated as a normal package file, not a sveltego module.
-- `+server.go` — REST endpoint, no template.
+- `+page.svelte` — leading `+` is required on Svelte template files.
+- `page.server.go` — note the `.server.` infix; no leading `+`. The `//go:build sveltego` tag identifies it to codegen.
+- `+page.server.go` (with `+`) is **not** recognized by routescan. Drop the `+`.
+- `server.go` — REST endpoint, no template. No `+` prefix.
 - `+page@.svelte` — trailing `@` (before the extension) signals a layout reset.
 
 When in doubt, run `sveltego routes` and verify the entry appears.
