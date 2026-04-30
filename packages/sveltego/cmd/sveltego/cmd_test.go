@@ -81,14 +81,25 @@ func TestCompileHelp(t *testing.T) {
 	}
 }
 
-func TestDevStub(t *testing.T) {
+func TestDevHelp(t *testing.T) {
 	resetLoggerOnCleanup(t)
-	_, stderr, err := runCmd(t, "dev")
+	stdout, _, err := runCmd(t, "dev", "--help")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if !strings.Contains(stderr, "v0.3") || !strings.Contains(stderr, "42") {
-		t.Errorf("unexpected dev stub message: %q", stderr)
+	for _, sub := range []string{"--port", "--go-port", "--vite-port", "--main", "--no-client"} {
+		if !strings.Contains(stdout, sub) {
+			t.Errorf("expected dev help to mention %q, got %q", sub, stdout)
+		}
+	}
+}
+
+func TestDevMissingGoMod(t *testing.T) {
+	resetLoggerOnCleanup(t)
+	dir := t.TempDir()
+	_, _, err := runCmd(t, "dev", dir)
+	if err == nil {
+		t.Fatal("expected error when project dir has no go.mod")
 	}
 }
 
