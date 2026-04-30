@@ -15,15 +15,15 @@ import (
 // Log keys are named constants so sloglint's no-raw-keys rule passes
 // and grep over log output finds every callsite for a given attribute.
 const (
-	logKeyMethod    = "method"
-	logKeyPath      = "path"
-	logKeyError     = "error"
-	logKeyStatus    = "status"
-	logKeyLocation  = "location"
-	logKeyFailCode  = "fail_code"
-	logKeyName      = "name"
-	logKeySpec      = "spec"
-	logKeyStreamID  = "stream_id"
+	logKeyMethod   = "method"
+	logKeyPath     = "path"
+	logKeyError    = "error"
+	logKeyStatus   = "status"
+	logKeyLocation = "location"
+	logKeyFailCode = "fail_code"
+	logKeyName     = "name"
+	logKeySpec     = "spec"
+	logKeyStreamID = "stream_id"
 )
 
 // httpStatuser lets user errors carry a non-500 status into the
