@@ -1,6 +1,7 @@
 package codegen
 
 import (
+	"fmt"
 	"go/parser"
 	"go/token"
 	"strings"
@@ -8,14 +9,21 @@ import (
 	"github.com/binsarjr/sveltego/internal/ast"
 )
 
-// validateExpr parses src as a Go expression. The returned error is a
-// *CodegenError carrying pos when src is empty or fails to parse.
+// validateExpr parses src as a Go expression and runs the env codegen
+// guard against the resulting AST. The returned error is a *CodegenError
+// carrying pos when src is empty, fails to parse, or references a private
+// env accessor (env.StaticPrivate / env.DynamicPrivate) inside a template
+// expression.
 func validateExpr(src string, pos ast.Pos) error {
 	if strings.TrimSpace(src) == "" {
 		return &CodegenError{Pos: pos, Msg: "invalid Go expression: empty"}
 	}
-	if _, err := parser.ParseExpr(src); err != nil {
+	expr, err := parser.ParseExpr(src)
+	if err != nil {
 		return newExprError(pos, err)
+	}
+	if err := checkPrivateEnv(expr, pos); err != nil {
+		return err
 	}
 	return nil
 }
@@ -78,9 +86,14 @@ func emitConst(b *Builder, c *ast.Const) {
 	b.Line(c.Stmt)
 }
 
-// emitRender lowers {@render snippet(args)} to a method call on the Page
-// receiver. The snippet_<name> method is produced by the snippet block
-// pass landing in #14; for now codegen emits the call site only.
+// emitRender lowers {@render expr} to a call against the local snippet
+// closure produced by emitSnippetBlock. The writer is appended as the
+// final argument so invocation reads `name(args, w)`. Closures returning
+// error propagate via `if err := name(...); err != nil { return err }`.
+//
+// When the expression is not an identifier-prefixed call (e.g. snippet
+// passed as prop and rendered through a method selector), the writer is
+// still appended as the tail arg.
 func emitRender(b *Builder, r *ast.Render) {
 	if r == nil {
 		return
@@ -91,33 +104,52 @@ func emitRender(b *Builder, r *ast.Render) {
 	}
 	name, args, ok := splitRenderCall(r.Expr)
 	if !ok {
-		b.Linef("// TODO: @render %q (#14 snippet wiring)", r.Expr)
+		b.Fail(&CodegenError{
+			Pos: r.P,
+			Msg: fmt.Sprintf("{@render} expects a callable expression, got %q", r.Expr),
+		})
 		return
 	}
-	if args == "" {
-		b.Linef("p.snippet_%s(w, ctx)", name)
-		return
-	}
-	b.Linef("p.snippet_%s(w, ctx, %s)", name, args)
+	call := name + "(" + appendWriter(args) + ")"
+	b.Linef("if err := %s; err != nil {", call)
+	b.Indent()
+	b.Line("return err")
+	b.Dedent()
+	b.Line("}")
 }
 
 // splitRenderCall pulls the snippet name and argument list out of a
-// {@render} expression like `card(post)`. Anything that isn't an
-// identifier-prefixed call falls back to a TODO emit; the AST validator
-// already accepted the expression, so the only loss is the snippet
-// indirection — runtime errors land in user code, not here.
+// {@render} expression like `card(post)`. The name segment is everything
+// before the matching opening paren; it must be a Go expression itself
+// (identifier, selector, or chain). Validation is delegated to
+// parser.ParseExpr via validateExpr — this helper only structurally
+// separates the call.
 func splitRenderCall(src string) (string, string, bool) {
-	open := strings.Index(src, "(")
-	if open <= 0 || !strings.HasSuffix(strings.TrimSpace(src), ")") {
+	src = strings.TrimSpace(src)
+	if !strings.HasSuffix(src, ")") {
+		return "", "", false
+	}
+	open := strings.IndexByte(src, '(')
+	if open <= 0 {
 		return "", "", false
 	}
 	name := strings.TrimSpace(src[:open])
-	if !isIdent(name) {
+	if name == "" {
 		return "", "", false
 	}
-	close := strings.LastIndex(src, ")")
+	close := strings.LastIndexByte(src, ')')
 	args := strings.TrimSpace(src[open+1 : close])
 	return name, args, true
+}
+
+// appendWriter formats the lowered argument list. The implicit writer
+// (`w`) is appended as the trailing argument so call sites read like a
+// normal Go function call with the writer threaded through.
+func appendWriter(args string) string {
+	if args == "" {
+		return "w"
+	}
+	return args + ", w"
 }
 
 func isIdent(s string) bool {

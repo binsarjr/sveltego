@@ -13,8 +13,18 @@ type PageData = struct{}
 func (p Page) Render(w *render.Writer, ctx *kit.RenderCtx, data PageData) error {
 	_ = ctx
 	_ = data
-	if err := card(post, w); err != nil {
+	var banner func(w *render.Writer) error
+	banner = func(w *render.Writer) error {
+		w.WriteString(`<b>`)
+		w.WriteString(`hi`)
+		w.WriteString(`</b>`)
+		return nil
+	}
+	_ = banner
+	if err := banner(w); err != nil {
 		return err
 	}
+	w.WriteString(`
+`)
 	return nil
 }

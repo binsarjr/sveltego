@@ -13,8 +13,8 @@ type PageData = struct{}
 func (p Page) Render(w *render.Writer, ctx *kit.RenderCtx, data PageData) error {
 	_ = ctx
 	_ = data
-	if err := card(post, w); err != nil {
-		return err
-	}
+	w.WriteEscape(env.StaticPublic("PUBLIC_API_URL"))
+	w.WriteString(`
+`)
 	return nil
 }

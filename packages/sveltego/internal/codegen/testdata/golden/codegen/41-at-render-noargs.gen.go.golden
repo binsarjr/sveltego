@@ -13,6 +13,8 @@ type PageData = struct{}
 func (p Page) Render(w *render.Writer, ctx *kit.RenderCtx, data PageData) error {
 	_ = ctx
 	_ = data
-	p.snippet_banner(w, ctx)
+	if err := banner(w); err != nil {
+		return err
+	}
 	return nil
 }
