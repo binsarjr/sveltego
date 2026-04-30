@@ -12,31 +12,44 @@ sveltego is pre-alpha. Expect rough edges and breaking changes. The shape below 
 
 ```sh
 go install github.com/binsarjr/sveltego/cmd/sveltego@latest
+go install github.com/binsarjr/sveltego/init/cmd/sveltego-init@latest
 sveltego version
 ```
 
-The CLI is a single binary. No Node runtime is required to run a built app; Node is only needed at build time for the Vite client bundle.
+Two binaries today: `sveltego` (build / compile / routes / version) and `sveltego-init` (project scaffolder, separate module under `packages/init`). No Node runtime is required to run a built app; Node is only needed at build time for the Vite client bundle.
 
 ## Scaffold
 
 ```sh
-mkdir hello && cd hello
-sveltego init
+sveltego-init ./hello
+cd hello
 ```
 
-This produces:
+This writes the baseline tree:
 
 ```
 hello/
   src/
     routes/
       +page.svelte
-      page.server.go       # //go:build sveltego (no `+` prefix on user .go files)
-    hooks.server.go        # //go:build sveltego (optional)
-    lib/                   # $lib alias target
+      page.server.go         # //go:build sveltego (no `+` prefix on user .go files)
+      +layout.svelte
+    lib/                     # $lib alias target ($lib/.gitkeep)
+  hooks.server.go            # //go:build sveltego
+  sveltego.config.go         # //go:build sveltego
   go.mod
-  package.json             # Vite client bundle
-  sveltego.config.go
+  README.md
+  .gitignore
+```
+
+::: warning Scaffold gap (#356)
+The scaffold does not yet emit `cmd/app/main.go`, `app.html`, `package.json`, or `vite.config.js`. To run the project end-to-end today, copy those four files from [`playgrounds/basic/`](https://github.com/binsarjr/sveltego/tree/main/playgrounds/basic) into your scaffold output. Tracked in [#356](https://github.com/binsarjr/sveltego/issues/356).
+:::
+
+Add `--ai` to also write `AGENTS.md`, `CLAUDE.md`, `.cursorrules`, and `.github/copilot-instructions.md` from the bundled AI templates:
+
+```sh
+sveltego-init --ai ./hello
 ```
 
 ## A minimal route
@@ -69,21 +82,21 @@ func Load(ctx *kit.LoadCtx) (PageData, error) {
 
 ## Develop
 
-```sh
-sveltego dev
-```
+`sveltego dev` is a stub today (deferred to v0.3, [#42](https://github.com/binsarjr/sveltego/issues/42)). For now: re-run `sveltego compile` after editing `.svelte` or user `.go` files, then re-run the binary.
 
-This starts the dev server, watches `src/routes/**`, regenerates `.gen/*.go`, and proxies the Vite dev server for the client bundle.
+```sh
+sveltego compile         # regenerate .gen/*.go
+go run ./cmd/app         # boot the server
+```
 
 ## Build
 
 ```sh
-sveltego build
-go build -o app ./cmd/app
-./app
+sveltego build           # codegen + Vite + go build, in one step
+./build/app              # listens on :3000
 ```
 
-The `build` step writes `.gen/*.go`; the standard `go build` produces a single binary. Deploy that binary plus the `dist/` Vite output as static assets.
+`sveltego build` runs codegen, runs Vite for the client bundle, then chains directly into `go build -o build/app ./cmd/app`. You do not need a separate `go build` invocation. Deploy `./build/app` plus the Vite `dist/` output (static assets) as a single artifact.
 
 ## Next steps
 

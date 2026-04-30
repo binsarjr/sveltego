@@ -6,10 +6,11 @@ summary: sveltego command reference — build, compile, dev, check, routes, vers
 
 # CLI
 
-`sveltego` is the project's command-line entry point. Install with:
+`sveltego` is the project's primary command-line entry point. Project scaffolding lives in a separate binary, `sveltego-init`. Install with:
 
 ```sh
 go install github.com/binsarjr/sveltego/cmd/sveltego@latest
+go install github.com/binsarjr/sveltego/init/cmd/sveltego-init@latest
 ```
 
 ## Global flags
@@ -26,7 +27,7 @@ Verbosity defaults to warn-level. Logs use `slog` with a text handler on stderr.
 
 ### `sveltego build`
 
-Full pipeline: codegen → Vite client bundle → `go build`.
+Full pipeline: codegen → Vite client bundle → `go build -o build/app ./cmd/app`. Single command; no separate `go build` step needed.
 
 ### `sveltego compile`
 
@@ -34,11 +35,11 @@ Codegen only. Writes `.gen/*.go`. Use this when iterating on templates without r
 
 ### `sveltego dev`
 
-Watch + regenerate. Restarts the server on `.gen/` change. Proxies the Vite dev server for client HMR.
+**Stub today** — deferred to v0.3 ([#42](https://github.com/binsarjr/sveltego/issues/42)). Will watch `src/routes/**`, regenerate `.gen/*.go` on change, restart the server, and proxy the Vite dev server for client HMR.
 
 ### `sveltego check`
 
-Validate without writing output. Runs the parser and Go expression validator over every `+page.svelte` / `+layout.svelte`. Use this in CI before `build`.
+**Stub today.** Will validate without writing output: parser pass + Go expression validator over every `+page.svelte` / `+layout.svelte`, intended for CI before `build`. Milestone TBD.
 
 ### `sveltego routes`
 
@@ -46,7 +47,20 @@ Print the route table. One line per route with: pattern, file, presence of `Load
 
 ### `sveltego version`
 
-Print version, commit, build date.
+Print version, Go runtime version, OS, and architecture.
+
+## `sveltego-init` (separate binary)
+
+Project scaffolder. See [`packages/init/README.md`](https://github.com/binsarjr/sveltego/blob/main/packages/init/README.md) for the full flag list. Quickly:
+
+```sh
+sveltego-init ./my-app                    # baseline scaffold
+sveltego-init --ai ./my-app               # baseline + AI-assistant templates
+sveltego-init --module example.com/x ./my-app
+sveltego-init --force ./my-app            # overwrite existing files
+```
+
+Scaffold output is incomplete pending [#356](https://github.com/binsarjr/sveltego/issues/356) — copy `cmd/app/main.go`, `app.html`, `package.json`, and `vite.config.js` from `playgrounds/basic/` until that lands.
 
 ## Exit codes
 
