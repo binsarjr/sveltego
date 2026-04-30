@@ -3,6 +3,7 @@ package kit
 import (
 	"sort"
 	"strings"
+	"sync"
 )
 
 // CSPMode controls how a sveltego server emits Content-Security-Policy
@@ -85,13 +86,61 @@ func DefaultCSPDirectives() map[string][]string {
 	}
 }
 
+// CSPTemplate is a precomputed Content-Security-Policy header split
+// around the per-request nonce token. Build splices the nonce into the
+// fixed prefix/suffix without rebuilding the directive map, so the hot
+// path is one allocation (the joined string) instead of map alloc + sort
+// + slice appends per request.
+type CSPTemplate struct {
+	prefix string
+	suffix string
+}
+
+// NewCSPTemplate composes the deterministic prefix/suffix for cfg once.
+// Callers store the returned template at server-construction time and
+// invoke Build(nonce) per request.
+func NewCSPTemplate(cfg CSPConfig) *CSPTemplate {
+	prefix, suffix := composeCSP(cfg)
+	return &CSPTemplate{prefix: prefix, suffix: suffix}
+}
+
+// Build returns the full Content-Security-Policy header value with nonce
+// spliced into the cached script-src position.
+func (t *CSPTemplate) Build(nonce string) string {
+	if t == nil {
+		return ""
+	}
+	return t.prefix + nonce + t.suffix
+}
+
+// cspTemplateCache memoizes CSPTemplate values keyed by a deterministic
+// fingerprint of CSPConfig. BuildCSPHeader uses it so per-request callers
+// pay the directive-merge + sort cost exactly once per distinct config.
+var cspTemplateCache sync.Map
+
 // BuildCSPHeader composes the Content-Security-Policy header value for
-// the given config and per-request nonce. Directive order is
+// the given config and per-request nonce. The merged directive map and
+// sort order are computed once per distinct cfg and cached, so repeated
+// calls with the same cfg only do a string concat. Directive order is
 // deterministic (alphabetical) so two requests with equivalent input
-// produce byte-identical output, which simplifies caching and tests.
-// nonce is required: callers that want CSP off must skip the header
-// entirely rather than passing an empty nonce.
+// produce byte-identical output. nonce is required: callers that want
+// CSP off must skip the header entirely rather than passing an empty
+// nonce.
 func BuildCSPHeader(cfg CSPConfig, nonce string) string {
+	key := cspCacheKey(cfg)
+	if cached, ok := cspTemplateCache.Load(key); ok {
+		return cached.(*CSPTemplate).Build(nonce)
+	}
+	tpl := NewCSPTemplate(cfg)
+	actual, _ := cspTemplateCache.LoadOrStore(key, tpl)
+	return actual.(*CSPTemplate).Build(nonce)
+}
+
+// composeCSP returns the prefix/suffix surrounding the nonce token in the
+// final header value. The split point is the script-src nonce slot: every
+// directive before script-src plus the literal `script-src 'nonce-` lives
+// in prefix; everything after the nonce string lives in suffix.
+func composeCSP(cfg CSPConfig) (prefix, suffix string) {
 	merged := DefaultCSPDirectives()
 	for k, v := range cfg.Directives {
 		if len(v) == 0 {
@@ -100,11 +149,8 @@ func BuildCSPHeader(cfg CSPConfig, nonce string) string {
 		}
 		merged[k] = append([]string(nil), v...)
 	}
-	if scripts, ok := merged["script-src"]; ok {
-		merged["script-src"] = append([]string{"'nonce-" + nonce + "'"}, scripts...)
-	} else {
-		merged["script-src"] = []string{"'nonce-" + nonce + "'"}
-	}
+	scripts := merged["script-src"]
+	delete(merged, "script-src")
 
 	keys := make([]string, 0, len(merged))
 	for k := range merged {
@@ -112,14 +158,64 @@ func BuildCSPHeader(cfg CSPConfig, nonce string) string {
 	}
 	sort.Strings(keys)
 
-	parts := make([]string, 0, len(keys)+1)
-	for _, k := range keys {
-		parts = append(parts, k+" "+strings.Join(merged[k], " "))
+	scriptIdx := sort.SearchStrings(keys, "script-src")
+
+	var b strings.Builder
+	for i := 0; i < scriptIdx; i++ {
+		b.WriteString(keys[i])
+		b.WriteByte(' ')
+		b.WriteString(strings.Join(merged[keys[i]], " "))
+		b.WriteString("; ")
+	}
+	b.WriteString("script-src 'nonce-")
+	prefix = b.String()
+
+	b.Reset()
+	b.WriteByte('\'')
+	if len(scripts) > 0 {
+		b.WriteByte(' ')
+		b.WriteString(strings.Join(scripts, " "))
+	}
+	for i := scriptIdx; i < len(keys); i++ {
+		b.WriteString("; ")
+		b.WriteString(keys[i])
+		b.WriteByte(' ')
+		b.WriteString(strings.Join(merged[keys[i]], " "))
 	}
 	if cfg.ReportTo != "" {
-		parts = append(parts, "report-to "+cfg.ReportTo)
+		b.WriteString("; report-to ")
+		b.WriteString(cfg.ReportTo)
 	}
-	return strings.Join(parts, "; ")
+	suffix = b.String()
+	return prefix, suffix
+}
+
+// cspCacheKey returns a deterministic string fingerprint of cfg suitable
+// as a sync.Map key. Map iteration order is non-deterministic so we sort
+// the directive keys before serializing.
+func cspCacheKey(cfg CSPConfig) string {
+	var b strings.Builder
+	b.WriteByte(byte('0' + int(cfg.Mode)))
+	b.WriteByte('|')
+	b.WriteString(cfg.ReportTo)
+	b.WriteByte('|')
+	keys := make([]string, 0, len(cfg.Directives))
+	for k := range cfg.Directives {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		b.WriteString(k)
+		b.WriteByte('=')
+		for i, v := range cfg.Directives[k] {
+			if i > 0 {
+				b.WriteByte(',')
+			}
+			b.WriteString(v)
+		}
+		b.WriteByte(';')
+	}
+	return b.String()
 }
 
 // CSPHeaderName returns the response header name for the configured mode:
