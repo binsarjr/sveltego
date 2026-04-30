@@ -13,9 +13,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/binsarjr/sveltego/adapter-server/internal/fsutil"
 )
 
 // Name is the canonical target name for this adapter.
@@ -78,7 +79,7 @@ func Build(ctx context.Context, bc BuildContext) error {
 		binaryName = "sveltego"
 	}
 	dst := filepath.Join(bc.OutputDir, binaryName)
-	if err := copyExecutable(bc.BinaryPath, dst); err != nil {
+	if err := fsutil.CopyFile(bc.BinaryPath, dst, 0o755); err != nil {
 		return fmt.Errorf("adapter-server: copy binary: %w", err)
 	}
 
@@ -105,25 +106,6 @@ func Doc() string {
 No external runtime; cross-compile via GOOS/GOARCH.`
 }
 
-func copyExecutable(src, dst string) error {
-	in, err := os.Open(src) //nolint:gosec // src comes from the caller's BuildContext, not user input
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-
-	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o755) //nolint:gosec // dst is OutputDir/<name>
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	if _, err := io.Copy(out, in); err != nil {
-		return err
-	}
-	return out.Close()
-}
-
 func copyTree(src, dst string) error {
 	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -140,27 +122,6 @@ func copyTree(src, dst string) error {
 		if !info.Mode().IsRegular() {
 			return nil
 		}
-		return copyFile(path, target, info.Mode().Perm())
+		return fsutil.CopyFile(path, target, info.Mode().Perm())
 	})
-}
-
-func copyFile(src, dst string, perm os.FileMode) error {
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return err
-	}
-	in, err := os.Open(src) //nolint:gosec // src is enumerated from filepath.Walk(AssetsDir)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-
-	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm) //nolint:gosec // dst is under OutputDir
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-	if _, err := io.Copy(out, in); err != nil {
-		return err
-	}
-	return out.Close()
 }
