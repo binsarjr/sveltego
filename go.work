@@ -14,5 +14,6 @@ use (
 	./packages/mcp
 	./packages/sveltego
 	./playgrounds/basic
+	./templates/ai
 	./test-utils
 )
