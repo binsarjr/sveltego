@@ -28,8 +28,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"text/template"
-
-	"github.com/binsarjr/sveltego/adapter-fastly/internal/fsutil"
 )
 
 // Name is the canonical target name for this adapter.
@@ -223,26 +221,4 @@ func (bc BuildContext) serviceName() string {
 		return bc.ServiceName
 	}
 	return "sveltego-app"
-}
-
-// copyTree recursively copies src into dst, preserving relative paths and
-// file mode bits. It delegates individual file copies to fsutil.CopyFile.
-func copyTree(src, dst string) error {
-	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, relErr := filepath.Rel(src, path)
-		if relErr != nil {
-			return relErr
-		}
-		target := filepath.Join(dst, rel)
-		if info.IsDir() {
-			return os.MkdirAll(target, info.Mode().Perm())
-		}
-		if !info.Mode().IsRegular() {
-			return nil
-		}
-		return fsutil.CopyFile(path, target, info.Mode().Perm())
-	})
 }
