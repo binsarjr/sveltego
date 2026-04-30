@@ -48,8 +48,8 @@ func parsePattern(t *testing.T, pattern string) []router.Segment {
 }
 
 func splitMatcher(body string) (name, matcher string) {
-	if i := strings.IndexByte(body, '='); i >= 0 {
-		return body[:i], body[i+1:]
+	if before, after, ok := strings.Cut(body, "="); ok {
+		return before, after
 	}
 	return body, ""
 }
@@ -473,9 +473,9 @@ func TestMatch_ConcurrentSafe(t *testing.T) {
 		mkRoute(t, "/docs/[...path]"),
 	})
 	done := make(chan struct{})
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		go func() {
-			for j := 0; j < 1000; j++ {
+			for range 1000 {
 				tree.Match("/about")
 				tree.Match("/post/42")
 				tree.Match("/docs/a/b/c")
@@ -483,7 +483,7 @@ func TestMatch_ConcurrentSafe(t *testing.T) {
 			done <- struct{}{}
 		}()
 	}
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		<-done
 	}
 }

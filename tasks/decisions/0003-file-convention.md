@@ -73,3 +73,11 @@ Router (`packages/sveltego/runtime/router`) consumes this slice at startup, buil
 
 - SvelteKit routing types: https://svelte.dev/docs/kit/advanced-routing
 - Go identifier rules: https://go.dev/ref/spec#Identifiers
+
+### Amendments
+
+**2026-04-30 (Phase 0g):** Group encoding canonical form is `_g_marketing` (no trailing underscore). The original locked sub-decision Q4 mapped `(marketing) → _g_marketing/`; phrase preserved here for clarity. Scanner enforces; no trailing underscore.
+
+**2026-04-30 (Phase 0g):** Manifest filename locked at `.gen/manifest.gen.go`. Generator name: `internal/codegen.GenerateManifest`. Manifest emits a `Routes() []router.Route` factory (not a `var Routes`) so each call returns a fresh slice that the dispatcher can wrap in `router.NewTree`. This matches the `Page{}.Render` method-on-struct convention from ADR 0004.
+
+**2026-04-30 (Phase 0g):** Built-in param matchers `int`, `uuid`, `slug` ship in `exports/kit/params/`. `DefaultMatchers()` returns a fresh map composable with user-discovered matchers. Matcher dispatch in `runtime/router/match.go` invokes `matchers[name].Match(value)`; missing matcher names fail at `router.NewTree` build time.

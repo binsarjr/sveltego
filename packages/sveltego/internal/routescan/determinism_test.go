@@ -33,7 +33,6 @@ func TestScanSortsAcrossFixtures(t *testing.T) {
 	t.Parallel()
 	fixtures := []string{"nested", "groups", "optional", "rest"}
 	for _, f := range fixtures {
-		f := f
 		t.Run(f, func(t *testing.T) {
 			t.Parallel()
 			res := mustScan(t, f, "")

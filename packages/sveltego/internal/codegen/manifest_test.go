@@ -24,7 +24,6 @@ var manifestFixtures = []string{
 func TestGenerateManifest_Goldens(t *testing.T) {
 	t.Parallel()
 	for _, name := range manifestFixtures {
-		name := name
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			scan := scanFixture(t, name)

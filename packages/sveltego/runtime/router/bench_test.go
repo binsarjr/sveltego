@@ -112,7 +112,7 @@ func BenchmarkMatch_Static(b *testing.B) {
 	path := "/static/leaf0/page0"
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_, _, _ = tree.Match(path)
 	}
 }
@@ -122,7 +122,7 @@ func BenchmarkMatch_Param(b *testing.B) {
 	path := "/group0/42/edit"
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_, _, _ = tree.Match(path)
 	}
 }
@@ -132,7 +132,7 @@ func BenchmarkMatch_Rest(b *testing.B) {
 	path := "/files0/a/b/c/d"
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_, _, _ = tree.Match(path)
 	}
 }
@@ -142,7 +142,7 @@ func BenchmarkMatch_Optional(b *testing.B) {
 	path := "/locale0/en/about"
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_, _, _ = tree.Match(path)
 	}
 }
@@ -152,7 +152,7 @@ func BenchmarkMatch_Miss(b *testing.B) {
 	path := "/no/such/route/here"
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_, _, _ = tree.Match(path)
 	}
 }
