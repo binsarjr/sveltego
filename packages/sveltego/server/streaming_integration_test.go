@@ -4,10 +4,12 @@ import (
 	"bufio"
 	"context"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -15,6 +17,30 @@ import (
 	"github.com/binsarjr/sveltego/render"
 	"github.com/binsarjr/sveltego/runtime/router"
 )
+
+// countingHandler is a slog.Handler that tallies records by level without
+// producing any output. Used to assert exactly one debug log and zero
+// error logs on client disconnect.
+type countingHandler struct {
+	debug atomic.Int64
+	warn  atomic.Int64
+	errs  atomic.Int64
+}
+
+func (h *countingHandler) Enabled(_ context.Context, _ slog.Level) bool { return true }
+func (h *countingHandler) Handle(_ context.Context, r slog.Record) error {
+	switch {
+	case r.Level >= slog.LevelError:
+		h.errs.Add(1)
+	case r.Level >= slog.LevelWarn:
+		h.warn.Add(1)
+	case r.Level == slog.LevelDebug:
+		h.debug.Add(1)
+	}
+	return nil
+}
+func (h *countingHandler) WithAttrs(_ []slog.Attr) slog.Handler { return h }
+func (h *countingHandler) WithGroup(_ string) slog.Handler      { return h }
 
 type streamingPageData struct {
 	Title string
@@ -307,6 +333,85 @@ func TestStreaming_ScriptInjectionEscaped(t *testing.T) {
 	}
 	if !strings.Contains(s, `</script`) {
 		t.Fatalf("expected escaped \\u003c/script in payload; body=%q", s)
+	}
+}
+
+func TestStreaming_ClientDisconnect_NoErrorSpam(t *testing.T) {
+	t.Parallel()
+
+	// stuck keeps the stream producer blocked so the client disconnects
+	// while the stream is still pending.
+	stuck := make(chan struct{})
+	t.Cleanup(func() { close(stuck) })
+
+	routes := []router.Route{{
+		Pattern:  "/",
+		Segments: segmentsFor("/"),
+		Load: func(_ *kit.LoadCtx) (any, error) {
+			return streamingPageData{
+				Posts: kit.Stream(func() ([]string, error) {
+					<-stuck
+					return nil, nil
+				}),
+			}, nil
+		},
+		Page: staticPage("<p>shell</p>"),
+	}}
+
+	logs := &countingHandler{}
+	srv, err := New(Config{
+		Routes: routes,
+		Shell:  testShell,
+		Logger: slog.New(logs),
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ts := httptest.NewServer(srv)
+	t.Cleanup(ts.Close)
+
+	// Start the request; read the shell so the server has flushed the
+	// first chunk before we disconnect.
+	ctx, cancel := context.WithCancel(context.Background())
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ts.URL+"/", nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		resp, doErr := http.DefaultClient.Do(req)
+		if doErr != nil {
+			done <- doErr
+			return
+		}
+		// Read until the shell arrives so the server is past the first
+		// FlushTo and is now waiting on the stream.
+		br := bufio.NewReader(resp.Body)
+		readUntil(t, br, "<p>shell</p>", 500*time.Millisecond)
+		cancel() // disconnect
+		_, _ = io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		done <- nil
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("request did not complete after client disconnect")
+	}
+
+	// Give the server goroutine a moment to record its log entries.
+	time.Sleep(50 * time.Millisecond)
+
+	if n := logs.errs.Load(); n != 0 {
+		t.Errorf("want 0 error log entries on client disconnect; got %d", n)
+	}
+	if n := logs.warn.Load(); n != 0 {
+		t.Errorf("want 0 warn log entries on client disconnect; got %d", n)
+	}
+	if n := logs.debug.Load(); n < 1 {
+		t.Errorf("want at least 1 debug log entry on client disconnect; got %d", n)
 	}
 }
 

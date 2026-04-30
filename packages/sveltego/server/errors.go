@@ -23,6 +23,7 @@ const (
 	logKeyFailCode = "fail_code"
 	logKeyName     = "name"
 	logKeySpec     = "spec"
+	logKeyStreamID = "stream_id"
 )
 
 // httpStatuser lets user errors carry a non-500 status into the

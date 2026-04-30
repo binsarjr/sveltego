@@ -15,6 +15,13 @@ const DefaultStreamTimeout = 30 * time.Second
 // timeout elapsed before the producer goroutine completed.
 var ErrStreamTimeout = errors.New("kit: stream timeout")
 
+// ErrClientGone is returned by the chunk writer when a client disconnects
+// mid-stream (broken pipe, closed connection, cancelled request). The
+// pipeline logs it once at debug level and suppresses further writes;
+// it never routes through HandleError because a disconnect is not a
+// server-side fault.
+var ErrClientGone = errors.New("kit: client disconnected")
+
 // streamIDCounter assigns unique IDs to Streamed values within a process.
 // Render path uses the ID as the data-stream attribute and as the first
 // argument to __sveltego__resolve so the client patches the right slot.
