@@ -1,4 +1,4 @@
-go 1.22
+go 1.23
 
 use (
 	./bench
@@ -9,6 +9,7 @@ use (
 	./packages/adapter-lambda
 	./packages/adapter-server
 	./packages/adapter-static
+	./packages/cookiesession
 	./packages/create-sveltego
 	./packages/enhanced-img
 	./packages/init
