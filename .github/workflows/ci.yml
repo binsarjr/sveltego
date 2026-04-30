@@ -5,22 +5,15 @@
 # - merge_group runs: same lite matrix + isolated-modules (no playground-smoke).
 #   CI runs once on the merged candidate; cancel-in-progress is disabled so
 #   the queue run always completes.
-# - Push to main (full): 3 OS × 2 Go matrix + isolated-modules +
-#   playground-smoke + agents-sync + changes. Full coverage at merge.
+# - Push to main: DISABLED. Flaky post-merge runs on main added noise without
+#   catching real regressions (PR-time + merge_group already validate every SHA
+#   before it lands). Re-enable if a genuine main-only failure class emerges.
 # - Docs-only diffs (`**.md`, `tasks/**`, `docs/**`) skip CI entirely
 #   via paths-ignore.
-# - Concurrency: PR runs cancel-in-progress; main and merge_group runs do not.
+# - Concurrency: PR runs cancel-in-progress; merge_group runs do not.
 name: ci
 
 on:
-  push:
-    branches: [main]
-    paths-ignore:
-      - '**.md'
-      - 'tasks/**'
-      - 'tasks/decisions/**'
-      - 'docs/**'
-      - '.github/ISSUE_TEMPLATE/**'
   pull_request:
     paths-ignore:
       - '**.md'
