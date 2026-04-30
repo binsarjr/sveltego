@@ -1,13 +1,29 @@
+# CI budget split (Phase 0p):
+#
+# - PR runs (lite): 1 OS × 1 Go (ubuntu-latest, 1.23.x) + changes +
+#   commit-lint + agents-sync. Roughly 4 jobs per push.
+# - Push to main (full): 3 OS × 2 Go matrix + isolated-modules +
+#   playground-smoke + agents-sync + changes. Full coverage at merge.
+# - Docs-only diffs (`**.md`, `tasks/**`, `docs/**`) skip CI entirely
+#   via paths-ignore.
+# - Concurrency cancels stale runs on the same ref.
 name: ci
 
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'tasks/**'
+      - 'tasks/decisions/**'
+      - 'docs/**'
+      - '.github/ISSUE_TEMPLATE/**'
   pull_request:
     paths-ignore:
       - '**.md'
-      - 'documentation/**'
       - 'tasks/**'
+      - 'tasks/decisions/**'
+      - 'docs/**'
       - '.github/ISSUE_TEMPLATE/**'
 
 concurrency:
@@ -61,14 +77,16 @@ jobs:
               - '.github/workflows/**'
               - 'test-utils/**'
 
-  lint-and-test:
+  # Lite matrix on PRs: ubuntu-latest, go1.23.x. ~1 job.
+  lint-and-test-pr:
     name: lint-and-test (${{ matrix.os }}, go${{ matrix.go }})
+    if: github.event_name == 'pull_request'
     needs: changes
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        go: ['1.22.x', '1.23.x']
+        os: [ubuntu-latest]
+        go: ['1.23.x']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -148,9 +166,6 @@ jobs:
           PATH="$(go env GOPATH)/bin:$PATH"
           dirs=$(go list -m -f '{{.Dir}}')
           for d in $dirs; do
-            # playgrounds/basic owns a generated `.gen/` package that
-            # cmd/app imports; the dedicated playground-smoke job drives
-            # `sveltego compile` first so per-module gates can run there.
             case "$d" in *[/\\]playgrounds[/\\]basic) continue ;; esac
             if [[ "$SHARED" != "true" ]]; then
               case "$d" in
@@ -322,8 +337,271 @@ jobs:
           directory: coverage
           fail_ci_if_error: false
 
+  # Full matrix on push to main: 3 OS × 2 Go. ~6 jobs.
+  lint-and-test-main:
+    name: lint-and-test (${{ matrix.os }}, go${{ matrix.go }})
+    if: github.event_name == 'push'
+    needs: changes
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        go: ['1.22.x', '1.23.x']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          cache: false
+
+      - name: Cache Go module and build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ matrix.go }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-${{ matrix.go }}-
+
+      - name: Install pinned tools
+        shell: bash
+        run: |
+          go install mvdan.cc/gofumpt@latest
+          go install golang.org/x/tools/cmd/goimports@latest
+
+      - name: gofumpt format check
+        shell: bash
+        run: |
+          out=$(gofumpt -l .)
+          if [ -n "$out" ]; then
+            echo "gofumpt would reformat the following files:"
+            echo "$out"
+            exit 1
+          fi
+
+      - name: goimports check
+        shell: bash
+        run: |
+          out=$(goimports -l -local github.com/binsarjr/sveltego .)
+          if [ -n "$out" ]; then
+            echo "goimports would reformat the following files:"
+            echo "$out"
+            exit 1
+          fi
+
+      - name: Install golangci-lint
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p "$(go env GOPATH)/bin"
+          curl -sSfL -o /tmp/golangci-install.sh https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh
+          sh /tmp/golangci-install.sh -b "$(go env GOPATH)/bin" v1.62.2
+          "$(go env GOPATH)/bin/golangci-lint" --version
+
+      - name: golangci-lint (per module, ubuntu only)
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        env:
+          SHARED: ${{ needs.changes.outputs.shared }}
+          SVELTEGO: ${{ needs.changes.outputs.sveltego }}
+          ADAPTER_AUTO: ${{ needs.changes.outputs.adapter-auto }}
+          ADAPTER_CLOUDFLARE: ${{ needs.changes.outputs.adapter-cloudflare }}
+          ADAPTER_DOCKER: ${{ needs.changes.outputs.adapter-docker }}
+          ADAPTER_LAMBDA: ${{ needs.changes.outputs.adapter-lambda }}
+          ADAPTER_SERVER: ${{ needs.changes.outputs.adapter-server }}
+          ADAPTER_STATIC: ${{ needs.changes.outputs.adapter-static }}
+          ENHANCED_IMG: ${{ needs.changes.outputs.enhanced-img }}
+          CREATE_SVELTEGO: ${{ needs.changes.outputs.create-sveltego }}
+          MCP: ${{ needs.changes.outputs.mcp }}
+          LSP: ${{ needs.changes.outputs.lsp }}
+          PLAYGROUND: ${{ needs.changes.outputs.playground }}
+          BENCHMARKS: ${{ needs.changes.outputs.benchmarks }}
+          TEST_UTILS: ${{ needs.changes.outputs.test-utils }}
+        run: |
+          set -euo pipefail
+          PATH="$(go env GOPATH)/bin:$PATH"
+          dirs=$(go list -m -f '{{.Dir}}')
+          for d in $dirs; do
+            case "$d" in *[/\\]playgrounds[/\\]basic) continue ;; esac
+            if [[ "$SHARED" != "true" ]]; then
+              case "$d" in
+                */packages/sveltego)             [[ "$SVELTEGO" == "true" ]]            || continue ;;
+                */packages/adapter-auto)         [[ "$ADAPTER_AUTO" == "true" ]]        || continue ;;
+                */packages/adapter-cloudflare)   [[ "$ADAPTER_CLOUDFLARE" == "true" ]]  || continue ;;
+                */packages/adapter-docker)       [[ "$ADAPTER_DOCKER" == "true" ]]      || continue ;;
+                */packages/adapter-lambda)       [[ "$ADAPTER_LAMBDA" == "true" ]]      || continue ;;
+                */packages/adapter-server)       [[ "$ADAPTER_SERVER" == "true" ]]      || continue ;;
+                */packages/adapter-static)       [[ "$ADAPTER_STATIC" == "true" ]]      || continue ;;
+                */packages/enhanced-img)         [[ "$ENHANCED_IMG" == "true" ]]        || continue ;;
+                */packages/create-sveltego)      [[ "$CREATE_SVELTEGO" == "true" ]]     || continue ;;
+                */packages/mcp)                  [[ "$MCP" == "true" ]]                 || continue ;;
+                */packages/lsp)                  [[ "$LSP" == "true" ]]                 || continue ;;
+                */benchmarks)                    [[ "$BENCHMARKS" == "true" ]]          || continue ;;
+                */test-utils)                    [[ "$TEST_UTILS" == "true" ]]          || continue ;;
+              esac
+            fi
+            echo "::group::golangci-lint $d"
+            (cd "$d" && golangci-lint run --config "$GITHUB_WORKSPACE/.golangci.yml" ./...)
+            echo "::endgroup::"
+          done
+
+      - name: go vet (changed modules)
+        shell: bash
+        env:
+          SHARED: ${{ needs.changes.outputs.shared }}
+          SVELTEGO: ${{ needs.changes.outputs.sveltego }}
+          ADAPTER_AUTO: ${{ needs.changes.outputs.adapter-auto }}
+          ADAPTER_CLOUDFLARE: ${{ needs.changes.outputs.adapter-cloudflare }}
+          ADAPTER_DOCKER: ${{ needs.changes.outputs.adapter-docker }}
+          ADAPTER_LAMBDA: ${{ needs.changes.outputs.adapter-lambda }}
+          ADAPTER_SERVER: ${{ needs.changes.outputs.adapter-server }}
+          ADAPTER_STATIC: ${{ needs.changes.outputs.adapter-static }}
+          ENHANCED_IMG: ${{ needs.changes.outputs.enhanced-img }}
+          CREATE_SVELTEGO: ${{ needs.changes.outputs.create-sveltego }}
+          MCP: ${{ needs.changes.outputs.mcp }}
+          LSP: ${{ needs.changes.outputs.lsp }}
+          PLAYGROUND: ${{ needs.changes.outputs.playground }}
+          BENCHMARKS: ${{ needs.changes.outputs.benchmarks }}
+          TEST_UTILS: ${{ needs.changes.outputs.test-utils }}
+        run: |
+          set -euo pipefail
+          dirs=$(go list -m -f '{{.Dir}}')
+          for d in $dirs; do
+            case "$d" in *[/\\]playgrounds[/\\]basic) continue ;; esac
+            if [[ "$SHARED" != "true" ]]; then
+              case "$d" in
+                */packages/sveltego)             [[ "$SVELTEGO" == "true" ]]            || continue ;;
+                */packages/adapter-auto)         [[ "$ADAPTER_AUTO" == "true" ]]        || continue ;;
+                */packages/adapter-cloudflare)   [[ "$ADAPTER_CLOUDFLARE" == "true" ]]  || continue ;;
+                */packages/adapter-docker)       [[ "$ADAPTER_DOCKER" == "true" ]]      || continue ;;
+                */packages/adapter-lambda)       [[ "$ADAPTER_LAMBDA" == "true" ]]      || continue ;;
+                */packages/adapter-server)       [[ "$ADAPTER_SERVER" == "true" ]]      || continue ;;
+                */packages/adapter-static)       [[ "$ADAPTER_STATIC" == "true" ]]      || continue ;;
+                */packages/enhanced-img)         [[ "$ENHANCED_IMG" == "true" ]]        || continue ;;
+                */packages/create-sveltego)      [[ "$CREATE_SVELTEGO" == "true" ]]     || continue ;;
+                */packages/mcp)                  [[ "$MCP" == "true" ]]                 || continue ;;
+                */packages/lsp)                  [[ "$LSP" == "true" ]]                 || continue ;;
+                */benchmarks)                    [[ "$BENCHMARKS" == "true" ]]          || continue ;;
+                */test-utils)                    [[ "$TEST_UTILS" == "true" ]]          || continue ;;
+              esac
+            fi
+            echo "::group::go vet $d"
+            (cd "$d" && go vet ./...)
+            echo "::endgroup::"
+          done
+
+      - name: go test -race + coverage (changed modules)
+        shell: bash
+        env:
+          SHARED: ${{ needs.changes.outputs.shared }}
+          SVELTEGO: ${{ needs.changes.outputs.sveltego }}
+          ADAPTER_AUTO: ${{ needs.changes.outputs.adapter-auto }}
+          ADAPTER_CLOUDFLARE: ${{ needs.changes.outputs.adapter-cloudflare }}
+          ADAPTER_DOCKER: ${{ needs.changes.outputs.adapter-docker }}
+          ADAPTER_LAMBDA: ${{ needs.changes.outputs.adapter-lambda }}
+          ADAPTER_SERVER: ${{ needs.changes.outputs.adapter-server }}
+          ADAPTER_STATIC: ${{ needs.changes.outputs.adapter-static }}
+          ENHANCED_IMG: ${{ needs.changes.outputs.enhanced-img }}
+          CREATE_SVELTEGO: ${{ needs.changes.outputs.create-sveltego }}
+          MCP: ${{ needs.changes.outputs.mcp }}
+          LSP: ${{ needs.changes.outputs.lsp }}
+          PLAYGROUND: ${{ needs.changes.outputs.playground }}
+          BENCHMARKS: ${{ needs.changes.outputs.benchmarks }}
+          TEST_UTILS: ${{ needs.changes.outputs.test-utils }}
+        run: |
+          set -euo pipefail
+          mkdir -p coverage
+          dirs=$(go list -m -f '{{.Dir}}')
+          for d in $dirs; do
+            case "$d" in *[/\\]playgrounds[/\\]basic) continue ;; esac
+            if [[ "$SHARED" != "true" ]]; then
+              case "$d" in
+                */packages/sveltego)             [[ "$SVELTEGO" == "true" ]]            || continue ;;
+                */packages/adapter-auto)         [[ "$ADAPTER_AUTO" == "true" ]]        || continue ;;
+                */packages/adapter-cloudflare)   [[ "$ADAPTER_CLOUDFLARE" == "true" ]]  || continue ;;
+                */packages/adapter-docker)       [[ "$ADAPTER_DOCKER" == "true" ]]      || continue ;;
+                */packages/adapter-lambda)       [[ "$ADAPTER_LAMBDA" == "true" ]]      || continue ;;
+                */packages/adapter-server)       [[ "$ADAPTER_SERVER" == "true" ]]      || continue ;;
+                */packages/adapter-static)       [[ "$ADAPTER_STATIC" == "true" ]]      || continue ;;
+                */packages/enhanced-img)         [[ "$ENHANCED_IMG" == "true" ]]        || continue ;;
+                */packages/create-sveltego)      [[ "$CREATE_SVELTEGO" == "true" ]]     || continue ;;
+                */packages/mcp)                  [[ "$MCP" == "true" ]]                 || continue ;;
+                */packages/lsp)                  [[ "$LSP" == "true" ]]                 || continue ;;
+                */benchmarks)                    [[ "$BENCHMARKS" == "true" ]]          || continue ;;
+                */test-utils)                    [[ "$TEST_UTILS" == "true" ]]          || continue ;;
+              esac
+            fi
+            slug=$(basename "$d")
+            echo "::group::go test $d"
+            (cd "$d" && go test -race -count=1 -coverprofile="coverage-${slug}.out" -coverpkg=./... ./... || exit 1)
+            if [ -f "$d/coverage-${slug}.out" ]; then
+              cp "$d/coverage-${slug}.out" "coverage/${slug}.out"
+            fi
+            echo "::endgroup::"
+          done
+
+      - name: go build (changed modules)
+        shell: bash
+        env:
+          SHARED: ${{ needs.changes.outputs.shared }}
+          SVELTEGO: ${{ needs.changes.outputs.sveltego }}
+          ADAPTER_AUTO: ${{ needs.changes.outputs.adapter-auto }}
+          ADAPTER_CLOUDFLARE: ${{ needs.changes.outputs.adapter-cloudflare }}
+          ADAPTER_DOCKER: ${{ needs.changes.outputs.adapter-docker }}
+          ADAPTER_LAMBDA: ${{ needs.changes.outputs.adapter-lambda }}
+          ADAPTER_SERVER: ${{ needs.changes.outputs.adapter-server }}
+          ADAPTER_STATIC: ${{ needs.changes.outputs.adapter-static }}
+          ENHANCED_IMG: ${{ needs.changes.outputs.enhanced-img }}
+          CREATE_SVELTEGO: ${{ needs.changes.outputs.create-sveltego }}
+          MCP: ${{ needs.changes.outputs.mcp }}
+          LSP: ${{ needs.changes.outputs.lsp }}
+          PLAYGROUND: ${{ needs.changes.outputs.playground }}
+          BENCHMARKS: ${{ needs.changes.outputs.benchmarks }}
+          TEST_UTILS: ${{ needs.changes.outputs.test-utils }}
+        run: |
+          set -euo pipefail
+          dirs=$(go list -m -f '{{.Dir}}')
+          for d in $dirs; do
+            case "$d" in *[/\\]playgrounds[/\\]basic) continue ;; esac
+            if [[ "$SHARED" != "true" ]]; then
+              case "$d" in
+                */packages/sveltego)             [[ "$SVELTEGO" == "true" ]]            || continue ;;
+                */packages/adapter-auto)         [[ "$ADAPTER_AUTO" == "true" ]]        || continue ;;
+                */packages/adapter-cloudflare)   [[ "$ADAPTER_CLOUDFLARE" == "true" ]]  || continue ;;
+                */packages/adapter-docker)       [[ "$ADAPTER_DOCKER" == "true" ]]      || continue ;;
+                */packages/adapter-lambda)       [[ "$ADAPTER_LAMBDA" == "true" ]]      || continue ;;
+                */packages/adapter-server)       [[ "$ADAPTER_SERVER" == "true" ]]      || continue ;;
+                */packages/adapter-static)       [[ "$ADAPTER_STATIC" == "true" ]]      || continue ;;
+                */packages/enhanced-img)         [[ "$ENHANCED_IMG" == "true" ]]        || continue ;;
+                */packages/create-sveltego)      [[ "$CREATE_SVELTEGO" == "true" ]]     || continue ;;
+                */packages/mcp)                  [[ "$MCP" == "true" ]]                 || continue ;;
+                */packages/lsp)                  [[ "$LSP" == "true" ]]                 || continue ;;
+                */benchmarks)                    [[ "$BENCHMARKS" == "true" ]]          || continue ;;
+                */test-utils)                    [[ "$TEST_UTILS" == "true" ]]          || continue ;;
+              esac
+            fi
+            echo "::group::go build $d"
+            (cd "$d" && go build ./...)
+            echo "::endgroup::"
+          done
+
+      - name: Upload coverage to Codecov
+        if: matrix.os == 'ubuntu-latest' && matrix.go == '1.23.x'
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: coverage
+          fail_ci_if_error: false
+
+  # Push-to-main only: catches per-module isolation breakage that the
+  # workspace path can mask. Skipped on PRs to keep PR runs lean.
   isolated-modules:
     name: isolated-modules (GOWORK=off)
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     env:
       GOWORK: off
@@ -356,8 +634,6 @@ jobs:
           fi
           for m in $mods; do
             d=$(dirname "$m")
-            # playground driven by playground-smoke job; cmd/app needs `.gen/`
-            # which only exists after `sveltego compile` runs.
             case "$d" in playgrounds/basic|*[/\\]playgrounds[/\\]basic) continue ;; esac
             echo "::group::isolated $d"
             (cd "$d" && go mod download && go build ./... && go test -race -short ./...)
@@ -399,14 +675,13 @@ jobs:
             exit 1
           fi
 
-  # playground-smoke drives playgrounds/basic end-to-end:
-  # `sveltego compile` then `sveltego build`, then the binary is curl'd
-  # against / and /post/123. Phase 0j-fix closed #109 (PageData type
-  # alias preserves identity) and #110 (pre-commit hook skips user .go
-  # files), so this job runs unconditionally on every push.
+  # Push-to-main only: end-to-end check (compile + build + curl) for the
+  # playground binary. PRs skip this — feature PRs that need it can run
+  # locally via `playgrounds/basic/Makefile` (manual gate).
   playground-smoke:
     name: playground-smoke (basic)
-    needs: lint-and-test
+    if: github.event_name == 'push'
+    needs: lint-and-test-main
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

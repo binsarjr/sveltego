@@ -1,13 +1,18 @@
+# Bench (Phase 0p): runs only on push-to-main (gate regressions at merge),
+# nightly schedule, and manual dispatch. PR triggers removed to cut spend
+# — feature PRs that touch hot paths can request bench via workflow_dispatch.
 name: bench
 
 on:
-  pull_request:
+  push:
+    branches: [main]
     paths:
       - '**.go'
       - 'benchmarks/**'
       - '.github/workflows/bench.yml'
-  push:
-    branches: [main]
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -20,7 +25,6 @@ concurrency:
 jobs:
   bench:
     name: bench
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -38,37 +42,30 @@ jobs:
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
           (cd benchmarks/cmd/bench-compare && go install)
 
-      - name: Bench base (${{ github.base_ref }})
-        # TODO: bump -count=6 once real benchmarks land per #60.
+      - name: Bench base (HEAD~1)
+        # On main pushes, compare HEAD against the previous commit on main.
+        # On schedule/dispatch, compare HEAD against HEAD~1 to detect drift
+        # between scheduled runs.
         run: |
-          git checkout "${{ github.base_ref }}"
+          git checkout HEAD~1
           go test -bench=. -benchmem -count=3 -run=^$ -benchtime=1x ./benchmarks/... \
             | tee /tmp/base.txt
 
-      - name: Bench head (${{ github.event.pull_request.head.sha }})
+      - name: Bench head (${{ github.sha }})
         run: |
-          git checkout "${{ github.event.pull_request.head.sha }}"
+          git checkout "${{ github.sha }}"
           go test -bench=. -benchmem -count=3 -run=^$ -benchtime=1x ./benchmarks/... \
             | tee /tmp/head.txt
 
       - name: Run bench-compare gate
-        env:
-          PR_BODY: ${{ github.event.pull_request.body }}
         run: |
-          ALLOW=
-          if printf '%s\n' "$PR_BODY" | grep -q "^bench-regression:"; then
-            ALLOW=-allow-regression
-          fi
           set +e
-          bench-compare $ALLOW -base /tmp/base.txt -head /tmp/head.txt | tee /tmp/bench.txt
+          bench-compare -base /tmp/base.txt -head /tmp/head.txt | tee /tmp/bench.txt
           echo $? > /tmp/bench.exit
           set -e
 
-      - name: Post sticky comment
-        uses: marocchino/sticky-pull-request-comment@v2
-        with:
-          header: bench
-          path: /tmp/bench.txt
+      - name: Print bench report
+        run: cat /tmp/bench.txt
 
       - name: Enforce gate
         run: exit "$(cat /tmp/bench.exit)"
