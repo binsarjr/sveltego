@@ -108,6 +108,10 @@ func walkRoutes(routesDir string) ([]ScannedRoute, []Diagnostic, error) {
 			if path != routesDir && strings.HasPrefix(d.Name(), ".") {
 				return fs.SkipDir
 			}
+			// Mirror go/build conventions: skip testdata/ and __tests__/ subtrees.
+			if path != routesDir && (d.Name() == "testdata" || d.Name() == "__tests__") {
+				return fs.SkipDir
+			}
 			files, hasReset, resetTarget, readErr := readSpecialFiles(path)
 			if readErr != nil {
 				return readErr
@@ -122,8 +126,15 @@ func walkRoutes(routesDir string) ([]ScannedRoute, []Diagnostic, error) {
 			}
 			return nil
 		}
+		// Skip test and spec files per Go and JS conventions.
+		name := d.Name()
+		if strings.HasSuffix(name, "_test.go") ||
+			strings.HasSuffix(name, "_test.svelte") ||
+			strings.HasSuffix(name, ".spec.svelte") {
+			return nil
+		}
 		// Stray hooks.server.go inside RoutesDir is a misplaced file.
-		if d.Name() == "hooks.server.go" {
+		if name == "hooks.server.go" {
 			diagnostics = append(diagnostics, Diagnostic{
 				Path:    path,
 				Message: "hooks.server.go must live outside src/routes/",

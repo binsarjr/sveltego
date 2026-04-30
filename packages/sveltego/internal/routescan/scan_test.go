@@ -334,6 +334,23 @@ func TestScanGroupsConflict(t *testing.T) {
 	}
 }
 
+// TestScanSkipTestFiles asserts that *_test.go, *_test.svelte, *.spec.svelte,
+// testdata/, and __tests__/ are all silently ignored by the scanner so that
+// test colocation inside src/routes/ does not pollute the manifest.
+func TestScanSkipTestFiles(t *testing.T) {
+	t.Parallel()
+	res := mustScan(t, "skip-tests", "")
+	if len(res.Diagnostics) != 0 {
+		t.Fatalf("unexpected diagnostics: %v", res.Diagnostics)
+	}
+	if got := len(res.Routes); got != 1 {
+		t.Fatalf("want 1 route, got %d (%v)", got, patterns(res.Routes))
+	}
+	if res.Routes[0].Pattern != "/" {
+		t.Fatalf("want pattern /, got %q", res.Routes[0].Pattern)
+	}
+}
+
 func TestParseResetFilename(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
