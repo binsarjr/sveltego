@@ -8,7 +8,7 @@ import (
 
 type Page struct{}
 
-type PageData struct {
+type PageData = struct {
 	Name string
 	Age  int
 }

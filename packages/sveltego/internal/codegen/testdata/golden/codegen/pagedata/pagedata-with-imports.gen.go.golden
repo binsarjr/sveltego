@@ -9,7 +9,7 @@ import (
 
 type Page struct{}
 
-type PageData struct {
+type PageData = struct {
 	CreatedAt time.Time
 }
 

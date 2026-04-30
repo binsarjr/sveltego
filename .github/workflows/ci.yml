@@ -401,16 +401,11 @@ jobs:
 
   # playground-smoke drives playgrounds/basic end-to-end:
   # `sveltego compile` then `sveltego build`, then the binary is curl'd
-  # against / and /post/123. Gated on the repo variable PLAYGROUND_SMOKE
-  # because Phase 0j surfaced two MVP-blocking framework bugs: #109
-  # (runtime PageData type-assertion mismatch) and #110 (pre-commit
-  # hook rejects the user `.go` files under the convention). Until #110
-  # lands the user `.go` files (`page.server.go`) are not committed, so
-  # codegen produces an empty PageData and the gen page.gen.go fails to
-  # compile. Flip the variable on once both fixes ship.
+  # against / and /post/123. Phase 0j-fix closed #109 (PageData type
+  # alias preserves identity) and #110 (pre-commit hook skips user .go
+  # files), so this job runs unconditionally on every push.
   playground-smoke:
     name: playground-smoke (basic)
-    if: vars.PLAYGROUND_SMOKE == 'enabled'
     needs: lint-and-test
     runs-on: ubuntu-latest
     steps:
@@ -443,7 +438,6 @@ jobs:
         run: go run github.com/binsarjr/sveltego/cmd/sveltego build --out ./build/app
 
       - name: Start server
-        if: vars.PLAYGROUND_SMOKE == 'enabled'
         working-directory: playgrounds/basic
         shell: bash
         run: |
@@ -460,15 +454,13 @@ jobs:
           exit 1
 
       - name: Curl /
-        if: vars.PLAYGROUND_SMOKE == 'enabled'
         run: curl -fsS http://localhost:3000/ | tee /tmp/root.html | grep "Hello, sveltego!"
 
       - name: Curl /post/123
-        if: vars.PLAYGROUND_SMOKE == 'enabled'
         run: curl -fsS http://localhost:3000/post/123 | tee /tmp/post.html | grep "Post 123"
 
       - name: Stop server
-        if: always() && vars.PLAYGROUND_SMOKE == 'enabled'
+        if: always()
         working-directory: playgrounds/basic
         shell: bash
         run: |

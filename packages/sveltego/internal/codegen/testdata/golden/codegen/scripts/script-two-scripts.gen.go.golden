@@ -14,7 +14,7 @@ func count(n int) string { return strconv.Itoa(n) }
 
 type Page struct{}
 
-type PageData struct{}
+type PageData = struct{}
 
 func (p Page) Render(w *render.Writer, ctx *kit.RenderCtx, data PageData) error {
 	_ = ctx

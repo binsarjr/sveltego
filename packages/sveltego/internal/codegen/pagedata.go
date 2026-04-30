@@ -171,14 +171,18 @@ func collectSelectorPackages(expr goast.Expr, set map[string]struct{}) {
 	})
 }
 
-// emitPageDataStruct writes `type PageData struct{...}`. Empty fields produce
-// the zero-field form.
+// emitPageDataStruct writes `type PageData = struct{...}` as a type alias
+// (note the `=`). The alias preserves type identity between the user's
+// inline anonymous struct literal returned by Load() and PageData, so the
+// manifest adapter's `data.(PageData)` assertion succeeds. A new named
+// type would require an explicit value conversion at the wire boundary.
+// See #109. Empty fields produce the zero-field alias form.
 func emitPageDataStruct(b *Builder, fields []pageDataField) {
 	if len(fields) == 0 {
-		b.Line("type PageData struct{}")
+		b.Line("type PageData = struct{}")
 		return
 	}
-	b.Line("type PageData struct {")
+	b.Line("type PageData = struct {")
 	b.Indent()
 	for _, fd := range fields {
 		b.Linef("%s %s", fd.Name, fd.Type)

@@ -19,7 +19,7 @@ func format(it Item) string {
 
 type Page struct{}
 
-type PageData struct{}
+type PageData = struct{}
 
 func (p Page) Render(w *render.Writer, ctx *kit.RenderCtx, data PageData) error {
 	_ = ctx

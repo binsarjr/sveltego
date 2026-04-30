@@ -7,6 +7,44 @@ staged_go=$(echo "$staged_all" | grep -E '\.go$' || true)
 # lint and test steps. They still get formatted by gofumpt/goimports.
 testable_go=$(echo "$staged_go" | grep -vE '(^|/)testdata/' || true)
 
+# sveltego user-source convention (#110, ADR 0003 amendment 2026-04-30):
+# files under src/routes/, src/params/, and hooks.server.go are read by
+# codegen via go/parser directly and carry `//go:build sveltego` so they
+# are excluded from the default Go toolchain. Two failure modes block
+# the lint + test loops on these files:
+#   1. Bracketed paths (`src/routes/[id]/`) — Go rejects `[` in import
+#      paths so `go test ./.../[id]` errors with "invalid char '['".
+#   2. All-tagged dirs — every .go file carries the build constraint so
+#      `go test` reports "build constraints exclude all Go files".
+# Filter both classes here: path-based skip catches user files that
+# fall under the convention; build-tag skip catches any other staged
+# .go that opts into the sveltego tag (defense-in-depth). Universal
+# formatting (gofumpt, goimports above) keeps running on these files;
+# lint + test skip. The dedicated playground-smoke CI job exercises the
+# full pipeline.
+testable_go=$(echo "$testable_go" | grep -vE '(^|/)src/(routes|params)/' || true)
+testable_go=$(echo "$testable_go" | grep -vE '(^|/)hooks\.server\.go$' || true)
+# Drop any remaining file whose first line carries `//go:build sveltego`
+# (single tag or any combination that includes the bare `sveltego`
+# token, but not the negation `!sveltego`). Uses an inverted match: a
+# file is dropped iff `head -n1` matches /^\/\/go:build [^!]*\bsveltego\b/.
+filtered_go=""
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  if [ -f "$f" ] && head -n1 "$f" 2>/dev/null | grep -qE '^//go:build [^!]*\bsveltego\b'; then
+    continue
+  fi
+  if [ -z "$filtered_go" ]; then
+    filtered_go="$f"
+  else
+    filtered_go="$filtered_go
+$f"
+  fi
+done <<EOF
+$testable_go
+EOF
+testable_go="$filtered_go"
+
 if [[ -n "$staged_go" ]]; then
   echo "→ gofumpt"
   echo "$staged_go" | xargs gofumpt -w
