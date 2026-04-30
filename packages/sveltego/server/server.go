@@ -264,16 +264,19 @@ func (s *Server) ListenAndServe(addr string) error {
 // accepting connections.
 func (s *Server) RunInitAsync(ctx context.Context) {
 	done := s.startInit()
-	go func() {
-		err := s.hooks.Init(ctx)
-		if err != nil {
-			s.Logger.Error("server: init hook failed", logKeyError, err.Error())
-			s.initState.Store(initFailed)
-		} else {
-			s.initState.Store(initReady)
-		}
-		close(done)
-	}()
+	go s.runInitAsync(ctx, done)
+}
+
+func (s *Server) runInitAsync(ctx context.Context, done chan struct{}) {
+	err := s.hooks.Init(ctx)
+	if err != nil {
+		logFn := s.Logger.Error
+		logFn("server: init hook failed", logKeyError, err.Error())
+		s.initState.Store(initFailed)
+	} else {
+		s.initState.Store(initReady)
+	}
+	close(done)
 }
 
 // Init runs the configured Init hook synchronously with ctx and returns its
