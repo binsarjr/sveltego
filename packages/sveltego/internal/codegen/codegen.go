@@ -21,6 +21,11 @@ type Options struct {
 	// `var Actions kit.ActionMap`. The page's PageData gains a `Form any`
 	// field so action result data can be threaded through the render.
 	HasActions bool
+	// Filename is the .svelte source path used to seed the CSS scope
+	// hash so client and server agree on the `svelte-<hash>` class name.
+	// Empty falls back to hashing the CSS body, matching upstream's
+	// default cssHash rule.
+	Filename string
 }
 
 // LayoutOptions configures GenerateLayout.
@@ -30,12 +35,17 @@ type LayoutOptions struct {
 	// ServerFilePath optionally points at a sibling layout.server.go whose
 	// Load() inline struct return is used to infer LayoutData fields.
 	ServerFilePath string
+	// Filename is the .svelte source path used to seed the CSS scope
+	// hash so client and server agree on the `svelte-<hash>` class name.
+	Filename string
 }
 
 // ErrorPageOptions configures GenerateErrorPage.
 type ErrorPageOptions struct {
 	// PackageName is written verbatim into the generated `package` clause.
 	PackageName string
+	// Filename is the .svelte source path used to seed the CSS scope hash.
+	Filename string
 }
 
 // Generate lowers frag to Go source for a Page.Render method. The returned
@@ -49,10 +59,22 @@ func Generate(frag *ast.Fragment, opts Options) ([]byte, error) {
 		return nil, errors.New("codegen: empty package name")
 	}
 
+	svelteOpts, err := extractSvelteOptions(frag)
+	if err != nil {
+		return nil, err
+	}
 	scripts, err := extractScripts(frag)
 	if err != nil {
 		return nil, err
 	}
+	if err := validateRunesOption(svelteOpts, scripts); err != nil {
+		return nil, err
+	}
+	style, err := extractStyle(frag, opts.Filename)
+	if err != nil {
+		return nil, err
+	}
+	applyScopeClass(frag.Children, style.ScopeClass)
 	pageData, err := inferPageData(opts.ServerFilePath)
 	if err != nil {
 		return nil, err
@@ -101,6 +123,7 @@ func Generate(frag *ast.Fragment, opts Options) ([]byte, error) {
 	emitRuneStmts(&b, scripts.RuneStmts)
 	rejectRootConst(&b, frag.Children)
 	emitChildren(&b, frag.Children)
+	emitStyleBlock(&b, style)
 	b.Line("return nil")
 	b.Dedent()
 	b.Line("}")
@@ -129,10 +152,22 @@ func GenerateLayout(frag *ast.Fragment, opts LayoutOptions) ([]byte, error) {
 		return nil, errors.New("codegen: empty package name")
 	}
 
+	svelteOpts, err := extractSvelteOptions(frag)
+	if err != nil {
+		return nil, err
+	}
 	scripts, err := extractScripts(frag)
 	if err != nil {
 		return nil, err
 	}
+	if err := validateRunesOption(svelteOpts, scripts); err != nil {
+		return nil, err
+	}
+	style, err := extractStyle(frag, opts.Filename)
+	if err != nil {
+		return nil, err
+	}
+	applyScopeClass(frag.Children, style.ScopeClass)
 	layoutData, err := inferPageData(opts.ServerFilePath)
 	if err != nil {
 		return nil, err
@@ -180,6 +215,7 @@ func GenerateLayout(frag *ast.Fragment, opts LayoutOptions) ([]byte, error) {
 	emitRuneStmts(&b, scripts.RuneStmts)
 	rejectRootConst(&b, frag.Children)
 	emitChildren(&b, frag.Children)
+	emitStyleBlock(&b, style)
 	b.Line("return nil")
 	b.Dedent()
 	b.Line("}")
@@ -206,10 +242,22 @@ func GenerateErrorPage(frag *ast.Fragment, opts ErrorPageOptions) ([]byte, error
 		return nil, errors.New("codegen: empty package name")
 	}
 
+	svelteOpts, err := extractSvelteOptions(frag)
+	if err != nil {
+		return nil, err
+	}
 	scripts, err := extractScripts(frag)
 	if err != nil {
 		return nil, err
 	}
+	if err := validateRunesOption(svelteOpts, scripts); err != nil {
+		return nil, err
+	}
+	style, err := extractStyle(frag, opts.Filename)
+	if err != nil {
+		return nil, err
+	}
+	applyScopeClass(frag.Children, style.ScopeClass)
 
 	imports := mergeImports(scripts.Imports, nil)
 
@@ -249,6 +297,7 @@ func GenerateErrorPage(frag *ast.Fragment, opts ErrorPageOptions) ([]byte, error
 	emitRuneStmts(&b, scripts.RuneStmts)
 	rejectRootConst(&b, frag.Children)
 	emitChildren(&b, frag.Children)
+	emitStyleBlock(&b, style)
 	b.Line("return nil")
 	b.Dedent()
 	b.Line("}")
