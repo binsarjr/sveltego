@@ -34,6 +34,7 @@ func Load(ctx *kit.LoadCtx) (struct {
 		Value int
 		Width string
 	}
+	Form any
 }, error,
 ) {
 	u, _ := ctx.Locals["user"].(*store.User)
@@ -54,6 +55,7 @@ func Load(ctx *kit.LoadCtx) (struct {
 				Value int
 				Width string
 			}
+			Form any
 		}{}, kit.Redirect(303, "/login")
 	}
 
@@ -131,6 +133,7 @@ func Load(ctx *kit.LoadCtx) (struct {
 			Value int
 			Width string
 		}
+		Form any
 	}{
 		Username:       u.Username,
 		Items:          items,

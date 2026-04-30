@@ -3,6 +3,7 @@
 build/
 dist/
 node_modules/
+vite.config.gen.js
 
 # Go
 /sveltego
