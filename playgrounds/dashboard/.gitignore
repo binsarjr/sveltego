@@ -1,3 +1,5 @@
 .gen/
 build/
 /app
+node_modules/
+static/

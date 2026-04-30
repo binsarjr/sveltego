@@ -68,7 +68,7 @@ jobs:
             create-sveltego: 'packages/create-sveltego/**'
             mcp: 'packages/mcp/**'
             lsp: 'packages/lsp/**'
-            playground: 'playgrounds/basic/**'
+            playground: ['playgrounds/basic/**', 'playgrounds/dashboard/**']
             benchmarks: 'benchmarks/**'
             test-utils: 'test-utils/**'
             shared:
