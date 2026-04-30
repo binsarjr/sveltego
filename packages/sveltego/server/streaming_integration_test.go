@@ -348,9 +348,9 @@ func TestStreaming_ClientDisconnect_NoErrorSpam(t *testing.T) {
 	routes := []router.Route{{
 		Pattern:  "/",
 		Segments: segmentsFor("/"),
-		Load: func(_ *kit.LoadCtx) (any, error) {
+		Load: func(lctx *kit.LoadCtx) (any, error) {
 			return streamingPageData{
-				Posts: kit.Stream(func() ([]string, error) {
+				Posts: kit.StreamCtx(lctx.Request.Context(), func(_ context.Context) ([]string, error) {
 					<-stuck
 					return nil, nil
 				}),
