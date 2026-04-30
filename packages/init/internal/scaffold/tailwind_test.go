@@ -133,18 +133,32 @@ func TestRun_TailwindV3_WritesPostCSSPath(t *testing.T) {
 	}
 }
 
-func TestRun_TailwindNone_NoPackageJSON(t *testing.T) {
+func TestRun_TailwindNone_OmitsTailwindDeps(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	res, err := Run(Options{Dir: dir, Module: "example.com/none", Tailwind: TailwindNone})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "package.json")); err == nil {
-		t.Errorf("package.json should not be written when Tailwind=none")
+	pkg, err := os.ReadFile(filepath.Join(dir, "package.json"))
+	if err != nil {
+		t.Fatalf("package.json should be written even without Tailwind: %v", err)
 	}
-	if res.InstallCommand != "" {
-		t.Errorf("install command unexpected: %q", res.InstallCommand)
+	for _, dep := range []string{"@tailwindcss/vite", "tailwindcss", "postcss", "autoprefixer"} {
+		if bytes.Contains(pkg, []byte(dep)) {
+			t.Errorf("package.json should not include %q without Tailwind, got: %s", dep, pkg)
+		}
+	}
+	for _, dep := range []string{"@sveltejs/vite-plugin-svelte", "svelte", "vite"} {
+		if !bytes.Contains(pkg, []byte(dep)) {
+			t.Errorf("package.json missing baseline dep %q, got: %s", dep, pkg)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "src/app.css")); err == nil {
+		t.Errorf("src/app.css should not be written when Tailwind=none")
+	}
+	if res.InstallCommand == "" {
+		t.Errorf("expected install command (always populated when package.json is written), got empty")
 	}
 }
 

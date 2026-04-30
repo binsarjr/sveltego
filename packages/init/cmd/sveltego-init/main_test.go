@@ -49,18 +49,22 @@ func TestRun_TailwindEqualsV3(t *testing.T) {
 	}
 }
 
-func TestRun_TailwindEqualsNone_NoPackageJSON(t *testing.T) {
+func TestRun_TailwindEqualsNone_OmitsTailwindDeps(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 	if err := run([]string{"--tailwind=none", "--non-interactive", dir}, strings.NewReader(""), stdout, stderr); err != nil {
 		t.Fatalf("run: %v\n%s", err, stderr.String())
 	}
-	if _, err := os.Stat(filepath.Join(dir, "package.json")); err == nil {
-		t.Errorf("package.json should not be written for --tailwind=none")
+	pkg, err := os.ReadFile(filepath.Join(dir, "package.json"))
+	if err != nil {
+		t.Fatalf("package.json should be written for --tailwind=none: %v", err)
 	}
-	if strings.Contains(stdout.String(), "next step:") {
-		t.Errorf("install hint should be absent for none flavor: %s", stdout.String())
+	if bytes.Contains(pkg, []byte("tailwindcss")) {
+		t.Errorf("package.json should not include tailwindcss for --tailwind=none, got: %s", pkg)
+	}
+	if !strings.Contains(stdout.String(), "next step:") {
+		t.Errorf("expected install hint in stdout (package.json is always emitted): %s", stdout.String())
 	}
 }
 
