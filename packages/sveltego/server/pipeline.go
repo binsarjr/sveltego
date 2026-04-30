@@ -14,6 +14,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 	"unsafe"
@@ -508,12 +509,42 @@ type streamedField struct {
 	stream kit.StreamedAny
 }
 
-// collectStreams walks data and every layoutData via reflection and
-// returns each kit.Streamed value found in a struct field. Map values,
-// slice elements, and unexported fields are not traversed; user code
-// that wants to stream nested data should expose it through a top-level
-// field. Returned streams retain the discovery order so resolve scripts
-// emit deterministically.
+// streamedAnyType is the reflect.Type for kit.StreamedAny, used once per
+// concrete type during the initial field-index scan.
+var streamedAnyType = reflect.TypeOf((*kit.StreamedAny)(nil)).Elem()
+
+// streamFieldCache maps reflect.Type → []int (exported field indices whose
+// static type implements kit.StreamedAny). An absent key means the type
+// has never been seen; a nil slice means it was seen and has no streamed
+// fields. sync.Map is read-mostly after process warm-up.
+var streamFieldCache sync.Map // map[reflect.Type][]int
+
+// streamFieldIndices returns cached field indices for struct type t. First
+// call per concrete type walks the struct fields via reflection; every
+// subsequent call is a lock-free sync.Map load with no type inspection.
+func streamFieldIndices(t reflect.Type) []int {
+	if v, ok := streamFieldCache.Load(t); ok {
+		return v.([]int)
+	}
+	var indices []int
+	for i := range t.NumField() {
+		f := t.Field(i)
+		if f.IsExported() && f.Type.Implements(streamedAnyType) {
+			indices = append(indices, i)
+		}
+	}
+	// LoadOrStore so a concurrent first-caller wins; we use whichever
+	// result was stored first (always identical for a given type).
+	v, _ := streamFieldCache.LoadOrStore(t, indices)
+	return v.([]int)
+}
+
+// collectStreams walks data and every layoutData and returns each
+// kit.Streamed value found in an exported struct field. Field-index
+// discovery is cached per concrete type in streamFieldCache; hot-path
+// requests pay only a sync.Map load and direct field accesses — zero
+// repeated type walks. Returned streams preserve discovery order so
+// resolve scripts emit deterministically.
 func collectStreams(data any, layoutDatas []any) []streamedField {
 	var out []streamedField
 	out = appendStreams(out, data)
@@ -537,10 +568,7 @@ func appendStreams(dst []streamedField, v any) []streamedField {
 	if rv.Kind() != reflect.Struct {
 		return dst
 	}
-	for i := 0; i < rv.NumField(); i++ {
-		if !rv.Field(i).CanInterface() {
-			continue
-		}
+	for _, i := range streamFieldIndices(rv.Type()) {
 		fv := rv.Field(i).Interface()
 		if s, ok := fv.(kit.StreamedAny); ok && s != nil {
 			dst = append(dst, streamedField{id: s.StreamID(), stream: s})
