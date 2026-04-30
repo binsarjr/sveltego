@@ -156,6 +156,10 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 	// (.gen/client/__router/router.ts). It feeds vite.GenerateRouter so
 	// the SPA router can lazy-import the right component per navigation.
 	clientRouterMap := make(map[string]string)
+	// clientSnapshotRoutes records which patterns export a Snapshot from
+	// `<script module>` so vite.GenerateRouter wires the snapshot capture
+	// + restore hooks (#84). Empty when no route opts in.
+	clientSnapshotRoutes := make(map[string]bool)
 	for _, route := range scan.Routes {
 		if route.HasError {
 			if _, done := emittedErrors[route.Dir]; !done {
@@ -167,7 +171,7 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 		}
 		switch {
 		case route.HasPage:
-			refs, hasHead, err := emitPage(opts.ProjectRoot, outDir, modulePath, route, opts.Release, opts.EnvLookup, opts.Provenance, start)
+			refs, hasHead, hasSnapshot, err := emitPage(opts.ProjectRoot, outDir, modulePath, route, opts.Release, opts.EnvLookup, opts.Provenance, start)
 			if err != nil {
 				return nil, err
 			}
@@ -183,13 +187,16 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 			componentSeeds = append(componentSeeds, filepath.Join(route.Dir, pageName))
 
 			if !opts.NoClient {
-				ck, relSvelteFromRouter, cerr := emitClientEntry(opts.ProjectRoot, outDir, routesDir, route, pageName)
+				ck, relSvelteFromRouter, cerr := emitClientEntry(opts.ProjectRoot, outDir, routesDir, route, pageName, hasSnapshot)
 				if cerr != nil {
 					return nil, cerr
 				}
 				clientRouteKeys = append(clientRouteKeys, ck)
 				clientKeysByPkg[route.PackagePath] = ck
 				clientRouterMap[route.Pattern] = relSvelteFromRouter
+				if hasSnapshot {
+					clientSnapshotRoutes[route.Pattern] = true
+				}
 			}
 		case route.HasServer:
 			if err := emitRESTRoute(opts.ProjectRoot, outDir, modulePath, route); err != nil {
@@ -284,7 +291,7 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 
 	var viteConfigPath string
 	if !opts.NoClient && len(clientRouteKeys) > 0 {
-		if err := emitClientRouter(opts.ProjectRoot, outDir, clientRouterMap); err != nil {
+		if err := emitClientRouter(opts.ProjectRoot, outDir, clientRouterMap, clientSnapshotRoutes); err != nil {
 			return nil, err
 		}
 		addons, derr := detectAddons(opts.ProjectRoot)
@@ -336,7 +343,7 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 // HeadFn wiring). When release is true, any $lib/dev/** import is a
 // fatal error. lookup is used to resolve env.Static* calls to literal
 // values at build time.
-func emitPage(projectRoot, outDir, modulePath string, route routescan.ScannedRoute, release bool, lookup EnvLookup, provenance bool, generatedAt time.Time) (int, bool, error) {
+func emitPage(projectRoot, outDir, modulePath string, route routescan.ScannedRoute, release bool, lookup EnvLookup, provenance bool, generatedAt time.Time) (int, bool, bool, error) {
 	pageName := "+page.svelte"
 	if route.HasReset {
 		pageName = "+page@" + route.ResetTarget + ".svelte"
@@ -344,25 +351,25 @@ func emitPage(projectRoot, outDir, modulePath string, route routescan.ScannedRou
 	pagePath := filepath.Join(route.Dir, pageName)
 	src, err := os.ReadFile(pagePath) //nolint:gosec // path comes from scanner walk under projectRoot
 	if err != nil {
-		return 0, false, fmt.Errorf("codegen: read %s: %w", pagePath, err)
+		return 0, false, false, fmt.Errorf("codegen: read %s: %w", pagePath, err)
 	}
 	if release {
 		if err := checkLibDevImports(string(src), pagePath); err != nil {
-			return 0, false, err
+			return 0, false, false, err
 		}
 	}
 	srcForHash := make([]byte, len(src)) // capture before rewrite for deterministic hash
 	copy(srcForHash, src)
 	substituted, err := substituteStaticEnv(string(src), lookup)
 	if err != nil {
-		return 0, false, fmt.Errorf("codegen: %s: %w", pagePath, err)
+		return 0, false, false, fmt.Errorf("codegen: %s: %w", pagePath, err)
 	}
 	rewritten, hits := rewriteLibImports(substituted, modulePath)
 	src = []byte(rewritten)
 
 	frag, perrs := parser.Parse(src)
 	if len(perrs) > 0 {
-		return 0, false, fmt.Errorf("codegen: parse %s: %w", pagePath, perrs)
+		return 0, false, false, fmt.Errorf("codegen: parse %s: %w", pagePath, perrs)
 	}
 
 	opts := Options{
@@ -376,30 +383,31 @@ func emitPage(projectRoot, outDir, modulePath string, route routescan.ScannedRou
 		opts.ServerFilePath = filepath.Join(route.Dir, "page.server.go")
 		actionInfo, err := scanActions(opts.ServerFilePath)
 		if err != nil {
-			return 0, false, err
+			return 0, false, false, err
 		}
 		opts.HasActions = actionInfo.HasActions
 	}
 	out, err := Generate(frag, opts)
 	if err != nil {
-		return 0, false, fmt.Errorf("codegen: generate %s: %w", pagePath, err)
+		return 0, false, false, fmt.Errorf("codegen: generate %s: %w", pagePath, err)
 	}
 
 	hasHead, _ := extractHeadChildren(frag.Children)
+	hasSnapshot := detectFragmentSnapshot(frag)
 
 	relPkg := strings.TrimPrefix(route.PackagePath, ".gen/")
 	target := filepath.Join(projectRoot, outDir, filepath.FromSlash(relPkg), "page.gen.go")
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-		return 0, false, fmt.Errorf("codegen: mkdir %s: %w", filepath.Dir(target), err)
+		return 0, false, false, fmt.Errorf("codegen: mkdir %s: %w", filepath.Dir(target), err)
 	}
 	if err := os.WriteFile(target, out, genFileMode); err != nil {
-		return 0, false, fmt.Errorf("codegen: write %s: %w", target, err)
+		return 0, false, false, fmt.Errorf("codegen: write %s: %w", target, err)
 	}
 	libRefs := 0
 	if hits {
 		libRefs = 1
 	}
-	return libRefs, len(hasHead) > 0, nil
+	return libRefs, len(hasHead) > 0, hasSnapshot, nil
 }
 
 // emitClientEntry writes .gen/client/<routeKey>/entry.ts for one page route.
@@ -408,8 +416,10 @@ func emitPage(projectRoot, outDir, modulePath string, route routescan.ScannedRou
 // directory (.gen/client/__router/), and any error. The caller collects
 // the routeKey for vite.GenerateConfig and the relative source path for
 // vite.GenerateRouter so the per-app router module imports each
-// component lazily without re-deriving the path.
-func emitClientEntry(projectRoot, outDir, routesDir string, route routescan.ScannedRoute, pageName string) (string, string, error) {
+// component lazily without re-deriving the path. hasSnapshot wires the
+// snapshot capture/restore hooks into the initial-mount path so a
+// reload that lands on a route with persisted state restores it.
+func emitClientEntry(projectRoot, outDir, routesDir string, route routescan.ScannedRoute, pageName string, hasSnapshot bool) (string, string, error) {
 	routesParent := filepath.Dir(routesDir)
 	relDir, err := filepath.Rel(routesParent, route.Dir)
 	if err != nil {
@@ -437,7 +447,11 @@ func emitClientEntry(projectRoot, outDir, routesDir string, route routescan.Scan
 	// and into __router/router.
 	relRouter := strings.Repeat("../", depth-2) + "__router/router"
 
-	src := vite.GenerateClientEntry(relSvelte, relRouter)
+	src := vite.GenerateClientEntry(vite.ClientEntryOptions{
+		RelSveltePath: relSvelte,
+		RelRouterPath: relRouter,
+		HasSnapshot:   hasSnapshot,
+	})
 	entryAbs := filepath.Join(entryDir, "entry.ts")
 	if err := os.WriteFile(entryAbs, []byte(src), genFileMode); err != nil {
 		return "", "", fmt.Errorf("codegen: write client entry %s: %w", entryAbs, err)
@@ -462,13 +476,17 @@ func emitClientEntry(projectRoot, outDir, routesDir string, route routescan.Scan
 // SPA router module imported by every per-route entry.ts. routeMap keys
 // are canonical route patterns (matching server-side router.Route.Pattern)
 // and values are paths to each route's +page.svelte source relative to
-// the router.ts file.
-func emitClientRouter(projectRoot, outDir string, routeMap map[string]string) error {
+// the router.ts file. snapshotRoutes flags which patterns export a
+// Snapshot so the generated router wires capture/restore hooks.
+func emitClientRouter(projectRoot, outDir string, routeMap map[string]string, snapshotRoutes map[string]bool) error {
 	dir := filepath.Join(projectRoot, outDir, "client", "__router")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("codegen: mkdir client router %s: %w", dir, err)
 	}
-	src := vite.GenerateRouter(vite.RouterOptions{Routes: routeMap})
+	src := vite.GenerateRouter(vite.RouterOptions{
+		Routes:         routeMap,
+		SnapshotRoutes: snapshotRoutes,
+	})
 	target := filepath.Join(dir, "router.ts")
 	if err := os.WriteFile(target, []byte(src), genFileMode); err != nil {
 		return fmt.Errorf("codegen: write client router %s: %w", target, err)

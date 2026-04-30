@@ -197,11 +197,15 @@ type Render struct {
 }
 
 // Script is the contents of a <script> block. Lang is the lang attribute
-// (must be "go" for sveltego). Body is the raw script source.
+// (must be "go" for sveltego's regular scripts). Module marks Svelte 5
+// `<script module>` blocks; their body is JS that runs once per module
+// load and is passed through to the client compiler verbatim. Body is
+// the raw script source.
 type Script struct {
-	P    Pos
-	Lang string
-	Body string
+	P      Pos
+	Lang   string
+	Module bool
+	Body   string
 }
 
 // Style is the raw contents of a <style> block. CSS parsing is deferred to

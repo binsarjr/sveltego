@@ -1,0 +1,1 @@
+<script module>export const snapshot = { capture, restore };</script>
