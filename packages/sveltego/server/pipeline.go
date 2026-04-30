@@ -460,6 +460,11 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 	if len(headBytes) > 0 {
 		buf.WriteRaw(bytesAsString(headBytes))
 	}
+	if route != nil && route.ClientKey != "" {
+		if tags := s.viteManifest.assetTags(route.ClientKey, s.viteBase); tags != "" {
+			buf.WriteString(tags)
+		}
+	}
 	buf.WriteString(s.shellMid)
 	if err := inner(buf); err != nil {
 		return nil, err

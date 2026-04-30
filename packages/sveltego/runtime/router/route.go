@@ -99,4 +99,8 @@ type Route struct {
 	// Error when the boundary fires. Entries past this prefix are
 	// inside the broken subtree and are skipped.
 	ErrorLayoutDepth int
+	// ClientKey is the Vite manifest input key for this route's client
+	// entry, e.g. "routes/+page". The server uses it for asset tag injection.
+	// Empty for server-only routes.
+	ClientKey string
 }
