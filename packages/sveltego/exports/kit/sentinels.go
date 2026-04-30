@@ -2,11 +2,29 @@ package kit
 
 import "strconv"
 
+// RedirectOption configures a RedirectErr. Apply options via the variadic
+// argument to Redirect; the zero set leaves all flags at their default.
+type RedirectOption func(*RedirectErr)
+
+// RedirectReload returns an option that marks the redirect as requiring a
+// full document reload. The pipeline sets X-Sveltego-Reload: 1 on the
+// response so the client router performs location.assign() instead of an
+// in-place SPA navigation. Use this for auth state changes, locale
+// switches, or any flow where the SPA shell may hold stale hydration data.
+//
+// Client-side honor of the header lands with the SPA router (#37).
+func RedirectReload() RedirectOption {
+	return func(r *RedirectErr) { r.ForceReload = true }
+}
+
 // RedirectErr signals a redirect short-circuit from Load. Code is the
 // HTTP status (303 for POST->GET, 307/308 to preserve method).
+// ForceReload, when true, instructs the client router to perform a full
+// document fetch rather than an SPA navigation.
 type RedirectErr struct {
-	Code     int
-	Location string
+	Code        int
+	Location    string
+	ForceReload bool
 }
 
 // Error implements error.
@@ -48,13 +66,18 @@ func (f *FailErr) HTTPStatus() int { return f.Code }
 
 // Redirect returns an error that, when returned from Load, makes the
 // pipeline emit an HTTP redirect with the given status and Location.
+// Pass kit.RedirectReload() to force a full document reload on the client.
 //
 // Idiomatic Go: use an error return rather than panic. Callers write
 // `return data, kit.Redirect(303, "/login")`. SvelteKit's `throw redirect`
 // is JS-flavored; Go uses explicit error returns to keep stack traces
 // honest and avoid panic-as-control-flow.
-func Redirect(code int, location string) error {
-	return &RedirectErr{Code: code, Location: location}
+func Redirect(code int, location string, opts ...RedirectOption) error {
+	r := &RedirectErr{Code: code, Location: location}
+	for _, o := range opts {
+		o(r)
+	}
+	return r
 }
 
 // Error returns an error that, when returned from Load, makes the

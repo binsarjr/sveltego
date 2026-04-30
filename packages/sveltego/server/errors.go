@@ -54,6 +54,9 @@ func (s *Server) handlePipelineError(w http.ResponseWriter, r *http.Request, ev 
 		if ev != nil && ev.Cookies != nil {
 			ev.Cookies.Apply(w)
 		}
+		if redir.ForceReload {
+			w.Header().Set("X-Sveltego-Reload", "1")
+		}
 		http.Redirect(w, r, redir.Location, redir.Code)
 		return
 	}
