@@ -5,70 +5,129 @@ import (
 	"time"
 )
 
-// Cookies is the request/response cookie jar surface. The full
-// implementation lands with issue #28 in v0.2; for MVP this exists so
-// codegen output and user route code referencing kit.Cookies compiles.
-// All methods are stubs returning zero values.
-type Cookies struct{}
-
-// Get returns the cookie value for name, or "" if absent. MVP stub:
-// always returns "".
-func (c *Cookies) Get(_ string) string {
-	return ""
-}
-
-// Set queues a Set-Cookie header. MVP stub: no-op.
-func (c *Cookies) Set(_, _ string, _ ...CookieOption) {}
-
-// Delete queues a Set-Cookie clear for name. MVP stub: no-op.
-func (c *Cookies) Delete(_ string) {}
-
-// CookieOption configures Set behavior. MVP stub: option constructors
-// produce functions that mutate cookieOpts but the jar does not yet
-// consume those values.
-type CookieOption func(*cookieOpts)
-
-type cookieOpts struct {
+// CookieOpts configures a Set-Cookie. Zero values mean "use defaults":
+// Path defaults to "/", SameSite to Lax, Secure follows the request
+// scheme (true for HTTPS), HttpOnly is true unless explicitly false via
+// SetExposed or by passing a non-nil pointer to false.
+type CookieOpts struct {
 	Path     string
 	Domain   string
-	MaxAge   int
-	Secure   bool
-	HTTPOnly bool
-	SameSite http.SameSite
+	MaxAge   time.Duration
 	Expires  time.Time
+	HttpOnly *bool
+	Secure   *bool
+	SameSite http.SameSite
 }
 
-// Path sets the Path attribute. MVP stub: stored but unused.
-func Path(p string) CookieOption {
-	return func(o *cookieOpts) { o.Path = p }
+// Cookies is the request/response cookie jar threaded through LoadCtx
+// and RenderCtx. Reads pull from the incoming request; writes accumulate
+// in an outgoing queue flushed to the response by Apply before the
+// pipeline calls WriteHeader.
+type Cookies struct {
+	in    map[string]string
+	out   []*http.Cookie
+	https bool
 }
 
-// Domain sets the Domain attribute. MVP stub: stored but unused.
-func Domain(d string) CookieOption {
-	return func(o *cookieOpts) { o.Domain = d }
+// NewCookies builds a Cookies jar seeded with the request's incoming
+// cookies. Secure defaults are inferred from r.TLS. A nil request is
+// tolerated and yields an empty jar with Secure defaulting to false.
+func NewCookies(r *http.Request) *Cookies {
+	c := &Cookies{in: map[string]string{}}
+	if r == nil {
+		return c
+	}
+	c.https = r.TLS != nil
+	for _, ck := range r.Cookies() {
+		c.in[ck.Name] = ck.Value
+	}
+	return c
 }
 
-// MaxAge sets the Max-Age attribute in seconds. MVP stub: stored but unused.
-func MaxAge(seconds int) CookieOption {
-	return func(o *cookieOpts) { o.MaxAge = seconds }
+// Get returns the incoming cookie value for name and ok=true if
+// present. Outgoing Sets do not affect Get.
+func (c *Cookies) Get(name string) (string, bool) {
+	if c == nil {
+		return "", false
+	}
+	v, ok := c.in[name]
+	return v, ok
 }
 
-// Secure sets the Secure flag. MVP stub: stored but unused.
-func Secure() CookieOption {
-	return func(o *cookieOpts) { o.Secure = true }
+// Set queues a Set-Cookie for name=value with secure defaults applied
+// (HttpOnly=true, SameSite=Lax, Path="/", Secure=request-scheme).
+func (c *Cookies) Set(name, value string, opts CookieOpts) {
+	if c == nil {
+		return
+	}
+	c.out = append(c.out, c.build(name, value, opts, true))
 }
 
-// HTTPOnly sets the HttpOnly flag. MVP stub: stored but unused.
-func HTTPOnly() CookieOption {
-	return func(o *cookieOpts) { o.HTTPOnly = true }
+// SetExposed queues a Set-Cookie like Set but defaults HttpOnly to
+// false so client-side JS can read it. Caller can still explicitly set
+// HttpOnly=true in opts to override.
+func (c *Cookies) SetExposed(name, value string, opts CookieOpts) {
+	if c == nil {
+		return
+	}
+	c.out = append(c.out, c.build(name, value, opts, false))
 }
 
-// SameSite sets the SameSite attribute. MVP stub: stored but unused.
-func SameSite(s http.SameSite) CookieOption {
-	return func(o *cookieOpts) { o.SameSite = s }
+// Delete queues a Set-Cookie that clears name on the client by emitting
+// MaxAge=-1 and Expires=epoch. Path/Domain in opts must match the path
+// the cookie was originally set at; Path defaults to "/".
+func (c *Cookies) Delete(name string, opts CookieOpts) {
+	if c == nil {
+		return
+	}
+	if opts.Path == "" {
+		opts.Path = "/"
+	}
+	c.out = append(c.out, &http.Cookie{
+		Name:    name,
+		Value:   "",
+		Path:    opts.Path,
+		Domain:  opts.Domain,
+		MaxAge:  -1,
+		Expires: time.Unix(0, 0),
+	})
 }
 
-// Expires sets the Expires attribute. MVP stub: stored but unused.
-func Expires(t time.Time) CookieOption {
-	return func(o *cookieOpts) { o.Expires = t }
+// Apply writes every queued Set-Cookie header to w. Safe to call before
+// WriteHeader; emits one header per cookie.
+func (c *Cookies) Apply(w http.ResponseWriter) {
+	if c == nil || w == nil {
+		return
+	}
+	for _, ck := range c.out {
+		http.SetCookie(w, ck)
+	}
+}
+
+func (c *Cookies) build(name, value string, opts CookieOpts, httpOnlyDefault bool) *http.Cookie {
+	if opts.Path == "" {
+		opts.Path = "/"
+	}
+	if opts.SameSite == 0 {
+		opts.SameSite = http.SameSiteLaxMode
+	}
+	secure := c.https
+	if opts.Secure != nil {
+		secure = *opts.Secure
+	}
+	httpOnly := httpOnlyDefault
+	if opts.HttpOnly != nil {
+		httpOnly = *opts.HttpOnly
+	}
+	return &http.Cookie{
+		Name:     name,
+		Value:    value,
+		Path:     opts.Path,
+		Domain:   opts.Domain,
+		MaxAge:   int(opts.MaxAge.Seconds()),
+		Expires:  opts.Expires,
+		Secure:   secure,
+		HttpOnly: httpOnly,
+		SameSite: opts.SameSite,
+	}
 }

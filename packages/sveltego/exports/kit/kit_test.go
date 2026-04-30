@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/binsarjr/sveltego/exports/kit"
 )
@@ -91,57 +90,6 @@ func TestNewLoadCtx_NilRequest(t *testing.T) {
 	}
 	if ctx.Cookies == nil {
 		t.Error("Cookies = nil, want non-nil")
-	}
-}
-
-func TestCookies_GetReturnsEmpty(t *testing.T) {
-	c := &kit.Cookies{}
-	if got := c.Get("session"); got != "" {
-		t.Errorf("Get = %q, want empty", got)
-	}
-	if got := c.Get(""); got != "" {
-		t.Errorf("Get(\"\") = %q, want empty", got)
-	}
-}
-
-func TestCookies_SetNoPanic(_ *testing.T) {
-	c := &kit.Cookies{}
-	c.Set("session", "abc")
-	c.Set("session", "abc", kit.Path("/"), kit.Secure(), kit.HTTPOnly())
-}
-
-func TestCookies_DeleteNoPanic(_ *testing.T) {
-	c := &kit.Cookies{}
-	c.Delete("session")
-}
-
-func TestCookieOptions_ComposeNoPanic(_ *testing.T) {
-	c := &kit.Cookies{}
-	c.Set("k", "v",
-		kit.Path("/"),
-		kit.Domain("example.com"),
-		kit.MaxAge(3600),
-		kit.Secure(),
-		kit.HTTPOnly(),
-		kit.SameSite(http.SameSiteStrictMode),
-		kit.Expires(time.Unix(1700000000, 0)),
-	)
-}
-
-func TestCookieOptions_NonNil(t *testing.T) {
-	opts := []kit.CookieOption{
-		kit.Path("/"),
-		kit.Domain("example.com"),
-		kit.MaxAge(60),
-		kit.Secure(),
-		kit.HTTPOnly(),
-		kit.SameSite(http.SameSiteLaxMode),
-		kit.Expires(time.Now()),
-	}
-	for i, opt := range opts {
-		if opt == nil {
-			t.Errorf("option %d is nil", i)
-		}
 	}
 }
 

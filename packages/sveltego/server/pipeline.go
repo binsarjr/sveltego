@@ -31,7 +31,10 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var data any
+	var (
+		data    any
+		cookies *kit.Cookies
+	)
 	if route.Load != nil {
 		lctx := kit.NewLoadCtx(r, params)
 		d, err := route.Load(lctx)
@@ -40,6 +43,7 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		data = d
+		cookies = lctx.Cookies
 	}
 
 	buf := render.Acquire()
@@ -48,12 +52,16 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 	buf.WriteString(s.shellHead)
 	buf.WriteString(s.shellMid)
 	rctx := kit.NewRenderCtx(r, w, params)
+	if cookies != nil {
+		rctx.Cookies = cookies
+	}
 	if err := route.Page(buf, rctx, data); err != nil {
 		s.handleRenderError(w, r, err)
 		return
 	}
 	buf.WriteString(s.shellTail)
 
+	rctx.Cookies.Apply(w)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Content-Length", strconv.Itoa(buf.Len()))
 	w.WriteHeader(http.StatusOK)
