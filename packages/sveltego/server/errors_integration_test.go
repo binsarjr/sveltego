@@ -288,7 +288,7 @@ func TestErrorPreservesHeadersAndCookies_PlainPath(t *testing.T) {
 		Page:     staticPage("home"),
 		Load: func(lctx *kit.LoadCtx) (any, error) {
 			lctx.Cookies.Delete("session", kit.CookieOpts{})
-			lctx.SetHeader("WWW-Authenticate", "Bearer")
+			lctx.Header().Set("WWW-Authenticate", "Bearer")
 			return nil, kit.Error(http.StatusUnauthorized, "unauthorized")
 		},
 	}})
@@ -334,7 +334,7 @@ func TestErrorPreservesHeadersAndCookies_BoundaryPath(t *testing.T) {
 		Page:     staticPage("home"),
 		Load: func(lctx *kit.LoadCtx) (any, error) {
 			lctx.Cookies.Delete("session", kit.CookieOpts{})
-			lctx.SetHeader("WWW-Authenticate", "Bearer")
+			lctx.Header().Set("WWW-Authenticate", "Bearer")
 			return nil, errors.New("unauthorized internal")
 		},
 		Error: errorBoundary("root"),
