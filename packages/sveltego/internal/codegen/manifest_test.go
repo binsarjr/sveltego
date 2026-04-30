@@ -19,6 +19,7 @@ var manifestFixtures = []string{
 	"groups",
 	"optional",
 	"rest",
+	"layout-chain",
 }
 
 func TestGenerateManifest_Goldens(t *testing.T) {

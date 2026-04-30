@@ -208,22 +208,62 @@ func buildRoute(routesDir, dir string, files map[string]struct{}, dirsWithLayout
 		packagePath = ".gen/routes/" + strings.Join(packageParts, "/")
 	}
 
+	chain := buildLayoutChain(routesDir, dir, dirsWithLayout)
+	chainPkgs := make([]string, 0, len(chain))
+	for _, c := range chain {
+		pkg, encErr := encodeLayoutPackagePath(routesDir, c)
+		if encErr != nil {
+			diagnostics = append(diagnostics, Diagnostic{Path: c, Message: encErr.Error()})
+			continue
+		}
+		chainPkgs = append(chainPkgs, pkg)
+	}
+
 	route := &ScannedRoute{
-		Pattern:         pattern,
-		Segments:        segments,
-		Dir:             dir,
-		PackageName:     packageName,
-		PackagePath:     packagePath,
-		LayoutChain:     buildLayoutChain(routesDir, dir, dirsWithLayout),
-		HasPage:         has(files, "+page.svelte"),
-		HasLayout:       has(files, "+layout.svelte"),
-		HasError:        has(files, "+error.svelte"),
-		HasReset:        has(files, "+page@.svelte"),
-		HasPageServer:   has(files, "page.server.go"),
-		HasLayoutServer: has(files, "layout.server.go"),
-		HasServer:       has(files, "server.go"),
+		Pattern:            pattern,
+		Segments:           segments,
+		Dir:                dir,
+		PackageName:        packageName,
+		PackagePath:        packagePath,
+		LayoutChain:        chain,
+		LayoutPackagePaths: chainPkgs,
+		HasPage:            has(files, "+page.svelte"),
+		HasLayout:          has(files, "+layout.svelte"),
+		HasError:           has(files, "+error.svelte"),
+		HasReset:           has(files, "+page@.svelte"),
+		HasPageServer:      has(files, "page.server.go"),
+		HasLayoutServer:    has(files, "layout.server.go"),
+		HasServer:          has(files, "server.go"),
 	}
 	return route, diagnostics
+}
+
+// encodeLayoutPackagePath returns the .gen package path for a layout
+// directory by re-applying ADR 0003 segment encoding. Mirrors the path
+// computation used for route packages so per-layout adapter imports line
+// up with what the layout emitter writes.
+func encodeLayoutPackagePath(routesDir, dir string) (string, error) {
+	rel, err := filepath.Rel(routesDir, dir)
+	if err != nil {
+		return "", fmt.Errorf("relativize layout dir: %w", err)
+	}
+	rel = filepath.ToSlash(rel)
+	if rel == "." {
+		return ".gen/routes", nil
+	}
+	var parts []string
+	for _, raw := range strings.Split(rel, "/") {
+		seg, perr := ParseSegment(raw)
+		if perr != nil {
+			if errors.Is(perr, ErrGroup) {
+				parts = append(parts, encodePackageName(raw, router.Segment{}, true))
+				continue
+			}
+			return "", perr
+		}
+		parts = append(parts, encodePackageName(raw, seg, false))
+	}
+	return ".gen/routes/" + strings.Join(parts, "/"), nil
 }
 
 func has(files map[string]struct{}, name string) bool {

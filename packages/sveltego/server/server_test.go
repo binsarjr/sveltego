@@ -450,6 +450,75 @@ func TestServeHTTP_orphanRoute(t *testing.T) {
 	}
 }
 
+func TestServeHTTP_layoutChainComposition(t *testing.T) {
+	t.Parallel()
+	page := func(w *render.Writer, _ *kit.RenderCtx, _ any) error {
+		w.WriteString("<page/>")
+		return nil
+	}
+	makeLayout := func(tag string) router.LayoutHandler {
+		return func(w *render.Writer, _ *kit.RenderCtx, _ any, children func(*render.Writer) error) error {
+			w.WriteString("<" + tag + ">")
+			if err := children(w); err != nil {
+				return err
+			}
+			w.WriteString("</" + tag + ">")
+			return nil
+		}
+	}
+	srv := newTestServer(t, []router.Route{{
+		Pattern:  "/",
+		Segments: segmentsFor("/"),
+		Page:     page,
+		LayoutChain: []router.LayoutHandler{
+			makeLayout("root"),
+			makeLayout("app"),
+			makeLayout("section"),
+		},
+	}})
+	ts := httptest.NewServer(srv)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	want := "<root><app><section><page/></section></app></root>"
+	if !strings.Contains(string(body), want) {
+		t.Fatalf("expected layout composition %q in body:\n%s", want, body)
+	}
+}
+
+func TestServeHTTP_layoutErrorAborts(t *testing.T) {
+	t.Parallel()
+	page := func(w *render.Writer, _ *kit.RenderCtx, _ any) error {
+		w.WriteString("page")
+		return nil
+	}
+	failing := func(_ *render.Writer, _ *kit.RenderCtx, _ any, _ func(*render.Writer) error) error {
+		return errors.New("layout boom")
+	}
+	srv := newTestServer(t, []router.Route{{
+		Pattern:     "/",
+		Segments:    segmentsFor("/"),
+		Page:        page,
+		LayoutChain: []router.LayoutHandler{failing},
+	}})
+	ts := httptest.NewServer(srv)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("layout error: got %d want 500", resp.StatusCode)
+	}
+}
+
 func TestServeHTTP_concurrent(t *testing.T) {
 	t.Parallel()
 	srv := newTestServer(t, []router.Route{{

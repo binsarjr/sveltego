@@ -10,6 +10,12 @@ import (
 // PageHandler renders a +page.svelte for the given context and load data.
 type PageHandler func(w *render.Writer, ctx *kit.RenderCtx, data any) error
 
+// LayoutHandler renders a +layout.svelte. It composes outer layouts around
+// inner content by writing its template up to <slot />, invoking children,
+// then writing the rest. children is non-nil; layout templates dispatch
+// the slot lowering through it.
+type LayoutHandler func(w *render.Writer, ctx *kit.RenderCtx, data any, children func(*render.Writer) error) error
+
 // ServerHandlers maps HTTP methods to handlers emitted from +server.go.
 type ServerHandlers map[string]http.HandlerFunc
 
@@ -40,6 +46,8 @@ type Route struct {
 	Load LoadHandler
 	// Actions is non-nil when +page.server.go declares Actions().
 	Actions ActionsHandler
-	// LayoutChain is filled by the dispatcher in Phase 0h; nil for now.
-	LayoutChain []*Route
+	// LayoutChain holds the layout handlers wrapping Page, ordered
+	// outer -> inner. The server pipeline composes them so the outermost
+	// layout owns the document chrome and the page renders innermost.
+	LayoutChain []LayoutHandler
 }
