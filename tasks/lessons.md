@@ -937,4 +937,3 @@
 5. **`go run github.com/binsarjr/sveltego/cmd/sveltego compile` must run before `go list ./...` or `go test ./...` in any playground.** The mirror tree under `.gen/usersrc/` is what the workspace toolchain sees; without it the whole module cannot resolve.
 6. **Pick disjoint default ports across playgrounds.** Basic on `:3000`, blog on `:8080`. Future playgrounds: `:8081`, `:8082`, ... so a developer can run all of them in parallel without a port-clash dance.
 7. **Always edit and commit from inside the agent's isolated worktree (`.claude/worktrees/agent-<id>/...`).** Parent-path absolute paths point at whatever branch the parent has checked out, which is not the agent's branch. Mixing paths leaks files into `main` and stomps other agents' staged work.
->>>>>>> 969252f (feat(playground): blog example with markdown, pagination, comment Action)
