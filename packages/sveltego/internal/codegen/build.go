@@ -35,12 +35,18 @@ const genFileMode = 0o600
 //
 // Release, when true, activates production-build restrictions: imports of
 // $lib/dev/** are rejected as fatal errors, mirroring sveltejs/kit#13078.
+//
+// EnvLookup is called for each env.StaticPublic("X") call found in .svelte
+// sources during codegen. The call is replaced with the Go string literal
+// for the returned value, baking it into the binary at build time. A
+// missing key is a fatal build error. When nil, os.LookupEnv is used.
 type BuildOptions struct {
 	ProjectRoot string
 	OutDir      string
 	Verbose     bool
 	Release     bool
 	Logger      *slog.Logger
+	EnvLookup   EnvLookup
 }
 
 // BuildResult summarizes one [Build] invocation. Routes counts every
@@ -64,6 +70,9 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 	logger := opts.Logger
 	if logger == nil {
 		logger = slog.Default()
+	}
+	if opts.EnvLookup == nil {
+		opts.EnvLookup = os.LookupEnv
 	}
 
 	if !filepath.IsAbs(opts.ProjectRoot) {
@@ -132,7 +141,7 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 		}
 		switch {
 		case route.HasPage:
-			refs, hasHead, err := emitPage(opts.ProjectRoot, outDir, modulePath, route, opts.Release)
+			refs, hasHead, err := emitPage(opts.ProjectRoot, outDir, modulePath, route, opts.Release, opts.EnvLookup)
 			if err != nil {
 				return nil, err
 			}
@@ -162,7 +171,7 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 			if i < len(route.LayoutServerFiles) {
 				serverFile = route.LayoutServerFiles[i]
 			}
-			hasHead, err := emitLayout(opts.ProjectRoot, outDir, layoutDir, pkgPath, pkgName, serverFile, opts.Release)
+			hasHead, err := emitLayout(opts.ProjectRoot, outDir, layoutDir, pkgPath, pkgName, serverFile, opts.Release, opts.EnvLookup)
 			if err != nil {
 				return nil, err
 			}
@@ -243,8 +252,9 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 // decide whether the missing-lib warning fires. The bool reports
 // whether the page contributed a Head method (drives manifest
 // HeadFn wiring). When release is true, any $lib/dev/** import is a
-// fatal error.
-func emitPage(projectRoot, outDir, modulePath string, route routescan.ScannedRoute, release bool) (int, bool, error) {
+// fatal error. lookup is used to resolve env.Static* calls to literal
+// values at build time.
+func emitPage(projectRoot, outDir, modulePath string, route routescan.ScannedRoute, release bool, lookup EnvLookup) (int, bool, error) {
 	pageName := "+page.svelte"
 	if route.HasReset {
 		pageName = "+page@" + route.ResetTarget + ".svelte"
@@ -259,7 +269,11 @@ func emitPage(projectRoot, outDir, modulePath string, route routescan.ScannedRou
 			return 0, false, err
 		}
 	}
-	rewritten, hits := rewriteLibImports(string(src), modulePath)
+	substituted, err := substituteStaticEnv(string(src), lookup)
+	if err != nil {
+		return 0, false, fmt.Errorf("codegen: %s: %w", pagePath, err)
+	}
+	rewritten, hits := rewriteLibImports(substituted, modulePath)
 	src = []byte(rewritten)
 
 	frag, perrs := parser.Parse(src)
@@ -476,8 +490,9 @@ func emitErrorPage(projectRoot, outDir, errorDir, pkgPath, pkgName string) error
 // silently ignores files whose name starts with "_". serverFile, when
 // non-empty, points at a sibling layout.server.go whose Load() inline
 // struct return is used to infer LayoutData fields. When release is true,
-// any $lib/dev/** import is a fatal error.
-func emitLayout(projectRoot, outDir, layoutDir, pkgPath, pkgName, serverFile string, release bool) (bool, error) {
+// any $lib/dev/** import is a fatal error. lookup resolves env.Static*
+// calls to literal string values at build time.
+func emitLayout(projectRoot, outDir, layoutDir, pkgPath, pkgName, serverFile string, release bool, lookup EnvLookup) (bool, error) {
 	layoutPath, err := resolveLayoutSource(layoutDir)
 	if err != nil {
 		return false, err
@@ -491,7 +506,11 @@ func emitLayout(projectRoot, outDir, layoutDir, pkgPath, pkgName, serverFile str
 			return false, err
 		}
 	}
-	frag, perrs := parser.Parse(src)
+	substituted, err := substituteStaticEnv(string(src), lookup)
+	if err != nil {
+		return false, fmt.Errorf("codegen: %s: %w", layoutPath, err)
+	}
+	frag, perrs := parser.Parse([]byte(substituted))
 	if len(perrs) > 0 {
 		return false, fmt.Errorf("codegen: parse %s: %w", layoutPath, perrs)
 	}
