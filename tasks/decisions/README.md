@@ -10,6 +10,7 @@ Locked decisions for `sveltego`. Each ADR mirrors a tracked GitHub RFC issue. Th
 | 0004 | Codegen Output Shape | [#4](https://github.com/binsarjr/sveltego/issues/4) | Accepted |
 | 0005 | Non-Goals | [#94](https://github.com/binsarjr/sveltego/issues/94) | Accepted |
 | 0006 | sveltego-auth Master Plan | [#155](https://github.com/binsarjr/sveltego/issues/155) | Accepted |
+| 0007 | Svelte Semantics Revisit (Go-mustache vs Full-Svelte) | [#309](https://github.com/binsarjr/sveltego/issues/309) | Proposed |
 
 ## Convention
 
