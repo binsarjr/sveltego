@@ -13,9 +13,10 @@ type PageData = struct{}
 func (p Page) Render(w *render.Writer, ctx *kit.RenderCtx, data PageData) error {
 	_ = ctx
 	_ = data
-	if Show {
-		total := a + b
-		w.WriteEscape(total)
-	}
+	w.WriteString(`<article>`)
+	w.WriteString(`before `)
+	w.WriteRaw(Data.Body)
+	w.WriteString(` after`)
+	w.WriteString(`</article>`)
 	return nil
 }

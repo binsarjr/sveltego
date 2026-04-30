@@ -1,0 +1,1 @@
+<article>before {@html Data.Body} after</article>
