@@ -19,6 +19,7 @@ func main() {
 		Routes:   gen.Routes(),
 		Matchers: params.DefaultMatchers(),
 		Shell:    string(shell),
+		Hooks:    gen.Hooks(),
 	})
 	if err != nil {
 		log.Fatalf("server.New: %v", err)
