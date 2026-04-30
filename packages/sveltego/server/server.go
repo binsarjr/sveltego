@@ -92,6 +92,15 @@ type Config struct {
 	// interval until the server shuts down. Tasks are skipped when their
 	// Spec fails to parse; the error is logged and startup continues.
 	CronTasks []kit.CronTask
+	// ViteManifest is the JSON content of the Vite manifest produced by
+	// `vite build`. When non-empty the server parses it at startup and
+	// injects <script type="module"> and <link rel="modulepreload"> tags
+	// for the matching route chunk during SSR. Typically embedded in the
+	// binary so no runtime FS read is required.
+	ViteManifest string
+	// ViteBase is the URL base path for Vite assets, e.g. "/static/_app".
+	// Defaults to "/static/_app" when ViteManifest is non-empty.
+	ViteBase string
 }
 
 // Server is the http.Handler implementation that drives a sveltego app.
@@ -113,6 +122,10 @@ type Server struct {
 	shellHead string
 	shellMid  string
 	shellTail string
+
+	// viteManifest holds parsed Vite chunk metadata for asset tag injection.
+	viteManifest viteManifestMap
+	viteBase     string
 
 	// initState is initPending/initReady/initFailed; read with atomic.
 	initState atomic.Int32
@@ -177,6 +190,18 @@ func New(cfg Config) (*Server, error) {
 	if initErrorHTML == "" {
 		initErrorHTML = defaultInitErrorHTML
 	}
+	var vm viteManifestMap
+	if cfg.ViteManifest != "" {
+		vm, err = parseViteManifest(cfg.ViteManifest)
+		if err != nil {
+			return nil, err
+		}
+	}
+	viteBase := cfg.ViteBase
+	if viteBase == "" && vm != nil {
+		viteBase = "/static/_app"
+	}
+
 	done := make(chan struct{})
 	srv := &Server{
 		tree:            tree,
@@ -189,6 +214,8 @@ func New(cfg Config) (*Server, error) {
 		shellHead:       head,
 		shellMid:        mid,
 		shellTail:       tail,
+		viteManifest:    vm,
+		viteBase:        viteBase,
 		initDone:        done,
 		initTimeout:     initTimeout,
 		initPendingHTML: initPendingHTML,

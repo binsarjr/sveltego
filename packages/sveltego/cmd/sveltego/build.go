@@ -14,9 +14,10 @@ import (
 
 func newBuildCmd() *cobra.Command {
 	var (
-		outPath string
-		mainPkg string
-		release bool
+		outPath  string
+		mainPkg  string
+		release  bool
+		noClient bool
 	)
 	cmd := &cobra.Command{
 		Use:   "build",
@@ -31,6 +32,7 @@ func newBuildCmd() *cobra.Command {
 				ProjectRoot: root,
 				Verbose:     verbose,
 				Release:     release || os.Getenv("SVELTEGO_RELEASE") == "1",
+				NoClient:    noClient,
 			})
 			if err != nil {
 				return err
@@ -40,6 +42,12 @@ func newBuildCmd() *cobra.Command {
 			}
 			if err := codegen.EmitLinksFile(root, ""); err != nil {
 				return fmt.Errorf("emit links: %w", err)
+			}
+
+			if result.ViteConfigPath != "" {
+				if err := runViteBuild(cmd, root, result.ViteConfigPath, verbose); err != nil {
+					return err
+				}
 			}
 
 			outAbs := outPath
@@ -70,6 +78,7 @@ func newBuildCmd() *cobra.Command {
 	cmd.Flags().StringVar(&outPath, "out", "build/app", "output binary path (relative to project root or absolute)")
 	cmd.Flags().StringVar(&mainPkg, "main", "./cmd/app", "main package import path or directory")
 	cmd.Flags().BoolVar(&release, "release", false, "production build: reject $lib/dev/** imports (also set by SVELTEGO_RELEASE=1)")
+	cmd.Flags().BoolVar(&noClient, "no-client", false, "skip Vite client bundle step (server-only mode)")
 	return cmd
 }
 
@@ -103,4 +112,66 @@ func resolveProjectRoot() (string, error) {
 		}
 		dir = parent
 	}
+}
+
+// runViteBuild shells out to the detected package manager to run `vite build`.
+// Node must be installed; a clear error is returned when not found on PATH.
+func runViteBuild(cmd *cobra.Command, root, viteConfig string, verbose bool) error {
+	pm := detectPackageManager(root)
+
+	// Auto-install if package.json is present but node_modules is absent.
+	pkgJSON := filepath.Join(root, "package.json")
+	if _, err := os.Stat(pkgJSON); err == nil {
+		if _, err := os.Stat(filepath.Join(root, "node_modules")); errors.Is(err, os.ErrNotExist) {
+			if verbose {
+				fmt.Fprintln(cmd.OutOrStdout(), "vite: installing dependencies via", pm)
+			}
+			install := exec.Command(pm, "install") //nolint:gosec
+			install.Dir = root
+			install.Stdout = cmd.OutOrStdout()
+			install.Stderr = cmd.ErrOrStderr()
+			if err := install.Run(); err != nil {
+				return fmt.Errorf("vite: %s install: %w", pm, err)
+			}
+		}
+	}
+
+	viteArgs := []string{"vite", "build", "--config", viteConfig}
+	var vitecmd *exec.Cmd
+	switch pm {
+	case "pnpm":
+		vitecmd = exec.Command("pnpm", append([]string{"exec"}, viteArgs...)...) //nolint:gosec
+	case "bun":
+		vitecmd = exec.Command("bun", append([]string{"x"}, viteArgs...)...) //nolint:gosec
+	default:
+		vitecmd = exec.Command("npx", viteArgs...) //nolint:gosec
+	}
+	vitecmd.Dir = root
+	vitecmd.Stdout = cmd.OutOrStdout()
+	vitecmd.Stderr = cmd.ErrOrStderr()
+	if err := vitecmd.Run(); err != nil {
+		return fmt.Errorf("vite build: %w — ensure Node >=18 and @sveltejs/vite-plugin-svelte are installed", err)
+	}
+	return nil
+}
+
+// detectPackageManager returns "pnpm", "bun", or "npm" based on lockfile
+// presence. The SVELTEGO_PM env var overrides detection.
+func detectPackageManager(root string) string {
+	if pm := os.Getenv("SVELTEGO_PM"); pm != "" {
+		return pm
+	}
+	for _, c := range []struct {
+		lock string
+		pm   string
+	}{
+		{"pnpm-lock.yaml", "pnpm"},
+		{"bun.lockb", "bun"},
+		{"bun.lock", "bun"},
+	} {
+		if _, err := os.Stat(filepath.Join(root, c.lock)); err == nil {
+			return c.pm
+		}
+	}
+	return "npm"
 }

@@ -68,6 +68,10 @@ type ManifestOptions struct {
 	// Keys are layout PackagePath; the manifest emits a head__layout__
 	// <alias> adapter and a LayoutHeads slot for keys present here.
 	LayoutHeads map[string]bool
+	// ClientKeys maps ScannedRoute.PackagePath to the Vite client entry
+	// key (e.g. "routes/+page"). When present the manifest emits a
+	// ClientKey field on each matching router.Route.
+	ClientKeys map[string]string
 }
 
 // GenerateManifest emits a deterministic, gofmt-clean Go source file
@@ -305,7 +309,7 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 			errorAliasByPath[ei.pkgPath] = ei.alias
 		}
 		for _, e := range entries {
-			emitRouteEntry(&b, e.route, e.alias, layoutByPath, errorAliasByPath, opts.RouteOptions, opts.PageHeads)
+			emitRouteEntry(&b, e.route, e.alias, layoutByPath, errorAliasByPath, opts.RouteOptions, opts.PageHeads, opts.ClientKeys)
 		}
 		b.Dedent()
 		b.Line("}")
@@ -532,7 +536,7 @@ func emitErrorAdapters(b *Builder, imports []errorImport) {
 	}
 }
 
-func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutByPath map[string]layoutImport, errorAliasByPath map[string]string, routeOptions map[string]kit.PageOptions, pageHeads map[string]bool) {
+func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutByPath map[string]layoutImport, errorAliasByPath map[string]string, routeOptions map[string]kit.PageOptions, pageHeads map[string]bool, clientKeys map[string]string) {
 	b.Line("{")
 	b.Indent()
 	b.Linef("Pattern: %s,", quoteGo(r.Pattern))
@@ -544,6 +548,9 @@ func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutBy
 		b.Linef("Page: render__%s,", alias)
 		if pageHeads[r.PackagePath] {
 			b.Linef("Head: head__%s,", alias)
+		}
+		if ck := clientKeys[r.PackagePath]; ck != "" {
+			b.Linef("ClientKey: %s,", quoteGo(ck))
 		}
 	}
 	if r.HasPageServer {

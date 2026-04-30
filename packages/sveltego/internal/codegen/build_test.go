@@ -134,7 +134,10 @@ func TestBuild_HappyPath(t *testing.T) {
 		`"example.com/app/.gen/routes/_id_"`,
 		`func render__page_routes`,
 		`func render__page_routes__id_`,
-		`Page:    render__page_routes__id_`,
+		// gofmt aligns struct field values; spacing varies with longest field name.
+		// Check that the Page field references the correct handler without asserting spacing.
+		`Page:`,
+		`render__page_routes__id_`,
 	} {
 		if !bytes.Contains(manifestBytes, []byte(want)) {
 			t.Errorf("manifest missing %q:\n%s", want, manifestBytes)
@@ -458,7 +461,9 @@ func TestBuild_EmbedSkippedWhenNoAssets(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	scaffoldProject(t, root, "example.com/app")
-	if _, err := Build(BuildOptions{ProjectRoot: root}); err != nil {
+	// NoClient skips client entry emission so .gen/client/ is absent.
+	// Without a static/ dir either, embed.go must not be written.
+	if _, err := Build(BuildOptions{ProjectRoot: root, NoClient: true}); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(root, ".gen", "embed.go")); err == nil {

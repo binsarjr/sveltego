@@ -13,6 +13,7 @@ import (
 
 	"github.com/binsarjr/sveltego/internal/parser"
 	"github.com/binsarjr/sveltego/internal/routescan"
+	"github.com/binsarjr/sveltego/internal/vite"
 )
 
 // log attribute keys for sloglint compliance.
@@ -55,22 +56,23 @@ type BuildOptions struct {
 	// comments in generated files. The file-level DO NOT EDIT banner is
 	// always emitted. Default true; set false with --no-provenance.
 	Provenance bool
+	// NoClient skips emitting Vite client entry files and vite.config.gen.js.
+	NoClient bool
 }
 
 // BuildResult summarizes one [Build] invocation. Routes counts every
 // emitted page or server stub; ManifestPath is the absolute path to the
-// generated manifest. Diagnostics holds non-fatal scanner warnings — fatal
-// diagnostics return through the error channel instead.
-//
-// Note: Diagnostics is typed as []routescan.Diagnostic, which lives in an
-// internal package. Build is currently experimental; if it is ever promoted
-// to stable, Diagnostic must be re-exported or wrapped so that callers
-// outside this module can refer to the type without import tricks.
+// generated manifest. ViteConfigPath is the path to vite.config.gen.js
+// (empty when NoClient is true or no page routes exist). ClientRouteKeys
+// contains the Vite input key for each page route. Diagnostics holds
+// non-fatal scanner warnings; fatal diagnostics are returned as errors.
 type BuildResult struct {
-	Routes       int
-	ManifestPath string
-	Diagnostics  []routescan.Diagnostic
-	Elapsed      time.Duration
+	Routes          int
+	ManifestPath    string
+	ViteConfigPath  string
+	ClientRouteKeys []string
+	Diagnostics     []routescan.Diagnostic
+	Elapsed         time.Duration
 }
 
 // Build orchestrates per-project codegen: it wipes OutDir, scans the
@@ -146,6 +148,9 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 	// componentSeeds collects every .svelte file processed by the route/layout
 	// passes so the component discovery pass can scan them for relative imports.
 	var componentSeeds []string
+	// clientRouteKeys collects the Vite input key for every page route.
+	var clientRouteKeys []string
+	clientKeysByPkg := make(map[string]string)
 	for _, route := range scan.Routes {
 		if route.HasError {
 			if _, done := emittedErrors[route.Dir]; !done {
@@ -171,6 +176,15 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 				pageName = "+page@" + route.ResetTarget + ".svelte"
 			}
 			componentSeeds = append(componentSeeds, filepath.Join(route.Dir, pageName))
+
+			if !opts.NoClient {
+				ck, cerr := emitClientEntry(opts.ProjectRoot, outDir, routesDir, route, pageName)
+				if cerr != nil {
+					return nil, cerr
+				}
+				clientRouteKeys = append(clientRouteKeys, ck)
+				clientKeysByPkg[route.PackagePath] = ck
+			}
 		case route.HasServer:
 			if err := emitRESTRoute(opts.ProjectRoot, outDir, modulePath, route); err != nil {
 				return nil, err
@@ -228,6 +242,7 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 		RouteOptions: routeOptions,
 		PageHeads:    pageHeads,
 		LayoutHeads:  layoutHeads,
+		ClientKeys:   clientKeysByPkg,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("codegen: generate manifest: %w", err)
@@ -257,6 +272,19 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 		})
 	}
 
+	var viteConfigPath string
+	if !opts.NoClient && len(clientRouteKeys) > 0 {
+		viteConfigPath = filepath.Join(opts.ProjectRoot, "vite.config.gen.js")
+		configSrc := vite.GenerateConfig(vite.ConfigOptions{
+			OutDir:       "static/_app",
+			RouteKeys:    clientRouteKeys,
+			GenClientDir: filepath.Join(outDir, "client"),
+		})
+		if werr := os.WriteFile(viteConfigPath, []byte(configSrc), 0o644); werr != nil { //nolint:gosec // world-readable JS config is intentional
+			return nil, fmt.Errorf("codegen: write vite.config.gen.js: %w", werr)
+		}
+	}
+
 	if opts.Verbose {
 		logger.Info("codegen done",
 			logKeyRoutes, routeCount,
@@ -267,10 +295,12 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 	}
 
 	return &BuildResult{
-		Routes:       routeCount,
-		ManifestPath: manifestPath,
-		Diagnostics:  warnings,
-		Elapsed:      time.Since(start),
+		Routes:          routeCount,
+		ManifestPath:    manifestPath,
+		ViteConfigPath:  viteConfigPath,
+		ClientRouteKeys: clientRouteKeys,
+		Diagnostics:     warnings,
+		Elapsed:         time.Since(start),
 	}, nil
 }
 
@@ -347,6 +377,36 @@ func emitPage(projectRoot, outDir, modulePath string, route routescan.ScannedRou
 		libRefs = 1
 	}
 	return libRefs, len(hasHead) > 0, nil
+}
+
+// emitClientEntry writes .gen/client/<routeKey>/entry.ts for one page route.
+// routeKey is e.g. "routes/+page" or "routes/post/[id]/+page". Returns the
+// routeKey so the caller can collect them for vite.GenerateConfig.
+func emitClientEntry(projectRoot, outDir, routesDir string, route routescan.ScannedRoute, pageName string) (string, error) {
+	routesParent := filepath.Dir(routesDir)
+	relDir, err := filepath.Rel(routesParent, route.Dir)
+	if err != nil {
+		return "", fmt.Errorf("codegen: client entry rel path: %w", err)
+	}
+	routeKey := filepath.ToSlash(filepath.Join(relDir, strings.TrimSuffix(pageName, ".svelte")))
+
+	entryDir := filepath.Join(projectRoot, outDir, "client", filepath.FromSlash(routeKey))
+	if err := os.MkdirAll(entryDir, 0o755); err != nil {
+		return "", fmt.Errorf("codegen: mkdir client entry %s: %w", entryDir, err)
+	}
+
+	entryRelFromRoot := filepath.ToSlash(filepath.Join(outDir, "client", routeKey, "entry.ts"))
+	depth := len(strings.Split(filepath.ToSlash(filepath.Dir(entryRelFromRoot)), "/"))
+	relRouteDir := filepath.ToSlash(relDir)
+	svelteSrc := relRouteDir + "/" + pageName
+	relSvelte := vite.RelativeSveltePath(svelteSrc, depth)
+
+	src := vite.GenerateClientEntry(relSvelte)
+	entryAbs := filepath.Join(entryDir, "entry.ts")
+	if err := os.WriteFile(entryAbs, []byte(src), genFileMode); err != nil {
+		return "", fmt.Errorf("codegen: write client entry %s: %w", entryAbs, err)
+	}
+	return routeKey, nil
 }
 
 // emitEmbedStub writes <outAbs>/embed.go only when at least one of the
