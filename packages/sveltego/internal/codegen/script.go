@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	goast "go/ast"
-	"go/parser"
 	"go/printer"
 	"go/token"
 	"regexp"
@@ -24,12 +23,19 @@ var runeRegexp = regexp.MustCompile(`\$([A-Za-z_][A-Za-z0-9_]*)`)
 // scriptOutput is the result of hoisting <script lang="go"> blocks to
 // package scope. Imports merge with the framework set; Decls land between
 // the import block and `type Page struct{}`. Runes records identifiers
-// flagged for downstream rune handling (#43-#47); the slice is intentionally
-// not emitted yet.
+// flagged for downstream rune handling (#43-#47); the slice is retained
+// for diagnostics. Props, RestField, and RuneStmts capture the structured
+// rune analysis: Props feeds emit of the Props struct + defaultProps
+// helper, and RuneStmts is emitted into the Render body before template
+// lowering so $state / $derived locals are in scope.
 type scriptOutput struct {
-	Imports []string
-	Decls   []string
-	Runes   []string
+	Imports   []string
+	Decls     []string
+	Runes     []string
+	Props     []runeProp
+	RestField string
+	RuneStmts []runeStmt
+	HasProps  bool
 }
 
 // extractScripts walks frag for *ast.Script nodes and lowers them. At most
@@ -67,68 +73,24 @@ func extractScripts(frag *ast.Fragment) (scriptOutput, error) {
 		for _, name := range runeNames {
 			runeSet[name] = struct{}{}
 		}
-		fileSrc := "package _x\n" + body + "\n"
-		fset := token.NewFileSet()
-		f, err := parser.ParseFile(fset, "", fileSrc, parser.AllErrors|parser.SkipObjectResolution)
+
+		ana, err := analyzeRunes(body, s.P)
 		if err != nil {
-			msg := err.Error()
-			if strings.Contains(msg, "expected declaration") {
-				return scriptOutput{}, &CodegenError{
-					Pos: s.P,
-					Msg: "<script> body must contain only imports and top-level declarations",
-				}
-			}
-			return scriptOutput{}, &CodegenError{
-				Pos: s.P,
-				Msg: fmt.Sprintf("invalid Go in <script>: %v", err),
-			}
+			return scriptOutput{}, err
 		}
-
-		for _, decl := range f.Decls {
-			gen, ok := decl.(*goast.GenDecl)
-			if !ok {
-				continue
-			}
-			if gen.Tok != token.IMPORT {
-				continue
-			}
-			for _, spec := range gen.Specs {
-				is, ok := spec.(*goast.ImportSpec)
-				if !ok {
-					continue
-				}
-				rendered, err := formatImportSpec(fset, is)
-				if err != nil {
-					return scriptOutput{}, &CodegenError{Pos: s.P, Msg: err.Error()}
-				}
-				importSet[rendered] = struct{}{}
-			}
+		for _, imp := range ana.Imports {
+			importSet[imp] = struct{}{}
 		}
-
-		for _, decl := range f.Decls {
-			switch d := decl.(type) {
-			case *goast.GenDecl:
-				if d.Tok == token.IMPORT {
-					continue
-				}
-				rendered, err := formatNode(fset, d)
-				if err != nil {
-					return scriptOutput{}, &CodegenError{Pos: s.P, Msg: err.Error()}
-				}
-				out.Decls = append(out.Decls, rendered)
-			case *goast.FuncDecl:
-				rendered, err := formatNode(fset, d)
-				if err != nil {
-					return scriptOutput{}, &CodegenError{Pos: s.P, Msg: err.Error()}
-				}
-				out.Decls = append(out.Decls, rendered)
-			default:
-				return scriptOutput{}, &CodegenError{
-					Pos: s.P,
-					Msg: fmt.Sprintf("<script> body must contain only imports and top-level declarations (got %T)", d),
-				}
+		out.Decls = append(out.Decls, ana.Decls...)
+		if ana.HasProps {
+			if out.HasProps {
+				return scriptOutput{}, &CodegenError{Pos: s.P, Msg: "<script>: only one $props() destructure allowed"}
 			}
+			out.HasProps = true
+			out.Props = ana.Props
+			out.RestField = ana.RestField
 		}
+		out.RuneStmts = append(out.RuneStmts, ana.Stmts...)
 	}
 
 	for k := range importSet {

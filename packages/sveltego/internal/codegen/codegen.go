@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"go/format"
 	"sort"
+	"strings"
 
 	"github.com/binsarjr/sveltego/internal/ast"
 )
@@ -84,10 +85,20 @@ func Generate(frag *ast.Fragment, opts Options) ([]byte, error) {
 	b.Line("")
 	emitPageDataStruct(&b, pageData.Fields)
 	b.Line("")
+	if scripts.HasProps {
+		emitPropsStruct(&b, scripts.Props)
+		b.Line("")
+	}
 	b.Line("func (p Page) Render(w *render.Writer, ctx *kit.RenderCtx, data PageData) error {")
 	b.Indent()
 	b.Line("_ = ctx")
 	b.Line("_ = data")
+	if scripts.HasProps {
+		b.Line("var props Props")
+		b.Line("defaultProps(&props)")
+		b.Line("_ = props")
+	}
+	emitRuneStmts(&b, scripts.RuneStmts)
 	rejectRootConst(&b, frag.Children)
 	emitChildren(&b, frag.Children)
 	b.Line("return nil")
@@ -152,11 +163,21 @@ func GenerateLayout(frag *ast.Fragment, opts LayoutOptions) ([]byte, error) {
 	b.Line("")
 	emitLayoutDataAlias(&b, layoutData.Fields)
 	b.Line("")
+	if scripts.HasProps {
+		emitPropsStruct(&b, scripts.Props)
+		b.Line("")
+	}
 	b.Line("func (l Layout) Render(w *render.Writer, ctx *kit.RenderCtx, data LayoutData, children func(*render.Writer) error) error {")
 	b.Indent()
 	b.Line("_ = ctx")
 	b.Line("_ = data")
 	b.Line("_ = children")
+	if scripts.HasProps {
+		b.Line("var props Props")
+		b.Line("defaultProps(&props)")
+		b.Line("_ = props")
+	}
+	emitRuneStmts(&b, scripts.RuneStmts)
 	rejectRootConst(&b, frag.Children)
 	emitChildren(&b, frag.Children)
 	b.Line("return nil")
@@ -212,10 +233,20 @@ func GenerateErrorPage(frag *ast.Fragment, opts ErrorPageOptions) ([]byte, error
 
 	b.Line("type ErrorPage struct{}")
 	b.Line("")
+	if scripts.HasProps {
+		emitPropsStruct(&b, scripts.Props)
+		b.Line("")
+	}
 	b.Line("func (e ErrorPage) Render(w *render.Writer, ctx *kit.RenderCtx, data kit.SafeError) error {")
 	b.Indent()
 	b.Line("_ = ctx")
 	b.Line("_ = data")
+	if scripts.HasProps {
+		b.Line("var props Props")
+		b.Line("defaultProps(&props)")
+		b.Line("_ = props")
+	}
+	emitRuneStmts(&b, scripts.RuneStmts)
 	rejectRootConst(&b, frag.Children)
 	emitChildren(&b, frag.Children)
 	b.Line("return nil")
@@ -271,6 +302,44 @@ func mergeImports(scriptImports, pageDataImports []string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// emitRuneStmts writes the lowered $state / $derived / $derived.by
+// statements at the top of Render's body. $effect entries lower to a
+// trailing comment marker so the generated source still records that an
+// effect was elided; the marker carries no runtime cost.
+func emitRuneStmts(b *Builder, stmts []runeStmt) {
+	for _, s := range stmts {
+		switch s.Kind {
+		case runeEffect:
+			b.Line("// $effect elided on SSR")
+		default:
+			if s.Body == "" {
+				continue
+			}
+			b.Line(s.Body)
+			if name := assignLHSName(s.Body); name != "" {
+				b.Linef("_ = %s", name)
+			}
+		}
+	}
+}
+
+// assignLHSName returns the LHS identifier of a `name := expr` line, or
+// "" when src does not start with a short-var-decl. Used to emit a
+// trailing `_ = name` so the Go compiler accepts vars that appear only
+// in template mustaches the codegen pass has not yet observed.
+func assignLHSName(src string) string {
+	src = strings.TrimSpace(src)
+	idx := strings.Index(src, ":=")
+	if idx <= 0 {
+		return ""
+	}
+	head := strings.TrimSpace(src[:idx])
+	if !isIdent(head) {
+		return ""
+	}
+	return head
 }
 
 // rejectRootConst latches a CodegenError when {@const} appears as a

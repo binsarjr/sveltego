@@ -190,3 +190,96 @@ func emitPageDataStruct(b *Builder, fields []pageDataField) {
 	b.Dedent()
 	b.Line("}")
 }
+
+// emitPropsStruct writes the component's Props struct declaration plus a
+// defaultProps helper that fills in any field whose corresponding $props
+// destructure default was a non-zero literal. Empty props produce
+// nothing — callers consult HasProps to decide whether to emit at all.
+// Bindable fields are tagged on the field via `kit:"bindable"` so the
+// client codegen pass (covered by #34) can pick them up without a
+// separate metadata table.
+func emitPropsStruct(b *Builder, props []runeProp) {
+	if len(props) == 0 {
+		return
+	}
+	b.Line("type Props struct {")
+	b.Indent()
+	for _, p := range props {
+		tag := propFieldTag(p)
+		if tag != "" {
+			b.Linef("%s %s %s", p.Name, p.Type, tag)
+		} else {
+			b.Linef("%s %s", p.Name, p.Type)
+		}
+	}
+	b.Dedent()
+	b.Line("}")
+	b.Line("")
+	emitDefaultProps(b, props)
+}
+
+func propFieldTag(p runeProp) string {
+	parts := []string{}
+	if p.Bindable {
+		parts = append(parts, "bindable")
+	}
+	if p.Rest {
+		parts = append(parts, "rest")
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "`kit:\"" + strings.Join(parts, ",") + "\"`"
+}
+
+// emitDefaultProps writes a defaultProps(p *Props) helper that applies
+// every rune-supplied default value when the corresponding field is at
+// its Go zero value. When no field carries a default the helper is a
+// no-op stub; we always emit it so Render's signature stays uniform.
+func emitDefaultProps(b *Builder, props []runeProp) {
+	b.Line("func defaultProps(p *Props) {")
+	b.Indent()
+	emitted := false
+	for _, p := range props {
+		if p.Default == "" || p.Rest {
+			continue
+		}
+		zero := zeroLiteralForType(p.Type)
+		if zero == "" {
+			b.Linef("p.%s = %s", p.Name, p.Default)
+			emitted = true
+			continue
+		}
+		b.Linef("if p.%s == %s {", p.Name, zero)
+		b.Indent()
+		b.Linef("p.%s = %s", p.Name, p.Default)
+		b.Dedent()
+		b.Line("}")
+		emitted = true
+	}
+	if !emitted {
+		b.Line("_ = p")
+	}
+	b.Dedent()
+	b.Line("}")
+}
+
+// zeroLiteralForType returns the textual zero literal for a small set of
+// builtin Go types so emitDefaultProps can guard `if p.X == zero {}`.
+// Types not in the set are treated as opaque — the caller falls back to
+// unconditional assignment so the default still wins on a fresh struct.
+func zeroLiteralForType(typ string) string {
+	switch typ {
+	case "string":
+		return `""`
+	case "int", "int8", "int16", "int32", "int64",
+		"uint", "uint8", "uint16", "uint32", "uint64",
+		"byte", "rune", "uintptr":
+		return "0"
+	case "float32", "float64":
+		return "0"
+	case "bool":
+		return "false"
+	}
+	return ""
+}
