@@ -27,7 +27,7 @@ type countingHandler struct {
 	errs  atomic.Int64
 }
 
-func (h *countingHandler) Enabled(_ context.Context, lvl slog.Level) bool { return true }
+func (h *countingHandler) Enabled(_ context.Context, _ slog.Level) bool { return true }
 func (h *countingHandler) Handle(_ context.Context, r slog.Record) error {
 	switch {
 	case r.Level >= slog.LevelError:
