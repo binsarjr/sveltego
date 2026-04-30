@@ -35,6 +35,12 @@ type ScannedRoute struct {
 	LayoutChain        []string
 	LayoutPackagePaths []string
 	LayoutServerFiles  []string
+	// ResetTarget records the @<target> suffix parsed from a reset
+	// filename like +page@(app).svelte. The empty string means a root
+	// reset (skip every intermediate layout); a non-empty value names
+	// the group whose +layout.svelte the chain truncates at, inclusive.
+	// Meaningful only when HasReset is true.
+	ResetTarget string
 }
 
 // DiscoveredMatcher names a Go file under src/params/ that exports
