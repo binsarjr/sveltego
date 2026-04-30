@@ -130,6 +130,9 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 	emittedErrors := make(map[string]struct{})
 	pageHeads := make(map[string]bool)
 	layoutHeads := make(map[string]bool)
+	// componentSeeds collects every .svelte file processed by the route/layout
+	// passes so the component discovery pass can scan them for relative imports.
+	var componentSeeds []string
 	for _, route := range scan.Routes {
 		if route.HasError {
 			if _, done := emittedErrors[route.Dir]; !done {
@@ -150,6 +153,11 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 				pageHeads[route.PackagePath] = true
 			}
 			routeCount++
+			pageName := "+page.svelte"
+			if route.HasReset {
+				pageName = "+page@" + route.ResetTarget + ".svelte"
+			}
+			componentSeeds = append(componentSeeds, filepath.Join(route.Dir, pageName))
 		case route.HasServer:
 			if err := emitRESTRoute(opts.ProjectRoot, outDir, modulePath, route); err != nil {
 				return nil, err
@@ -184,9 +192,17 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 				}
 			}
 			emittedLayouts[layoutDir] = struct{}{}
+			layoutPath, lerr := resolveLayoutSource(layoutDir)
+			if lerr == nil {
+				componentSeeds = append(componentSeeds, layoutPath)
+			}
 		}
 	}
 	libExists := dirExists(libDir)
+
+	if _, err := emitComponentTree(opts.ProjectRoot, outDir, componentSeeds); err != nil {
+		return nil, fmt.Errorf("codegen: component tree: %w", err)
+	}
 
 	routeOptions, err := resolvePageOptions(scan)
 	if err != nil {
