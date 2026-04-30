@@ -36,6 +36,9 @@ func newBuildCmd() *cobra.Command {
 			for _, d := range result.Diagnostics {
 				fmt.Fprintln(cmd.ErrOrStderr(), "warn:", d.String())
 			}
+			if err := codegen.EmitLinksFile(root, ""); err != nil {
+				return fmt.Errorf("emit links: %w", err)
+			}
 
 			outAbs := outPath
 			if !filepath.IsAbs(outAbs) {
