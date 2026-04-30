@@ -35,13 +35,18 @@ func (hw *HeaderWriter) Del(key string) {
 // RenderCtx is the request-scoped context handed to generated Render
 // methods across the SSR lifecycle (Load, Render, Hooks).
 type RenderCtx struct {
-	Locals    map[string]any
-	URL       *url.URL
-	Params    map[string]string
-	RawParams map[string]string
-	Cookies   *Cookies
-	Request   *http.Request
-	Writer    http.ResponseWriter
+	Locals map[string]any
+	URL    *url.URL
+	// OriginalURL is the request URL before any Reroute hook rewrote it.
+	// Nil when no Reroute was applied (i.e. the request was served at its
+	// original path). Use this to recover the inbound URL in error
+	// boundaries and layouts rendered after a reroute.
+	OriginalURL *url.URL
+	Params      map[string]string
+	RawParams   map[string]string
+	Cookies     *Cookies
+	Request     *http.Request
+	Writer      http.ResponseWriter
 }
 
 // RawParam returns the un-decoded route parameter value for name exactly

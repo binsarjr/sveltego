@@ -395,12 +395,13 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 	}
 
 	rctx := &kit.RenderCtx{
-		Locals:    ev.Locals,
-		URL:       ev.URL,
-		Params:    ev.Params,
-		RawParams: ev.RawParams,
-		Cookies:   ev.Cookies,
-		Request:   r,
+		Locals:      ev.Locals,
+		URL:         ev.URL,
+		OriginalURL: ev.OriginalURL,
+		Params:      ev.Params,
+		RawParams:   ev.RawParams,
+		Cookies:     ev.Cookies,
+		Request:     r,
 	}
 	inner := func(buf *render.Writer) error {
 		return route.Page(buf, rctx, data)

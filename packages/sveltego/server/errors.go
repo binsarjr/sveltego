@@ -204,11 +204,13 @@ func (s *Server) renderErrorBoundary(w http.ResponseWriter, r *http.Request, ev 
 	var rctx *kit.RenderCtx
 	if ev != nil {
 		rctx = &kit.RenderCtx{
-			Locals:  ev.Locals,
-			URL:     ev.URL,
-			Params:  ev.Params,
-			Cookies: ev.Cookies,
-			Request: r,
+			Locals:      ev.Locals,
+			URL:         ev.URL,
+			OriginalURL: ev.OriginalURL,
+			Params:      ev.Params,
+			RawParams:   ev.RawParams,
+			Cookies:     ev.Cookies,
+			Request:     r,
 		}
 	} else {
 		rctx = &kit.RenderCtx{Request: r}
