@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"runtime/debug"
 	"sync"
 	"sync/atomic"
 )
@@ -91,6 +92,17 @@ func (s *Server) dispatch(msg *Message) {
 type handlerFn func(params json.RawMessage) (any, *RPCError)
 
 func (s *Server) handle(msg *Message, fn handlerFn) {
+	defer func() {
+		rec := recover()
+		if rec == nil {
+			return
+		}
+		s.logf("handler panic: method=%s id=%s panic=%v\n%s",
+			msg.Method, idString(msg.ID), rec, debug.Stack())
+		if msg.ID != nil {
+			s.respondError(msg.ID, ErrInternal, fmt.Sprintf("internal error: %v", rec))
+		}
+	}()
 	if msg.ID == nil {
 		// Notification dispatched to a request handler — best-effort run, drop result.
 		_, _ = fn(msg.Params)
@@ -102,6 +114,13 @@ func (s *Server) handle(msg *Message, fn handlerFn) {
 		return
 	}
 	s.respondResult(msg.ID, result)
+}
+
+func idString(id *json.RawMessage) string {
+	if id == nil {
+		return "<nil>"
+	}
+	return string(*id)
 }
 
 func (s *Server) respondResult(id *json.RawMessage, result any) {

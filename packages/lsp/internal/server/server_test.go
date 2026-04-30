@@ -184,3 +184,68 @@ func TestServer_ProxyDisabled(t *testing.T) {
 		t.Fatalf("expected ErrProxyDisabled, got nil")
 	}
 }
+
+func TestServer_HandlePanicRequestRecoversAndResponds(t *testing.T) {
+	t.Parallel()
+	var out bytes.Buffer
+	var logs bytes.Buffer
+	srv := New(strings.NewReader(""), &out, &logs)
+
+	panicking := func(json.RawMessage) (any, *RPCError) {
+		panic("boom: handler exploded")
+	}
+	srv.handle(&Message{ID: rawID(t, 99), Method: "textDocument/hover"}, panicking)
+
+	resp, err := ReadMessage(bufio.NewReader(&out))
+	if err != nil {
+		t.Fatalf("read response after panic: %v", err)
+	}
+	if resp.Error == nil {
+		t.Fatalf("expected RPC error response after panic, got result %s", string(resp.Result))
+	}
+	if resp.Error.Code != ErrInternal {
+		t.Errorf("expected code %d, got %d", ErrInternal, resp.Error.Code)
+	}
+	if !strings.Contains(resp.Error.Message, "boom") {
+		t.Errorf("expected panic value in error message, got %q", resp.Error.Message)
+	}
+	if !strings.Contains(logs.String(), "handler panic") {
+		t.Errorf("expected panic log line, got %q", logs.String())
+	}
+
+	ok := func(params json.RawMessage) (any, *RPCError) {
+		return map[string]string{"hi": "there"}, nil
+	}
+	srv.handle(&Message{ID: rawID(t, 100), Method: "textDocument/hover"}, ok)
+
+	reader := bufio.NewReader(&out)
+	resp2, err := ReadMessage(reader)
+	if err != nil {
+		t.Fatalf("read second response: %v", err)
+	}
+	if resp2.Error != nil {
+		t.Fatalf("post-panic request returned error: %+v", resp2.Error)
+	}
+	if !strings.Contains(string(resp2.Result), `"hi":"there"`) {
+		t.Errorf("post-panic result missing payload: %s", string(resp2.Result))
+	}
+}
+
+func TestServer_HandlePanicNotificationDropsResponse(t *testing.T) {
+	t.Parallel()
+	var out bytes.Buffer
+	var logs bytes.Buffer
+	srv := New(strings.NewReader(""), &out, &logs)
+
+	panicking := func(json.RawMessage) (any, *RPCError) {
+		panic("notification panic")
+	}
+	srv.handle(&Message{Method: "textDocument/didOpen"}, panicking)
+
+	if out.Len() != 0 {
+		t.Errorf("expected no response for panicking notification, got %q", out.String())
+	}
+	if !strings.Contains(logs.String(), "handler panic") {
+		t.Errorf("expected panic log line, got %q", logs.String())
+	}
+}
