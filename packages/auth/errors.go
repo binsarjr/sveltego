@@ -35,4 +35,14 @@ var (
 	// Err2FARequired is returned when the account has two-factor authentication
 	// enabled and the caller has not yet completed the second factor.
 	Err2FARequired = errors.New("auth: two-factor authentication required")
+
+	// ErrMailerSend is the sentinel wrapped by all Mailer implementations on
+	// delivery failure. Wrap with fmt.Errorf("auth/mailer: <adapter>: %w: %w",
+	// ErrMailerSend, originalErr) so callers can use errors.Is(err, ErrMailerSend).
+	ErrMailerSend = errors.New("auth: mailer send failed")
+
+	// ErrSMSSend is the sentinel wrapped by all SMSSender implementations on
+	// delivery failure. Wrap with fmt.Errorf("auth/sms: <adapter>: %w: %w",
+	// ErrSMSSend, originalErr) so callers can use errors.Is(err, ErrSMSSend).
+	ErrSMSSend = errors.New("auth: sms send failed")
 )

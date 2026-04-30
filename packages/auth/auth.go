@@ -24,11 +24,16 @@ type Config struct {
 	// Storage is the persistence adapter. auth.New panics if this is nil.
 	Storage Storage
 
-	// Mailer is the email delivery adapter (populated by the email-provider issues).
-	Mailer any
+	// Mailer is the email delivery adapter. A nil Mailer disables all
+	// email-dependent flows (verification, password-reset, magic-link, OTP).
+	// Use auth/mailer/smtp, auth/mailer/resend, or auth/mailer/sendgrid for
+	// production; use auth.NewNoopMailer() in tests and development.
+	Mailer Mailer
 
-	// SMS is the SMS delivery adapter (populated by the sms-provider issues).
-	SMS any
+	// SMS is the SMS delivery adapter. A nil SMS disables all SMS-dependent
+	// flows (OTP via SMS, SMS two-factor authentication). Use auth/sms/twilio
+	// for production; use auth.NewNoopSMSSender() in tests and development.
+	SMS SMSSender
 
 	// Plugins holds optional capability extensions (populated by #224+).
 	Plugins []any
