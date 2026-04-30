@@ -25,7 +25,9 @@ func issueToken(t *testing.T, csrf *auth.CSRF) (token string, cookies []*http.Co
 	if err != nil {
 		t.Fatalf("Issue error: %v", err)
 	}
-	return tok, w.Result().Cookies()
+	resp := w.Result()
+	defer resp.Body.Close()
+	return tok, resp.Cookies()
 }
 
 func TestCSRF_IssueAndVerify_HappyPath(t *testing.T) {

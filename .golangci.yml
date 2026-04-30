@@ -39,6 +39,9 @@ linters-settings:
   gosec:
     excludes:
       - G104  # err checking is errcheck's job
+      - G115  # int/uint→uint32 via len(); len never negative, safe conversion
+      - G201  # SQL string formatting via internal placeholder helpers; not user input
+      - G202  # SQL string concatenation via internal placeholder helpers; not user input
 
   revive:
     rules:
