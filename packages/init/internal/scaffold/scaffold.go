@@ -30,12 +30,19 @@ type Options struct {
 	// Force overwrites existing files. Default skips them and reports
 	// the list via the returned Result.
 	Force bool
+	// Tailwind selects the Tailwind CSS scaffolding flavor. Defaults to
+	// TailwindNone (no package.json, no Tailwind files).
+	Tailwind TailwindFlavor
 }
 
 // Result reports what Run wrote and what it skipped.
 type Result struct {
 	Written []string
 	Skipped []string
+	// InstallCommand is the suggested package-manager command to run
+	// after scaffolding. Empty when the scaffold did not write a
+	// package.json.
+	InstallCommand string
 }
 
 // Run materializes the scaffold described by opts. It returns the
@@ -57,7 +64,17 @@ func Run(opts Options) (Result, error) {
 		}
 	}
 
-	for _, f := range baseFiles(module) {
+	flavor := opts.Tailwind
+	if flavor == "" {
+		flavor = TailwindNone
+	}
+
+	for _, f := range baseFiles(module, flavor) {
+		if err := writeFile(opts.Dir, f.path, f.body, opts.Force, &res); err != nil {
+			return res, err
+		}
+	}
+	for _, f := range tailwindFiles(flavor) {
 		if err := writeFile(opts.Dir, f.path, f.body, opts.Force, &res); err != nil {
 			return res, err
 		}
@@ -67,6 +84,10 @@ func Run(opts Options) (Result, error) {
 		if err := writeAITemplates(opts.Dir, opts.Force, &res); err != nil {
 			return res, err
 		}
+	}
+
+	if flavor != TailwindNone {
+		res.InstallCommand = DetectPackageManager(opts.Dir).InstallCommand()
 	}
 
 	sort.Strings(res.Written)
@@ -111,16 +132,16 @@ type file struct {
 	body []byte
 }
 
-func baseFiles(module string) []file {
+func baseFiles(module string, flavor TailwindFlavor) []file {
 	return []file{
 		{path: "go.mod", body: []byte(renderGoMod(module))},
 		{path: "README.md", body: []byte(renderReadme(module))},
 		{path: ".gitignore", body: []byte(gitignoreBody)},
 		{path: "sveltego.config.go", body: []byte(configBody)},
 		{path: "hooks.server.go", body: []byte(hooksBody)},
-		{path: "src/routes/+page.svelte", body: []byte(pageSvelteBody)},
+		{path: "src/routes/+page.svelte", body: []byte(renderPageSvelte(flavor))},
 		{path: "src/routes/page.server.go", body: []byte(pageServerBody)},
-		{path: "src/routes/+layout.svelte", body: []byte(layoutSvelteBody)},
+		{path: "src/routes/+layout.svelte", body: []byte(renderLayoutSvelte(flavor))},
 		{path: "src/lib/.gitkeep", body: []byte{}},
 	}
 }
@@ -174,6 +195,7 @@ const gitignoreBody = `.gen/
 node_modules/
 dist/
 *.test
+static/_app/
 `
 
 const configBody = `//go:build sveltego
