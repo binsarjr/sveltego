@@ -151,7 +151,7 @@ jobs:
             # playgrounds/basic owns a generated `.gen/` package that
             # cmd/app imports; the dedicated playground-smoke job drives
             # `sveltego compile` first so per-module gates can run there.
-            case "$d" in */playgrounds/basic) continue ;; esac
+            case "$d" in *[/\\]playgrounds[/\\]basic) continue ;; esac
             if [[ "$SHARED" != "true" ]]; then
               case "$d" in
                 */packages/sveltego)             [[ "$SVELTEGO" == "true" ]]            || continue ;;
@@ -196,7 +196,7 @@ jobs:
           set -euo pipefail
           dirs=$(go list -m -f '{{.Dir}}')
           for d in $dirs; do
-            case "$d" in */playgrounds/basic) continue ;; esac
+            case "$d" in *[/\\]playgrounds[/\\]basic) continue ;; esac
             if [[ "$SHARED" != "true" ]]; then
               case "$d" in
                 */packages/sveltego)             [[ "$SVELTEGO" == "true" ]]            || continue ;;
@@ -242,7 +242,7 @@ jobs:
           mkdir -p coverage
           dirs=$(go list -m -f '{{.Dir}}')
           for d in $dirs; do
-            case "$d" in */playgrounds/basic) continue ;; esac
+            case "$d" in *[/\\]playgrounds[/\\]basic) continue ;; esac
             if [[ "$SHARED" != "true" ]]; then
               case "$d" in
                 */packages/sveltego)             [[ "$SVELTEGO" == "true" ]]            || continue ;;
@@ -291,7 +291,7 @@ jobs:
           set -euo pipefail
           dirs=$(go list -m -f '{{.Dir}}')
           for d in $dirs; do
-            case "$d" in */playgrounds/basic) continue ;; esac
+            case "$d" in *[/\\]playgrounds[/\\]basic) continue ;; esac
             if [[ "$SHARED" != "true" ]]; then
               case "$d" in
                 */packages/sveltego)             [[ "$SVELTEGO" == "true" ]]            || continue ;;
@@ -358,7 +358,7 @@ jobs:
             d=$(dirname "$m")
             # playground driven by playground-smoke job; cmd/app needs `.gen/`
             # which only exists after `sveltego compile` runs.
-            case "$d" in */playgrounds/basic) continue ;; esac
+            case "$d" in playgrounds/basic|*[/\\]playgrounds[/\\]basic) continue ;; esac
             echo "::group::isolated $d"
             (cd "$d" && go mod download && go build ./... && go test -race -short ./...)
             echo "::endgroup::"
