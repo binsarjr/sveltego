@@ -57,12 +57,10 @@ type StreamedAny interface {
 // resolves with fn's return values. The goroutine starts immediately so
 // slow work overlaps with shell rendering.
 //
-// Stream is preserved for backward compatibility with code authored
-// before StreamCtx existed. New code should call StreamCtx so the
-// producer receives a cancellable context and exits promptly when the
-// request goes away. Stream is implemented in terms of StreamCtx with a
-// background parent, so Cancel still works on the returned value but the
-// producer fn cannot observe cancellation directly.
+// Deprecated: Use StreamCtx so the producer receives a cancellable context
+// and exits promptly when the request goes away. Stream is implemented in
+// terms of StreamCtx with a background parent, so Cancel still works on
+// the returned value but the producer fn cannot observe cancellation directly.
 func Stream[T any](fn func() (T, error)) *Streamed[T] {
 	return StreamCtx(context.Background(), func(context.Context) (T, error) {
 		return fn()
