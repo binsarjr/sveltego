@@ -19,8 +19,8 @@ func runCronTasks(ctx context.Context, tasks []kit.CronTask, logger *slog.Logger
 		if err != nil {
 			logger.Error("server: cron task skipped — bad spec",
 				logKeyError, err.Error(),
-				"name", task.Name,
-				"spec", task.Spec,
+				logKeyName, task.Name,
+				logKeySpec, task.Spec,
 			)
 			continue
 		}
@@ -46,7 +46,7 @@ func runCronLoop(ctx context.Context, task kit.CronTask, interval time.Duration,
 			if err := task.Fn(ctx); err != nil {
 				logger.Error("server: cron task error",
 					logKeyError, err.Error(),
-					"name", name,
+					logKeyName, name,
 				)
 			}
 		}

@@ -21,6 +21,8 @@ const (
 	logKeyStatus   = "status"
 	logKeyLocation = "location"
 	logKeyFailCode = "fail_code"
+	logKeyName     = "name"
+	logKeySpec     = "spec"
 )
 
 // httpStatuser lets user errors carry a non-500 status into the

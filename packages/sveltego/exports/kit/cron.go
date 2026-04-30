@@ -2,7 +2,7 @@ package kit
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -40,17 +40,17 @@ func ParseSchedule(spec string) (time.Duration, error) {
 	}
 	after, ok := strings.CutPrefix(spec, "@every ")
 	if !ok {
-		return 0, fmt.Errorf("kit: unsupported cron spec %q; use @every <duration>, @hourly, @daily, or @weekly", spec)
+		return 0, errors.New("kit: unsupported cron spec " + strconv.Quote(spec) + "; use @every <duration>, @hourly, @daily, or @weekly")
 	}
 	// Allow both pure duration strings ("5s") and unit-only shorthand ("5m").
 	// time.ParseDuration handles those already; attempt an integer-only value
 	// for the rare case where users omit units, which we reject with a clear message.
 	d, err := parseDurationOrBare(strings.TrimSpace(after))
 	if err != nil {
-		return 0, fmt.Errorf("kit: invalid @every duration %q: %w", after, err)
+		return 0, errors.New("kit: invalid @every duration " + strconv.Quote(after) + ": " + err.Error())
 	}
 	if d <= 0 {
-		return 0, fmt.Errorf("kit: @every duration must be positive, got %q", after)
+		return 0, errors.New("kit: @every duration must be positive, got " + strconv.Quote(after))
 	}
 	return d, nil
 }
@@ -62,7 +62,7 @@ func parseDurationOrBare(s string) (time.Duration, error) {
 	if err != nil {
 		// If the string looks like a plain integer, hint the user.
 		if _, intErr := strconv.ParseInt(s, 10, 64); intErr == nil {
-			return 0, fmt.Errorf("%w (did you mean %ss?)", err, s)
+			return 0, errors.New(err.Error() + " (did you mean " + s + "s?)")
 		}
 		return 0, err
 	}
