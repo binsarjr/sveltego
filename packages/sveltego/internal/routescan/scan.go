@@ -137,15 +137,19 @@ func walkRoutes(routesDir string) ([]ScannedRoute, []Diagnostic, error) {
 	}
 
 	dirsWithLayout := make(map[string]struct{})
+	dirsWithError := make(map[string]struct{})
 	for _, di := range dirs {
 		if _, ok := di.files["+layout.svelte"]; ok {
 			dirsWithLayout[di.path] = struct{}{}
+		}
+		if _, ok := di.files["+error.svelte"]; ok {
+			dirsWithError[di.path] = struct{}{}
 		}
 	}
 
 	routes := make([]ScannedRoute, 0, len(dirs))
 	for _, di := range dirs {
-		route, parseDiags := buildRoute(routesDir, di.path, di.files, dirsWithLayout, di.hasReset, di.resetTarget)
+		route, parseDiags := buildRoute(routesDir, di.path, di.files, dirsWithLayout, dirsWithError, di.hasReset, di.resetTarget)
 		diagnostics = append(diagnostics, parseDiags...)
 		if route != nil {
 			diagnostics = append(diagnostics, validateRouteFiles(*route)...)
@@ -189,7 +193,7 @@ func readSpecialFiles(dir string) (files map[string]struct{}, hasReset bool, res
 	return files, hasReset, resetTarget, nil
 }
 
-func buildRoute(routesDir, dir string, files map[string]struct{}, dirsWithLayout map[string]struct{}, hasReset bool, resetTarget string) (*ScannedRoute, []Diagnostic) {
+func buildRoute(routesDir, dir string, files map[string]struct{}, dirsWithLayout, dirsWithError map[string]struct{}, hasReset bool, resetTarget string) (*ScannedRoute, []Diagnostic) {
 	rel, err := filepath.Rel(routesDir, dir)
 	if err != nil {
 		return nil, []Diagnostic{{
@@ -276,7 +280,62 @@ func buildRoute(routesDir, dir string, files map[string]struct{}, dirsWithLayout
 		HasLayoutServer:    has(files, "layout.server.go"),
 		HasServer:          has(files, "server.go"),
 	}
+	if boundaryDir := nearestErrorDir(routesDir, dir, dirsWithError); boundaryDir != "" {
+		pkgPath, encErr := encodeLayoutPackagePath(routesDir, boundaryDir)
+		if encErr != nil {
+			diagnostics = append(diagnostics, Diagnostic{Path: boundaryDir, Message: encErr.Error()})
+		} else {
+			route.ErrorBoundaryDir = boundaryDir
+			route.ErrorBoundaryPackagePath = pkgPath
+			route.ErrorBoundaryLayoutDepth = layoutsAtOrAbove(chain, boundaryDir)
+		}
+	}
 	return route, diagnostics
+}
+
+// nearestErrorDir walks from dir up to routesDir and returns the first
+// directory that owns a +error.svelte. Empty when none cover the route.
+func nearestErrorDir(routesDir, dir string, dirsWithError map[string]struct{}) string {
+	cur := dir
+	for {
+		if _, ok := dirsWithError[cur]; ok {
+			return cur
+		}
+		if cur == routesDir {
+			return ""
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return ""
+		}
+		cur = parent
+	}
+}
+
+// layoutsAtOrAbove returns the count of LayoutChain entries whose
+// directory equals or is an ancestor of boundaryDir. Layouts past this
+// prefix are inside the broken subtree and abort on error.
+func layoutsAtOrAbove(chain []string, boundaryDir string) int {
+	count := 0
+	for _, layoutDir := range chain {
+		if layoutDir == boundaryDir || isAncestor(layoutDir, boundaryDir) {
+			count++
+		}
+	}
+	return count
+}
+
+// isAncestor reports whether a is a strict ancestor of b. Both must be
+// cleaned absolute paths sharing a separator-aligned prefix.
+func isAncestor(a, b string) bool {
+	if a == b {
+		return false
+	}
+	prefix := a
+	if !strings.HasSuffix(prefix, string(filepath.Separator)) {
+		prefix += string(filepath.Separator)
+	}
+	return strings.HasPrefix(b, prefix)
 }
 
 // truncateChainForReset trims a layout chain (ordered ancestor->self)

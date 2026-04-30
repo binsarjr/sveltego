@@ -47,8 +47,9 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 		ev.MatchPath = rewritten
 	}
 
+	var matched *router.Route
 	resolve := func(ev *kit.RequestEvent) (*kit.Response, error) {
-		return s.resolve(w, r, ev)
+		return s.resolve(w, r, ev, &matched)
 	}
 
 	res, err := s.runHandle(ev, resolve)
@@ -56,7 +57,7 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, errServerRouteWrote) {
 			return
 		}
-		s.handlePipelineError(w, r, ev, err)
+		s.handlePipelineError(w, r, ev, matched, err)
 		return
 	}
 	if res == nil {
@@ -84,7 +85,7 @@ func (s *Server) runHandle(ev *kit.RequestEvent, resolve kit.ResolveFn) (res *ki
 // resolve runs the SvelteKit-shaped match → load → render path and
 // returns either a buffered Response (page routes) or errServerRouteWrote
 // (server routes wrote directly via the user's http.HandlerFunc).
-func (s *Server) resolve(w http.ResponseWriter, r *http.Request, ev *kit.RequestEvent) (*kit.Response, error) {
+func (s *Server) resolve(w http.ResponseWriter, r *http.Request, ev *kit.RequestEvent, matched **router.Route) (*kit.Response, error) {
 	matchPath := ev.MatchPath
 	if matchPath == "" {
 		matchPath = ev.URL.Path
@@ -105,6 +106,9 @@ func (s *Server) resolve(w http.ResponseWriter, r *http.Request, ev *kit.Request
 	}
 	if !ok {
 		return nil, kit.SafeError{Code: http.StatusNotFound, Message: http.StatusText(http.StatusNotFound)}
+	}
+	if matched != nil {
+		*matched = route
 	}
 	for k, v := range params {
 		ev.Params[k] = v

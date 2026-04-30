@@ -114,7 +114,16 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 	libRefs := 0
 	routeCount := 0
 	emittedLayouts := make(map[string]struct{})
+	emittedErrors := make(map[string]struct{})
 	for _, route := range scan.Routes {
+		if route.HasError {
+			if _, done := emittedErrors[route.Dir]; !done {
+				if err := emitErrorPage(opts.ProjectRoot, outDir, route.Dir, route.PackagePath, route.PackageName); err != nil {
+					return nil, err
+				}
+				emittedErrors[route.Dir] = struct{}{}
+			}
+		}
 		switch {
 		case route.HasPage:
 			refs, err := emitPage(opts.ProjectRoot, outDir, modulePath, route)
@@ -402,6 +411,35 @@ func dirExists(path string) bool {
 		return false
 	}
 	return info.IsDir()
+}
+
+// emitErrorPage parses one +error.svelte and writes the generated
+// error.gen.go into the route's encoded gen package directory. The
+// package may also host a layout.gen.go and/or page.gen.go from the
+// same directory; the distinct filename keeps them separate.
+func emitErrorPage(projectRoot, outDir, errorDir, pkgPath, pkgName string) error {
+	errPath := filepath.Join(errorDir, "+error.svelte")
+	src, err := os.ReadFile(errPath) //nolint:gosec // path comes from scanner walk under projectRoot
+	if err != nil {
+		return fmt.Errorf("codegen: read %s: %w", errPath, err)
+	}
+	frag, perrs := parser.Parse(src)
+	if len(perrs) > 0 {
+		return fmt.Errorf("codegen: parse %s: %w", errPath, perrs)
+	}
+	out, err := GenerateErrorPage(frag, ErrorPageOptions{PackageName: pkgName})
+	if err != nil {
+		return fmt.Errorf("codegen: generate %s: %w", errPath, err)
+	}
+	relPkg := strings.TrimPrefix(pkgPath, ".gen/")
+	target := filepath.Join(projectRoot, outDir, filepath.FromSlash(relPkg), "error.gen.go")
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return fmt.Errorf("codegen: mkdir %s: %w", filepath.Dir(target), err)
+	}
+	if err := os.WriteFile(target, out, genFileMode); err != nil {
+		return fmt.Errorf("codegen: write %s: %w", target, err)
+	}
+	return nil
 }
 
 // emitLayout parses one +layout.svelte and writes the generated
