@@ -164,9 +164,10 @@ jobs:
         run: |
           set -euo pipefail
           PATH="$(go env GOPATH)/bin:$PATH"
+          . scripts/ci/skip-playgrounds.sh
           dirs=$(go list -m -f '{{.Dir}}')
           for d in $dirs; do
-            case "$d" in *[/\\]playgrounds[/\\]basic|*[/\\]playgrounds[/\\]blog|*[/\\]playgrounds[/\\]dashboard) continue ;; esac
+            should_skip_playground "$d" && continue
             if [[ "$SHARED" != "true" ]]; then
               case "$d" in
                 */packages/sveltego)             [[ "$SVELTEGO" == "true" ]]            || continue ;;
@@ -209,9 +210,10 @@ jobs:
           TEST_UTILS: ${{ needs.changes.outputs.test-utils }}
         run: |
           set -euo pipefail
+          . scripts/ci/skip-playgrounds.sh
           dirs=$(go list -m -f '{{.Dir}}')
           for d in $dirs; do
-            case "$d" in *[/\\]playgrounds[/\\]basic|*[/\\]playgrounds[/\\]blog|*[/\\]playgrounds[/\\]dashboard) continue ;; esac
+            should_skip_playground "$d" && continue
             if [[ "$SHARED" != "true" ]]; then
               case "$d" in
                 */packages/sveltego)             [[ "$SVELTEGO" == "true" ]]            || continue ;;
@@ -255,9 +257,10 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p coverage
+          . scripts/ci/skip-playgrounds.sh
           dirs=$(go list -m -f '{{.Dir}}')
           for d in $dirs; do
-            case "$d" in *[/\\]playgrounds[/\\]basic|*[/\\]playgrounds[/\\]blog|*[/\\]playgrounds[/\\]dashboard) continue ;; esac
+            should_skip_playground "$d" && continue
             if [[ "$SHARED" != "true" ]]; then
               case "$d" in
                 */packages/sveltego)             [[ "$SVELTEGO" == "true" ]]            || continue ;;
@@ -304,9 +307,10 @@ jobs:
           TEST_UTILS: ${{ needs.changes.outputs.test-utils }}
         run: |
           set -euo pipefail
+          . scripts/ci/skip-playgrounds.sh
           dirs=$(go list -m -f '{{.Dir}}')
           for d in $dirs; do
-            case "$d" in *[/\\]playgrounds[/\\]basic|*[/\\]playgrounds[/\\]blog|*[/\\]playgrounds[/\\]dashboard) continue ;; esac
+            should_skip_playground "$d" && continue
             if [[ "$SHARED" != "true" ]]; then
               case "$d" in
                 */packages/sveltego)             [[ "$SVELTEGO" == "true" ]]            || continue ;;
@@ -424,9 +428,10 @@ jobs:
         run: |
           set -euo pipefail
           PATH="$(go env GOPATH)/bin:$PATH"
+          . scripts/ci/skip-playgrounds.sh
           dirs=$(go list -m -f '{{.Dir}}')
           for d in $dirs; do
-            case "$d" in *[/\\]playgrounds[/\\]basic|*[/\\]playgrounds[/\\]blog|*[/\\]playgrounds[/\\]dashboard) continue ;; esac
+            should_skip_playground "$d" && continue
             if [[ "$SHARED" != "true" ]]; then
               case "$d" in
                 */packages/sveltego)             [[ "$SVELTEGO" == "true" ]]            || continue ;;
@@ -469,9 +474,10 @@ jobs:
           TEST_UTILS: ${{ needs.changes.outputs.test-utils }}
         run: |
           set -euo pipefail
+          . scripts/ci/skip-playgrounds.sh
           dirs=$(go list -m -f '{{.Dir}}')
           for d in $dirs; do
-            case "$d" in *[/\\]playgrounds[/\\]basic|*[/\\]playgrounds[/\\]blog|*[/\\]playgrounds[/\\]dashboard) continue ;; esac
+            should_skip_playground "$d" && continue
             if [[ "$SHARED" != "true" ]]; then
               case "$d" in
                 */packages/sveltego)             [[ "$SVELTEGO" == "true" ]]            || continue ;;
@@ -515,9 +521,10 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p coverage
+          . scripts/ci/skip-playgrounds.sh
           dirs=$(go list -m -f '{{.Dir}}')
           for d in $dirs; do
-            case "$d" in *[/\\]playgrounds[/\\]basic|*[/\\]playgrounds[/\\]blog|*[/\\]playgrounds[/\\]dashboard) continue ;; esac
+            should_skip_playground "$d" && continue
             if [[ "$SHARED" != "true" ]]; then
               case "$d" in
                 */packages/sveltego)             [[ "$SVELTEGO" == "true" ]]            || continue ;;
@@ -564,9 +571,10 @@ jobs:
           TEST_UTILS: ${{ needs.changes.outputs.test-utils }}
         run: |
           set -euo pipefail
+          . scripts/ci/skip-playgrounds.sh
           dirs=$(go list -m -f '{{.Dir}}')
           for d in $dirs; do
-            case "$d" in *[/\\]playgrounds[/\\]basic|*[/\\]playgrounds[/\\]blog|*[/\\]playgrounds[/\\]dashboard) continue ;; esac
+            should_skip_playground "$d" && continue
             if [[ "$SHARED" != "true" ]]; then
               case "$d" in
                 */packages/sveltego)             [[ "$SVELTEGO" == "true" ]]            || continue ;;
@@ -627,6 +635,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          . scripts/ci/skip-playgrounds.sh
           mods=$(find packages playgrounds benchmarks test-utils -maxdepth 2 -name go.mod 2>/dev/null || true)
           if [ -z "$mods" ]; then
             echo "no go.mod files found under packages/playgrounds/benchmarks/test-utils"
@@ -634,7 +643,7 @@ jobs:
           fi
           for m in $mods; do
             d=$(dirname "$m")
-            case "$d" in playgrounds/basic|playgrounds/blog|playgrounds/dashboard|*[/\\]playgrounds[/\\]basic|*[/\\]playgrounds[/\\]blog|*[/\\]playgrounds[/\\]dashboard) continue ;; esac
+            should_skip_playground "$d" && continue
             echo "::group::isolated $d"
             (cd "$d" && go mod download && go build ./... && go test -race -short ./...)
             echo "::endgroup::"
