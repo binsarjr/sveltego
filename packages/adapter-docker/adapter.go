@@ -11,11 +11,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/binsarjr/sveltego/adapter-docker/internal/fsutil"
 )
 
 // Name is the canonical target name for this adapter.
@@ -67,10 +68,10 @@ func Build(ctx context.Context, bc BuildContext) error {
 	bc.applyDefaults()
 
 	dockerfile := renderDockerfile(bc)
-	if err := writeFile(filepath.Join(bc.OutputDir, "Dockerfile"), dockerfile); err != nil {
+	if err := fsutil.WriteFile(filepath.Join(bc.OutputDir, "Dockerfile"), dockerfile, 0o644); err != nil {
 		return fmt.Errorf("adapter-docker: write Dockerfile: %w", err)
 	}
-	if err := writeFile(filepath.Join(bc.OutputDir, ".dockerignore"), dockerignoreTemplate); err != nil {
+	if err := fsutil.WriteFile(filepath.Join(bc.OutputDir, ".dockerignore"), dockerignoreTemplate, 0o644); err != nil {
 		return fmt.Errorf("adapter-docker: write .dockerignore: %w", err)
 	}
 	return nil
@@ -119,16 +120,4 @@ func renderDockerfile(bc BuildContext) string {
 	out = strings.ReplaceAll(out, "{{AssetsCopy}}", assetsCopy)
 	out = strings.ReplaceAll(out, "{{Port}}", strconv.Itoa(bc.Port))
 	return out
-}
-
-func writeFile(path, content string) error {
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644) //nolint:gosec // path is OutputDir/<known name>
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	if _, err := io.WriteString(f, content); err != nil {
-		return err
-	}
-	return f.Close()
 }

@@ -18,11 +18,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/binsarjr/sveltego/adapter-lambda/internal/fsutil"
 )
 
 // Name is the canonical target name for this adapter.
@@ -73,11 +74,11 @@ func Build(ctx context.Context, bc BuildContext) error {
 	}
 
 	mainGo := renderMainGo(bc)
-	if err := writeFile(filepath.Join(bc.OutputDir, "main.go"), mainGo); err != nil {
+	if err := fsutil.WriteFile(filepath.Join(bc.OutputDir, "main.go"), mainGo, 0o644); err != nil {
 		return fmt.Errorf("adapter-lambda: write main.go: %w", err)
 	}
 	sam := renderSAMTemplate(bc)
-	if err := writeFile(filepath.Join(bc.OutputDir, "template.yaml"), sam); err != nil {
+	if err := fsutil.WriteFile(filepath.Join(bc.OutputDir, "template.yaml"), sam, 0o644); err != nil {
 		return fmt.Errorf("adapter-lambda: write template.yaml: %w", err)
 	}
 	return nil
@@ -235,16 +236,4 @@ func renderSAMTemplate(bc BuildContext) string {
 	out = strings.ReplaceAll(out, "{{MemoryMB}}", strconv.Itoa(bc.MemoryMB))
 	out = strings.ReplaceAll(out, "{{TimeoutSeconds}}", strconv.Itoa(bc.TimeoutSeconds))
 	return out
-}
-
-func writeFile(path, content string) error {
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644) //nolint:gosec // path is OutputDir/<known name>
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	if _, err := io.WriteString(f, content); err != nil {
-		return err
-	}
-	return f.Close()
 }
