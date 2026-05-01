@@ -28,6 +28,8 @@ vendor/
 
 # sveltego build artifacts
 bin/
+# create-sveltego ships a Node CLI entry under bin/; keep it.
+!packages/create-sveltego/bin/
 coverage*.out
 coverage*.html
 *.prof
