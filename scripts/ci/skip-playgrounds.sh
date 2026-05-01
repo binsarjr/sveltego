@@ -26,6 +26,7 @@ SKIP_PLAYGROUNDS=(
   playgrounds/basic
   playgrounds/blog
   playgrounds/dashboard
+  playgrounds/ssr-stress
 )
 
 should_skip_playground() {

@@ -34,6 +34,11 @@ func TestCrossCheckFixtures(t *testing.T) {
 
 	total := 0
 	for _, path := range matches {
+		// Template-level fixtures use a different schema; they are
+		// driven by TestCrossCheckTemplates below.
+		if filepath.Base(path) == "templates.json" {
+			continue
+		}
 		path := path
 		t.Run(filepath.Base(path), func(t *testing.T) {
 			data, err := os.ReadFile(path)
@@ -56,6 +61,96 @@ func TestCrossCheckFixtures(t *testing.T) {
 	}
 	if total < 50 {
 		t.Errorf("fixture count = %d, acceptance bar is ≥50", total)
+	}
+}
+
+// templateCase is one full-template render fixture: a sequence of
+// payload-mutating ops (push, escape, attr, clsx, merge_styles,
+// spread_attributes) plus the Svelte 5 server-rendered HTML the chain
+// MUST produce byte-for-byte. Drives the ≥30 representative-template
+// cross-check from issue #429.
+type templateCase struct {
+	Name     string       `json:"name"`
+	Ops      []templateOp `json:"ops"`
+	Expected string       `json:"expected"`
+}
+
+type templateOp struct {
+	Op   string `json:"op"`
+	Args []any  `json:"args"`
+}
+
+type templateFile struct {
+	Kind          string         `json:"kind"`
+	SvelteVersion string         `json:"svelte_version"`
+	Cases         []templateCase `json:"cases"`
+}
+
+// TestCrossCheckTemplates drives ≥30 full-template render fixtures.
+// Each fixture's `expected` is a snapshot of the body Svelte's
+// `svelte/server` produces for the equivalent template; the Go side
+// plays back the same op sequence through Payload + helpers and must
+// reach byte-equality. Phase 7 (#429) cross-check bar.
+func TestCrossCheckTemplates(t *testing.T) {
+	t.Parallel()
+	data, err := os.ReadFile(filepath.Join("testdata", "cross", "templates.json"))
+	if err != nil {
+		t.Fatalf("read templates fixture: %v", err)
+	}
+	var f templateFile
+	if err := json.Unmarshal(data, &f); err != nil {
+		t.Fatalf("parse templates fixture: %v", err)
+	}
+	if len(f.Cases) < 30 {
+		t.Fatalf("templates corpus has %d entries; acceptance bar is ≥30", len(f.Cases))
+	}
+	for _, tc := range f.Cases {
+		tc := tc
+		t.Run(tc.Name, func(t *testing.T) {
+			t.Parallel()
+			var p Payload
+			for _, op := range tc.Ops {
+				runTemplateOp(t, &p, op)
+			}
+			got := p.Body()
+			if got != tc.Expected {
+				t.Fatalf("template body mismatch\n--- want:\n%s\n--- got:\n%s", tc.Expected, got)
+			}
+		})
+	}
+}
+
+func runTemplateOp(t *testing.T, p *Payload, op templateOp) {
+	t.Helper()
+	switch op.Op {
+	case "push":
+		s, _ := op.Args[0].(string)
+		p.Push(s)
+	case "escape_html":
+		p.Push(EscapeHTML(op.Args[0]))
+	case "escape_html_attr":
+		p.Push(EscapeHTMLAttr(op.Args[0]))
+	case "stringify":
+		p.Push(Stringify(op.Args[0]))
+	case "attr":
+		if len(op.Args) != 3 {
+			t.Fatalf("attr op expects 3 args, got %d", len(op.Args))
+		}
+		name, _ := op.Args[0].(string)
+		isBool, _ := op.Args[2].(bool)
+		p.Push(Attr(name, op.Args[1], isBool))
+	case "clsx":
+		p.Push(Clsx(normalizeJSONArgs(op.Args)...))
+	case "merge_styles":
+		p.Push(MergeStyles(normalizeJSONArgs(op.Args)...))
+	case "spread_attributes":
+		props, ok := op.Args[0].(map[string]any)
+		if !ok {
+			t.Fatalf("spread_attributes arg must be object")
+		}
+		p.Push(SpreadAttributes(props))
+	default:
+		t.Fatalf("unknown template op: %s", op.Op)
 	}
 }
 
