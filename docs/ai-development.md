@@ -14,7 +14,7 @@ This page collects the setup snippets and the gotchas worth knowing.
 
 ### Claude Code / Claude Desktop
 
-Project-level instructions live at the repo root in `CLAUDE.md`. Claude Code reads it automatically. The shipped `CLAUDE.md` includes the read-this-first list, the Go-expression invariants, and the verification gates.
+Project-level instructions live at the repo root in `CLAUDE.md`. Claude Code reads it automatically. The shipped `CLAUDE.md` includes the read-this-first list, the pure-Svelte template invariants (per [ADR 0008](https://github.com/binsarjr/sveltego/blob/main/tasks/decisions/0008-pure-svelte-pivot.md)), and the verification gates.
 
 For Claude Desktop's MCP integration:
 
@@ -64,9 +64,9 @@ To copy AI templates into an existing project (without scaffolding a new tree), 
 
 ### sveltego-specific gotchas
 
-LLMs default to JavaScript when generating Svelte. Remind them:
+LLMs default to SvelteKit-with-Node-server. Remind them:
 
-> Use Go expressions inside mustaches. PascalCase fields. `nil` not `null`. `len(x)` not `x.length`. Server modules need `//go:build sveltego` at the top.
+> Templates are pure Svelte/JS/TS — `let { data } = $props()`, `{data.user.name}`, `null` not `nil`. Server-side data lives in `_page.server.go` (Go), not `+page.server.ts`. Files under `src/routes/**` use the `_` prefix (`_page.server.go`, `_layout.server.go`, `_server.go`) so Go's default toolchain skips them. `src/params/**` and `hooks.server.go` still need `//go:build sveltego`.
 
 The shipped templates do this for you; the prompts below assume the rules are loaded.
 
@@ -74,28 +74,29 @@ The shipped templates do this for you; the prompts below assume the rules are lo
 
 **Scaffold a route**
 
-> Create a `src/routes/blog/[slug]` route with `_page.svelte` and `page.server.go`. The page shows a `Post` fetched by slug from `db.PostBySlug(ctx, slug)`. Fields: `Title`, `Body` (HTML), `PublishedAt` (`time.Time`).
+> Create a `src/routes/blog/[slug]` route with `_page.svelte` (pure Svelte) and `_page.server.go` (Go). The page shows a `Post` fetched by slug from `db.PostBySlug(ctx, slug)`. Fields: `title`, `body` (HTML), `publishedAt` (ISO string). On the Go side: `Title string \`json:"title"\``, `Body string \`json:"body"\``, `PublishedAt time.Time \`json:"publishedAt"\``.
 
 **Write a form action**
 
-> Add a comment form to `src/routes/blog/[slug]/_page.svelte` and an action in `page.server.go` that validates body is non-empty, appends to `db.Comments`, and redirects back to the page on success or returns `kit.ActionFail(422, ...)` on validation failure.
+> Add a comment form to `src/routes/blog/[slug]/_page.svelte` (use `<form method="POST" use:enhance>`) and an action in `_page.server.go` that validates body is non-empty, appends to `db.Comments`, and redirects back to the page on success or returns `kit.ActionFail(422, ...)` on validation failure.
 
 **Add a hook**
 
-> Add `hooks.server.go` with a `Handle` that reads cookie `session`, calls `auth.LookupUser(token)`, and attaches `*User` to `ev.Locals["user"]`. Use `kit.Sequence` so we can chain another handler later.
+> Add `hooks.server.go` (with `//go:build sveltego`) with a `Handle` that reads cookie `session`, calls `auth.LookupUser(token)`, and attaches `*User` to `ev.Locals["user"]`. Use `kit.Sequence` so we can chain another handler later.
 
 ## Watch out for
 
-LLMs reach for SvelteKit-flavored patterns. Reject these:
+LLMs reach for stale or wrong patterns. Reject these:
 
-- `export let prop` → use `$props[T]()`.
-- `<script>` without `lang="go"` → reject.
+- `export let prop` → use `let { prop } = $props()`.
+- `<script lang="go">` inside `.svelte` → templates are 100% pure Svelte/JS/TS now (per [ADR 0008](https://github.com/binsarjr/sveltego/blob/main/tasks/decisions/0008-pure-svelte-pivot.md)). Server-side Go lives in `_page.server.go`.
+- `{Data.User.Name}` (PascalCase, Go-style) → `{data.user.name}` (camelCase via JSON tags). The legacy Mustache-Go dialect is removed.
 - `kit.json(...)` (lowercase) → actual API is `kit.JSON(status, body)`.
-- `throw redirect(303, ...)` → `return data, kit.Redirect(303, ...)`.
-- `data.posts.length` in mustaches → `len(Data.Posts)`.
-- `data.user?.name` → Go has no optional chaining; check `Data.User != nil`.
+- `throw redirect(303, ...)` (in Go) → `return data, kit.Redirect(303, ...)`.
+- `data.user?.name` in `.svelte` → fine on the client (standard JS optional chaining); plan for it on the Go side by leaving `User` as a pointer or omitempty field.
 - `useState`, `writable`, `derived` from Svelte stores → use runes (`$state`, `$derived`).
 - Universal Load (`+page.ts`) → server-only by design; not supported.
+- `+page.server.ts` filenames → use `_page.server.go`. The `_` prefix hides the file from Go's default toolchain (RFC #379 phase 1b).
 
 ## Markdown access for assistants
 

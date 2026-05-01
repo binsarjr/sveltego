@@ -44,11 +44,12 @@ Import the stylesheet in your root layout:
 
 ```svelte
 <!-- src/routes/_layout.svelte -->
-<script lang="go">
-  import "../app.css";
+<script lang="ts">
+  import '../app.css';
+  let { children } = $props();
 </script>
 
-<slot />
+{@render children()}
 ```
 
 ## Content globs
@@ -125,16 +126,18 @@ sveltego's codegen (Phase 0dd / [#54](https://github.com/binsarjr/sveltego/issue
 
 ### Dynamic class strings are purged
 
-Tailwind's scanner looks for complete class names as static strings. A class built at runtime will be purged in production:
+Tailwind's scanner looks for complete class names as static strings (in `.svelte` markup or in the Go `Load`/`Actions` source). A class built at runtime will be purged in production. Stick to full literals on either side:
 
-```go
-// Bad — "text-red-500" never appears as a literal; Tailwind purges it.
-color := "red"
-cls := "text-" + color + "-500"
+```svelte
+<!-- Bad — assembled at render time, never appears as a literal in source -->
+<p class={`text-${color}-500`}>...</p>
+
+<!-- Good — full literals, branch on them -->
+<p class={danger ? 'text-red-500' : 'text-gray-700'}>...</p>
 ```
 
 ```go
-// Good — use a full literal string; branch on it in Go.
+// Same rule in Go: use full literals when assembling class names server-side.
 var cls string
 if danger {
     cls = "text-red-500"

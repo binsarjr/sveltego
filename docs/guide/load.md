@@ -11,15 +11,13 @@ summary: Server-side Load functions, parent layout data, request-scoped fetch.
 ## Page load
 
 ```go
-//go:build sveltego
-
 package routes
 
 import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
 type PageData struct {
-  Title string
-  Posts []Post
+  Title string `json:"title"`
+  Posts []Post `json:"posts"`
 }
 
 func Load(ctx *kit.LoadCtx) (PageData, error) {
@@ -31,11 +29,11 @@ func Load(ctx *kit.LoadCtx) (PageData, error) {
 }
 ```
 
-Inside the template, fields are referenced as `{Data.Title}`, `{Data.Posts}`, etc. PascalCase, Go expressions, `nil` not `null`.
+`_page.server.go` does not need a `//go:build sveltego` tag — the `_` prefix already hides the file from Go's default toolchain. Inside the template, fields are accessed via the `data` prop with names driven by JSON tags: `{data.title}`, `{data.posts}`. `null` not `nil`. Codegen reads this `Load` return type and emits a sibling `_page.svelte.d.ts` so Svelte LSP autocompletes `data.*` end to end.
 
 ## Layout load
 
-`layout.server.go` works the same way and exports `LayoutData`. The pipeline runs each layer's `Load` outer-to-inner. Children read the immediate parent through `ctx.Parent()`:
+`_layout.server.go` works the same way and exports `LayoutData`. The pipeline runs each layer's `Load` outer-to-inner. Children read the immediate parent through `ctx.Parent()`:
 
 ```go
 parent := ctx.Parent().(rootlayout.LayoutData)
@@ -80,4 +78,4 @@ The render path emits a placeholder, flushes the shell, then patches the slot wh
 
 - It cannot run on the client. Loaders are server-only.
 - It must not mutate `RequestEvent.Locals` after `Handle` finished — read only.
-- It cannot write to `http.ResponseWriter`; responses come from the page template or a `server.go` handler.
+- It cannot write to `http.ResponseWriter`; responses come from the page template or a `_server.go` handler.

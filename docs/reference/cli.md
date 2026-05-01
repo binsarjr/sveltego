@@ -30,15 +30,15 @@ Full pipeline: codegen → Vite client bundle → `go build -o build/app ./cmd/a
 
 ### `sveltego compile`
 
-Codegen only. Writes `.gen/*.go`. Use this when iterating on templates without rebuilding the binary.
+Codegen only. Writes `.gen/manifest.gen.go`, `.gen/links.gen.go`, and sibling `*.svelte.d.ts` declarations next to each `.svelte`. Use this when iterating on routes without rebuilding the binary.
 
 ### `sveltego dev`
 
-**Stub today** — deferred to v0.3 ([#42](https://github.com/binsarjr/sveltego/issues/42)). Will watch `src/routes/**`, regenerate `.gen/*.go` on change, restart the server, and proxy the Vite dev server for client HMR.
+**Stub today** — deferred to v0.3 ([#42](https://github.com/binsarjr/sveltego/issues/42)). Will watch `src/routes/**`, regenerate manifest + `.svelte.d.ts` on change, restart the server, and proxy the Vite dev server for client HMR.
 
 ### `sveltego check`
 
-**Stub today.** Will validate without writing output: parser pass + Go expression validator over every `_page.svelte` / `_layout.svelte`, intended for CI before `build`. Milestone TBD.
+**Stub today.** Will validate without writing output: parser pass over every `_page.svelte` / `_layout.svelte`, route + `Load` shape sanity check, intended for CI before `build`. Milestone TBD.
 
 ### `sveltego routes`
 

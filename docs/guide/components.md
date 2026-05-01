@@ -1,49 +1,56 @@
 ---
 title: Components
 order: 70
-summary: Svelte 5 runes — $props, $state, $derived, $effect, $bindable.
+summary: Svelte 5 runes — $props, $state, $derived, $effect, $bindable. Pure Svelte/JS/TS.
 ---
 
 # Components
 
 sveltego targets **Svelte 5 only**. Legacy Svelte 4 reactivity (`$:`, store auto-subscriptions, `export let`) is not supported. Use runes.
 
+`.svelte` files are 100% pure Svelte/JS/TS — the same syntax SvelteKit uses. The `data` prop arrives from `_page.server.go`'s `Load` (Go side); JSON tags drive the Go-to-TypeScript field mapping, so a Go field `User User \`json:"user"\`` shows up as `data.user` in the template.
+
 ## Props
 
 ```svelte
-<script lang="go">
-  type Props struct {
-    Name  string
-    Count int
-  }
-  var p = $props[Props]()
+<script lang="ts">
+  let { name, count } = $props();
 </script>
 
-<p>Hello {p.Name}, {p.Count} unread.</p>
+<p>Hello {name}, {count} unread.</p>
 ```
 
-`$props[T]()` returns a typed value. Field access in the template (`{p.Name}`) is a Go expression: PascalCase, no JS pattern destructuring at the prop boundary.
+For typed props, use a TypeScript type:
+
+```svelte
+<script lang="ts">
+  type Props = { name: string; count: number };
+  let { name, count }: Props = $props();
+</script>
+```
+
+For pages, codegen emits a sibling `_page.svelte.d.ts` describing `data`'s shape (built from your `_page.server.go` `Load` return type), so Svelte LSP autocompletes `data.*` end to end with no manual type annotation.
 
 ## State
 
 ```svelte
-<script lang="go">
-  var count = $state(0)
+<script lang="ts">
+  let count = $state(0);
 </script>
 
-<button onclick={func() { count++ }}>
+<button onclick={() => count++}>
   Clicked {count} times
 </button>
 ```
 
-`$state[T](initial)` creates a reactive cell. Reads and writes are via the cell value; the runtime tracks dependencies for re-render on the client.
+`$state(initial)` creates a reactive cell. Reads and writes look like normal variables; the Svelte compiler rewrites them into reactivity primitives.
 
 ## Derived
 
 ```svelte
-<script lang="go">
-  var count = $state(0)
-  var doubled = $derived(count * 2)
+<script lang="ts">
+  let count = $state(0);
+  let doubled = $derived(count * 2);
 </script>
 
 <p>{doubled}</p>
@@ -54,11 +61,11 @@ sveltego targets **Svelte 5 only**. Legacy Svelte 4 reactivity (`$:`, store auto
 ## Effects
 
 ```svelte
-<script lang="go">
-  var count = $state(0)
-  $effect(func() {
-    log("count changed to", count)
-  })
+<script lang="ts">
+  let count = $state(0);
+  $effect(() => {
+    console.log('count changed to', count);
+  });
 </script>
 ```
 
@@ -67,32 +74,31 @@ sveltego targets **Svelte 5 only**. Legacy Svelte 4 reactivity (`$:`, store auto
 ## Bindable
 
 ```svelte
-<script lang="go">
-  type Props struct {
-    Value string
-  }
-  var p = $bindable[Props]()
+<script lang="ts">
+  let { value = $bindable() } = $props();
 </script>
 
-<input bind:value={p.Value} />
+<input bind:value />
 ```
 
-`$bindable[T]()` declares a two-way binding. The parent component supplies and updates the bound value through the same field.
+`$bindable()` declares a two-way binding. The parent component supplies and updates the bound value through the same prop.
 
-## Mustache expressions
+## Template expressions
 
-Inside `{...}` you write Go:
+Inside `{...}` you write standard JavaScript / TypeScript expressions over the `data` prop and any local state:
 
 ```svelte
-{Data.User.Name}
-{len(Data.Posts)}
-{strings.ToUpper(Data.Title)}
-{#if Data.Posts != nil && len(Data.Posts) > 0}
+{data.user.name}
+{data.posts.length}
+{data.title.toUpperCase()}
+{#if data.posts && data.posts.length > 0}
   ...
 {/if}
-{#each Data.Posts as post}
-  <li>{post.Title}</li>
+{#each data.posts as post}
+  <li>{post.title}</li>
 {/each}
 ```
 
-Validated at codegen via `go/parser.ParseExpr`. Type errors surface at `sveltego build`, not runtime.
+Field names use camelCase by convention (driven by JSON tags on the Go side). `null` not `nil`. Empty slices serialize as JSON `[]` so `data.posts.length` is always defined.
+
+See [ADR 0008](https://github.com/binsarjr/sveltego/blob/main/tasks/decisions/0008-pure-svelte-pivot.md) for the rationale behind pure-Svelte templates.

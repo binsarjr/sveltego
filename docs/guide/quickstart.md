@@ -45,11 +45,11 @@ sveltego version
 hello/
   src/
     routes/
-      _page.svelte
-      page.server.go         # //go:build sveltego (no `+` prefix on user .go files)
+      _page.svelte           # pure Svelte/JS/TS
+      _page.server.go        # `_` prefix; Go toolchain skips
       _layout.svelte
     lib/                     # $lib alias target ($lib/.gitkeep)
-  hooks.server.go            # //go:build sveltego
+  hooks.server.go            # //go:build sveltego (no `_` prefix)
   sveltego.config.go         # //go:build sveltego
   go.mod
   README.md
@@ -60,38 +60,40 @@ The scaffold writes `cmd/app/main.go`, `app.html`, `package.json`, and `vite.con
 
 ## A minimal route
 
-`src/routes/_page.svelte`:
+`src/routes/_page.svelte` (pure Svelte — copy across from any SvelteKit project unchanged):
 
 ```svelte
-<script lang="go">
-  type PageData struct {
-    Greeting string
-  }
+<script lang="ts">
+  let { data } = $props();
 </script>
 
-<h1>{Data.Greeting}</h1>
+<h1>{data.greeting}</h1>
 ```
 
-`src/routes/_page.server.go` (no `+` prefix — user `.go` files use the `//go:build sveltego` tag instead, so the standard Go toolchain ignores them):
+`src/routes/_page.server.go` (the `_` prefix hides the file from Go's default toolchain — no `//go:build sveltego` tag needed):
 
 ```go
-//go:build sveltego
-
 package routes
 
 import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
+
+type PageData struct {
+  Greeting string `json:"greeting"`
+}
 
 func Load(ctx *kit.LoadCtx) (PageData, error) {
   return PageData{Greeting: "hello, sveltego"}, nil
 }
 ```
 
+Codegen reads the `Load` return type and emits a sibling `_page.svelte.d.ts` so `data.greeting` autocompletes in your editor with no manual type duplication.
+
 ## Develop
 
 `sveltego dev` is a stub today (deferred to v0.3, [#42](https://github.com/binsarjr/sveltego/issues/42)). For now: re-run `sveltego compile` after editing `.svelte` or user `.go` files, then re-run the binary.
 
 ```sh
-sveltego compile         # regenerate .gen/*.go
+sveltego compile         # regenerate manifest + .svelte.d.ts
 go run ./cmd/app         # boot the server
 ```
 

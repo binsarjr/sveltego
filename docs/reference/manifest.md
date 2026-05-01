@@ -31,8 +31,8 @@ Runtime route lookup is a map index, not a tree walk. Every static decision (whi
 
 The file is overwritten on every codegen run. Source of truth lives in:
 
-- `page.server.go` for `Load`, `Actions`, page options.
-- `layout.server.go` for layout `Load` and cascaded options.
+- `_page.server.go` for `Load`, `Actions`, page options.
+- `_layout.server.go` for layout `Load` and cascaded options.
 - `hooks.server.go` for hooks.
 - File paths under `src/routes/` for patterns.
 

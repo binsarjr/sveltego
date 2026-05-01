@@ -18,15 +18,19 @@ Runes (`$props`, `$state`, `$derived`, `$effect`, `$bindable`) are easier to com
 
 ## Can I write TypeScript in `<script>`?
 
-No. `<script lang="go">` is the only supported language. The expression validator runs `go/parser` on every mustache.
+Yes. Templates are 100% pure Svelte/JS/TS — `<script lang="ts">` works as in any SvelteKit project. The Svelte LSP and the standard Svelte ecosystem apply unchanged. Server-side data loading lives in Go (`_page.server.go`); codegen reads its AST and emits a sibling `_page.svelte.d.ts` so Svelte LSP autocompletes `data.*` end to end.
 
 ## Can I use my SvelteKit components?
 
-Markup mostly. Mustaches must be rewritten to Go. Component scripts must be rewritten to Go. The result is a port, not a drop-in.
+Yes — markup, scripts, and most third-party Svelte components copy across unchanged. The break vs. SvelteKit is on the server side: `+page.server.ts` becomes `_page.server.go` (and you write `Load`/`Actions` in Go); universal `+page.ts` / `+layout.ts` is not supported. The `.svelte` files themselves stay pure.
 
 ## Where is hot reload?
 
-`sveltego dev` is the planned watch + regenerate + HMR proxy command, but today it is a stub (deferred to v0.3, [#42](https://github.com/binsarjr/sveltego/issues/42)). For now, re-run `sveltego compile` after editing templates and restart the server. Once it ships, the Go server restart will be the primary feedback loop, with browser HMR for the Vite client bundle handled by Vite as in any other project.
+`sveltego dev` is the planned watch + regenerate + HMR proxy command, but today it is a stub (deferred to v0.3, [#42](https://github.com/binsarjr/sveltego/issues/42)). For now, re-run `sveltego compile` after editing routes (regenerates manifest + `.svelte.d.ts`) and restart the server. Once it ships, the Go server restart will be the primary feedback loop, with browser HMR for the Vite client bundle handled by Vite as in any other project.
+
+## What's the difference between SSG-mode and SPA-mode for my route?
+
+Routes opting into `kit.PageOptions{Prerender: true}` are rendered to static HTML at build time via `svelte/server` (Node runs only during `sveltego build`); the deployed Go binary serves the cached HTML with no per-request work — ideal for marketing pages, blog posts, docs. Everything else ships as a SPA: the Go server returns a tiny shell + JSON payload from `Load`, and the Svelte client mounts and renders. Both modes use the same `.svelte` source; the only difference is *when* it executes. The deployed binary has no JS engine in either case.
 
 ## How do I serve static files?
 

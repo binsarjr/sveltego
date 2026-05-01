@@ -6,22 +6,22 @@ summary: Reusable template fragments via {#snippet} and {@render}.
 
 # Snippets
 
-Snippets are reusable template fragments declared inside a component. They replace slot fall-throughs from older Svelte versions and compose better with typed props.
+Snippets are reusable template fragments declared inside a component. They replace slot fall-throughs from older Svelte versions and compose better with typed props. Standard Svelte 5 syntax — sveltego does not modify it.
 
 ## Declaring
 
 ```svelte
-{#snippet greeting(name string)}
+{#snippet greeting(name)}
   <p>Hello {name}.</p>
 {/snippet}
 ```
 
-A snippet captures parameters by name. Inside the body, parameters are Go-typed; field access is `{name}`, not `{name.value}` or anything JS-flavored.
+A snippet captures parameters by name. Inside the body, parameters are JavaScript values.
 
 ## Rendering
 
 ```svelte
-{@render greeting("world")}
+{@render greeting('world')}
 ```
 
 `{@render snippet(args...)}` invokes a snippet. Multiple invocations with different arguments produce different output.
@@ -31,26 +31,25 @@ A snippet captures parameters by name. Inside the body, parameters are Go-typed;
 A component can accept snippets as props:
 
 ```svelte
-<script lang="go">
-  type Props struct {
-    Item func(p Post)
-  }
-  var p = $props[Props]()
+<script lang="ts">
+  let { item, data } = $props();
 </script>
 
-{#each Data.Posts as post}
-  {@render p.Item(post)}
+{#each data.posts as post}
+  {@render item(post)}
 {/each}
 ```
 
 The parent passes a snippet:
 
 ```svelte
-<List Item={#snippet (post Post)}
-  <article>
-    <h2>{post.Title}</h2>
-  </article>
-{/snippet} />
+<List {data}>
+  {#snippet item(post)}
+    <article>
+      <h2>{post.title}</h2>
+    </article>
+  {/snippet}
+</List>
 ```
 
 ## Out of scope

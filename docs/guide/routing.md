@@ -1,22 +1,22 @@
 ---
 title: Routing
 order: 20
-summary: File-based routing — _page.svelte, page.server.go, server.go, params, groups.
+summary: File-based routing — _page.svelte, _page.server.go, _server.go, params, groups.
 ---
 
 # Routing
 
-sveltego uses file-based routing under `src/routes/`. The conventions match SvelteKit, with one constraint: every Go file in `src/routes/**` and `src/params/**` MUST start with `//go:build sveltego` so Go's default toolchain skips them. Codegen reads them through `go/parser` directly.
+sveltego uses file-based routing under `src/routes/`. The conventions match SvelteKit. Server-side Go files in `src/routes/**` use the `_` prefix (`_page.server.go`, `_layout.server.go`, `_server.go`); Go's default toolchain skips files whose names start with `_`, so no build tag is required there (RFC #379 phase 1b). Files under `src/params/**` MUST still start with `//go:build sveltego` because their filenames have no `_` prefix. Codegen parses every user `.go` file via `go/parser` regardless.
 
 ## Files
 
 | File | Purpose |
 |---|---|
-| `_page.svelte` | SSR template. Mustache expressions are Go. |
-| `page.server.go` | Page server module: `Load`, `Actions`. No `+` prefix; identified by `//go:build sveltego`. |
+| `_page.svelte` | Pure Svelte/JS/TS template. `data` props arrive from `_page.server.go`'s `Load`. |
+| `_page.server.go` | Page server module: `Load`, `Actions`. The `_` prefix hides it from Go's default toolchain. |
 | `_layout.svelte` | Layout chain. Wraps descendant `_page.svelte`. |
-| `layout.server.go` | Layout-level `Load` cascading to children. No `+` prefix. |
-| `server.go` | REST endpoints (`GET`, `POST`, ...). No template, no `+` prefix. |
+| `_layout.server.go` | Layout-level `Load` cascading to children. |
+| `_server.go` | REST endpoints (`GET`, `POST`, ...). No template. |
 | `_error.svelte` | Error boundary for the subtree. |
 | `_page@.svelte` | Layout reset — opt out of the parent chain. |
 
@@ -56,11 +56,9 @@ Reference it as `[id=hex]`.
 
 ## Endpoints
 
-`server.go` exposes named handlers per HTTP method:
+`_server.go` exposes named handlers per HTTP method (the `_` prefix hides it from Go's default toolchain — no build tag needed):
 
 ```go
-//go:build sveltego
-
 package routes
 
 import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
