@@ -76,7 +76,14 @@ func runSSRTranspile(ctx context.Context, projectRoot, outDir, modulePath string
 		Jobs:   jobs,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("codegen: ssr ast: %w", err)
+		// Sidecar-deps-missing or sidecar-source-tree-missing are
+		// build-host configuration errors; treat them as the same
+		// soft-fallback as Node-missing so the build completes and
+		// each route serves the SPA shell. Operators see the warning
+		// and can run `npm install` in the sidecar tree.
+		logger.Warn("ssr ast skipped; routes fall back to SPA shell",
+			logKeyDiagnostic, err.Error())
+		return nil, nil
 	}
 	resultsByRoute := make(map[string]string, len(results))
 	for _, r := range results {
