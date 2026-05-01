@@ -6,11 +6,10 @@ summary: sveltego command reference — build, compile, dev, check, routes, vers
 
 # CLI
 
-`sveltego` is the project's primary command-line entry point. Project scaffolding lives in a separate binary, `sveltego-init`. Install with:
+`sveltego` is the project's primary command-line entry point. Project scaffolding lives in a separate binary, `sveltego-init`, that is normally invoked through `go run @latest` rather than installed globally. Install the framework CLI with:
 
 ```sh
 go install github.com/binsarjr/sveltego/cmd/sveltego@latest
-go install github.com/binsarjr/sveltego/init/cmd/sveltego-init@latest
 ```
 
 ## Global flags
@@ -49,18 +48,18 @@ Print the route table. One line per route with: pattern, file, presence of `Load
 
 Print version, Go runtime version, OS, and architecture.
 
-## `sveltego-init` (separate binary)
+## `sveltego-init` (zero-clone scaffolder)
 
-Project scaffolder. See [`packages/init/README.md`](https://github.com/binsarjr/sveltego/blob/main/packages/init/README.md) for the full flag list. Quickly:
+Project scaffolder. The canonical entry point is `go run @latest` — no clone, no global install. See [`packages/init/README.md`](https://github.com/binsarjr/sveltego/blob/main/packages/init/README.md) for the full flag list.
 
 ```sh
-sveltego-init ./my-app                    # baseline scaffold
-sveltego-init --ai ./my-app               # baseline + AI-assistant templates
-sveltego-init --module example.com/x ./my-app
-sveltego-init --force ./my-app            # overwrite existing files
+go run github.com/binsarjr/sveltego/packages/init/cmd/sveltego-init@latest ./my-app
+go run github.com/binsarjr/sveltego/packages/init/cmd/sveltego-init@latest --ai ./my-app
+go run github.com/binsarjr/sveltego/packages/init/cmd/sveltego-init@latest --tailwind=v4 --module example.com/x ./my-app
+go run github.com/binsarjr/sveltego/packages/init/cmd/sveltego-init@latest --service-worker ./my-app
 ```
 
-Scaffold output is incomplete pending [#356](https://github.com/binsarjr/sveltego/issues/356) — copy `cmd/app/main.go`, `app.html`, `package.json`, and `vite.config.js` from `playgrounds/basic/` until that lands.
+Want a local install instead? `go install github.com/binsarjr/sveltego/packages/init/cmd/sveltego-init@latest` puts a `sveltego-init` binary on `$GOPATH/bin`. Use `go run` for one-off scaffolds; install only if you scaffold often enough that fetch latency matters.
 
 ## Exit codes
 
