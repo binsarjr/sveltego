@@ -68,6 +68,7 @@ export default defineConfig({
             { text: 'Routes', link: '/reference/routes' },
             { text: 'Manifest', link: '/reference/manifest' },
             { text: 'CLI', link: '/reference/cli' },
+            { text: 'Performance', link: '/reference/perf' },
           ],
         },
       ],
