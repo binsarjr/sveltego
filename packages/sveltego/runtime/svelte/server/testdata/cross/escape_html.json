@@ -1,0 +1,23 @@
+{
+  "helper": "EscapeHTML",
+  "svelte_version": "5.x",
+  "cases": [
+    { "name": "empty", "in": "", "want": "" },
+    { "name": "plain", "in": "hello", "want": "hello" },
+    { "name": "amp", "in": "a & b", "want": "a &amp; b" },
+    { "name": "lt", "in": "a < b", "want": "a &lt; b" },
+    { "name": "amp-and-lt", "in": "a & b < c", "want": "a &amp; b &lt; c" },
+    { "name": "gt-not-escaped", "in": "a > b", "want": "a > b" },
+    { "name": "quote-not-escaped", "in": "say \"hi\"", "want": "say \"hi\"" },
+    { "name": "apos-not-escaped", "in": "it's", "want": "it's" },
+    { "name": "null", "in": null, "want": "" },
+    { "name": "number", "in": 42, "want": "42" },
+    { "name": "true", "in": true, "want": "true" },
+    { "name": "false", "in": false, "want": "false" },
+    { "name": "many-amps", "in": "&&&", "want": "&amp;&amp;&amp;" },
+    { "name": "trailing-amp", "in": "x&", "want": "x&amp;" },
+    { "name": "leading-amp", "in": "&x", "want": "&amp;x" },
+    { "name": "script-tag", "in": "<script>", "want": "&lt;script>" },
+    { "name": "html-entity", "in": "&amp;", "want": "&amp;amp;" }
+  ]
+}
