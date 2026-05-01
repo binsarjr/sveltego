@@ -1,6 +1,6 @@
 module github.com/binsarjr/sveltego/packages/sveltego
 
-go 1.23
+go 1.25
 
 require (
 	github.com/fsnotify/fsnotify v1.7.0

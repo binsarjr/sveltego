@@ -1,6 +1,6 @@
 module github.com/binsarjr/sveltego/adapter-auto
 
-go 1.22
+go 1.25
 
 require (
 	github.com/binsarjr/sveltego/adapter-cloudflare v0.0.0-00010101000000-000000000000
