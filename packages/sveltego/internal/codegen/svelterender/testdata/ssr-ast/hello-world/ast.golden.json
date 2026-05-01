@@ -1,0 +1,288 @@
+{
+  "ast": {
+    "body": [
+      {
+        "attributes": [],
+        "end": 44,
+        "source": {
+          "end": 43,
+          "raw": "'svelte/internal/server'",
+          "start": 19,
+          "type": "Literal",
+          "value": "svelte/internal/server"
+        },
+        "specifiers": [
+          {
+            "end": 13,
+            "local": {
+              "end": 13,
+              "name": "$",
+              "start": 12,
+              "type": "Identifier"
+            },
+            "start": 7,
+            "type": "ImportNamespaceSpecifier"
+          }
+        ],
+        "start": 0,
+        "type": "ImportDeclaration"
+      },
+      {
+        "declaration": {
+          "async": false,
+          "body": {
+            "body": [
+              {
+                "end": 230,
+                "expression": {
+                  "arguments": [
+                    {
+                      "async": false,
+                      "body": {
+                        "body": [
+                          {
+                            "declarations": [
+                              {
+                                "end": 163,
+                                "id": {
+                                  "end": 153,
+                                  "properties": [
+                                    {
+                                      "computed": false,
+                                      "end": 151,
+                                      "key": {
+                                        "end": 151,
+                                        "name": "data",
+                                        "start": 147,
+                                        "type": "Identifier"
+                                      },
+                                      "kind": "init",
+                                      "method": false,
+                                      "shorthand": true,
+                                      "start": 147,
+                                      "type": "Property",
+                                      "value": {
+                                        "end": 151,
+                                        "name": "data",
+                                        "start": 147,
+                                        "type": "Identifier"
+                                      }
+                                    }
+                                  ],
+                                  "start": 145,
+                                  "type": "ObjectPattern"
+                                },
+                                "init": {
+                                  "end": 163,
+                                  "name": "$$props",
+                                  "start": 156,
+                                  "type": "Identifier"
+                                },
+                                "start": 145,
+                                "type": "VariableDeclarator"
+                              }
+                            ],
+                            "end": 164,
+                            "kind": "let",
+                            "start": 141,
+                            "type": "VariableDeclaration"
+                          },
+                          {
+                            "end": 225,
+                            "expression": {
+                              "arguments": [
+                                {
+                                  "end": 223,
+                                  "expressions": [
+                                    {
+                                      "arguments": [
+                                        {
+                                          "computed": false,
+                                          "end": 215,
+                                          "object": {
+                                            "end": 210,
+                                            "name": "data",
+                                            "start": 206,
+                                            "type": "Identifier"
+                                          },
+                                          "optional": false,
+                                          "property": {
+                                            "end": 215,
+                                            "name": "name",
+                                            "start": 211,
+                                            "type": "Identifier"
+                                          },
+                                          "start": 206,
+                                          "type": "MemberExpression"
+                                        }
+                                      ],
+                                      "callee": {
+                                        "computed": false,
+                                        "end": 205,
+                                        "object": {
+                                          "end": 198,
+                                          "name": "$",
+                                          "start": 197,
+                                          "type": "Identifier"
+                                        },
+                                        "optional": false,
+                                        "property": {
+                                          "end": 205,
+                                          "name": "escape",
+                                          "start": 199,
+                                          "type": "Identifier"
+                                        },
+                                        "start": 197,
+                                        "type": "MemberExpression"
+                                      },
+                                      "end": 216,
+                                      "optional": false,
+                                      "start": 197,
+                                      "type": "CallExpression"
+                                    }
+                                  ],
+                                  "quasis": [
+                                    {
+                                      "end": 195,
+                                      "start": 185,
+                                      "tail": false,
+                                      "type": "TemplateElement",
+                                      "value": {
+                                        "cooked": "<h1>Hello ",
+                                        "raw": "<h1>Hello "
+                                      }
+                                    },
+                                    {
+                                      "end": 222,
+                                      "start": 217,
+                                      "tail": true,
+                                      "type": "TemplateElement",
+                                      "value": {
+                                        "cooked": "</h1>",
+                                        "raw": "</h1>"
+                                      }
+                                    }
+                                  ],
+                                  "start": 184,
+                                  "type": "TemplateLiteral"
+                                }
+                              ],
+                              "callee": {
+                                "computed": false,
+                                "end": 183,
+                                "object": {
+                                  "end": 178,
+                                  "name": "$$renderer",
+                                  "start": 168,
+                                  "type": "Identifier"
+                                },
+                                "optional": false,
+                                "property": {
+                                  "end": 183,
+                                  "name": "push",
+                                  "start": 179,
+                                  "type": "Identifier"
+                                },
+                                "start": 168,
+                                "type": "MemberExpression"
+                              },
+                              "end": 224,
+                              "optional": false,
+                              "start": 168,
+                              "type": "CallExpression"
+                            },
+                            "start": 168,
+                            "type": "ExpressionStatement"
+                          }
+                        ],
+                        "end": 228,
+                        "start": 137,
+                        "type": "BlockStatement"
+                      },
+                      "end": 228,
+                      "expression": false,
+                      "generator": false,
+                      "id": null,
+                      "params": [
+                        {
+                          "end": 132,
+                          "name": "$$renderer",
+                          "start": 122,
+                          "type": "Identifier"
+                        }
+                      ],
+                      "start": 121,
+                      "type": "ArrowFunctionExpression"
+                    }
+                  ],
+                  "callee": {
+                    "computed": false,
+                    "end": 120,
+                    "object": {
+                      "end": 110,
+                      "name": "$$renderer",
+                      "start": 100,
+                      "type": "Identifier"
+                    },
+                    "optional": false,
+                    "property": {
+                      "end": 120,
+                      "name": "component",
+                      "start": 111,
+                      "type": "Identifier"
+                    },
+                    "start": 100,
+                    "type": "MemberExpression"
+                  },
+                  "end": 229,
+                  "optional": false,
+                  "start": 100,
+                  "type": "CallExpression"
+                },
+                "start": 100,
+                "type": "ExpressionStatement"
+              }
+            ],
+            "end": 232,
+            "start": 97,
+            "type": "BlockStatement"
+          },
+          "end": 232,
+          "expression": false,
+          "generator": false,
+          "id": {
+            "end": 75,
+            "name": "_page",
+            "start": 70,
+            "type": "Identifier"
+          },
+          "params": [
+            {
+              "end": 86,
+              "name": "$$renderer",
+              "start": 76,
+              "type": "Identifier"
+            },
+            {
+              "end": 95,
+              "name": "$$props",
+              "start": 88,
+              "type": "Identifier"
+            }
+          ],
+          "start": 61,
+          "type": "FunctionDeclaration"
+        },
+        "end": 232,
+        "start": 46,
+        "type": "ExportDefaultDeclaration"
+      }
+    ],
+    "end": 232,
+    "sourceType": "module",
+    "start": 0,
+    "type": "Program"
+  },
+  "route": "/hello-world",
+  "schema": "ssr-json-ast/v1"
+}
