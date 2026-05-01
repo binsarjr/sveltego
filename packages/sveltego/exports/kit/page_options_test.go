@@ -11,8 +11,8 @@ func TestPageOptions_DefaultsAndMerge(t *testing.T) {
 	if base.TrailingSlash != TrailingSlashNever {
 		t.Fatalf("trailing-slash default = %v, want never", base.TrailingSlash)
 	}
-	if base.Templates != TemplatesGoMustache {
-		t.Fatalf("templates default = %q, want %q", base.Templates, TemplatesGoMustache)
+	if base.Templates != TemplatesSvelte {
+		t.Fatalf("templates default = %q, want %q", base.Templates, TemplatesSvelte)
 	}
 
 	out := base.Merge(PageOptionsOverride{HasSSR: true, SSR: false})
@@ -28,8 +28,8 @@ func TestPageOptions_DefaultsAndMerge(t *testing.T) {
 		t.Fatalf("trailing-slash override missed: %+v", out)
 	}
 
-	out = base.Merge(PageOptionsOverride{HasTemplates: true, Templates: TemplatesSvelte})
-	if out.Templates != TemplatesSvelte {
+	out = base.Merge(PageOptionsOverride{HasTemplates: true, Templates: ""})
+	if out.Templates != "" {
 		t.Fatalf("templates override missed: %+v", out)
 	}
 

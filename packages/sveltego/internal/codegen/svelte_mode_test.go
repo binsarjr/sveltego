@@ -10,12 +10,13 @@ import (
 	"github.com/binsarjr/sveltego/packages/sveltego/internal/routescan"
 )
 
-// TestGenerateManifest_SvelteMode_NoRenderAdapter verifies that a route
-// with kit.PageOptions{Templates: "svelte"} skips the Mustache-Go
-// render adapter emission. The manifest still includes the route
-// entry, the wire-imported Load, the ClientKey, and the Options
-// literal — but no `Page: render__...` reference and no
-// `func render__...` definition. Phase 3 of RFC #379.
+// TestGenerateManifest_SvelteMode_NoRenderAdapter verifies that a
+// pure-Svelte route (the only mode after RFC #379 phase 5) skips the
+// legacy render-adapter emission. The manifest still includes the
+// route entry, the wire-imported Load, and the ClientKey — but no
+// `Page: render__...` reference and no `func render__...` definition.
+// Templates: "svelte" is the default, so the Options literal omits the
+// field; the runtime treats empty as svelte mode.
 func TestGenerateManifest_SvelteMode_NoRenderAdapter(t *testing.T) {
 	t.Parallel()
 	scan := scanFixture(t, "simple")
@@ -43,48 +44,10 @@ func TestGenerateManifest_SvelteMode_NoRenderAdapter(t *testing.T) {
 		t.Errorf("Svelte-mode route emitted Page field:\n%s", s)
 	}
 	if !bytes.Contains(out, []byte("Templates: `svelte`")) {
-		t.Errorf("expected Templates: `svelte` in Options literal:\n%s", s)
+		t.Errorf("expected Templates: `svelte` literal in manifest:\n%s", s)
 	}
 	if !bytes.Contains(out, []byte("ClientKey: `routes/_page`")) {
 		t.Errorf("expected ClientKey wired for Svelte mode:\n%s", s)
-	}
-}
-
-// TestGenerateManifest_MixedMode confirms that a Mustache-Go route and
-// a Svelte route in the same scan emit a render adapter for the
-// former but skip it for the latter, exercising the mixed-mode
-// codegen pass that ships in Phase 3 (the framework keeps both
-// pipelines parallel until Phase 5 (#384) drops Mustache-Go).
-func TestGenerateManifest_MixedMode(t *testing.T) {
-	t.Parallel()
-	scan := scanFixture(t, "nested")
-	if len(scan.Routes) < 2 {
-		t.Fatalf("need ≥2 routes in nested fixture, got %d", len(scan.Routes))
-	}
-	// Pick the first two patterns: one stays Mustache-Go, the other
-	// flips to Svelte.
-	first := scan.Routes[0].Pattern
-	second := scan.Routes[1].Pattern
-	routeOpts := map[string]kit.PageOptions{
-		first:  {SSR: true, CSR: true, CSRF: true, TrailingSlash: kit.TrailingSlashNever, Templates: kit.TemplatesGoMustache},
-		second: {SSR: true, CSR: true, CSRF: true, TrailingSlash: kit.TrailingSlashNever, Templates: kit.TemplatesSvelte},
-	}
-	out, err := GenerateManifest(scan, ManifestOptions{
-		PackageName:  "gen",
-		ModulePath:   "myapp",
-		GenRoot:      ".gen",
-		RouteOptions: routeOpts,
-	})
-	if err != nil {
-		t.Fatalf("GenerateManifest: %v", err)
-	}
-	s := string(out)
-
-	if !bytes.Contains(out, []byte("func render__")) {
-		t.Errorf("expected at least one render adapter for the Mustache-Go route:\n%s", s)
-	}
-	if !bytes.Contains(out, []byte("Templates: `svelte`")) {
-		t.Errorf("expected Svelte route to carry Templates literal:\n%s", s)
 	}
 }
 
@@ -113,7 +76,7 @@ func TestNeedsNodeForSvelteSSG(t *testing.T) {
 		opts kit.PageOptions
 		want bool
 	}{
-		{"no-svelte", kit.PageOptions{Templates: kit.TemplatesGoMustache, Prerender: true}, false},
+		{"no-svelte", kit.PageOptions{Prerender: true}, false},
 		{"svelte-no-prerender", kit.PageOptions{Templates: kit.TemplatesSvelte}, false},
 		{"svelte-prerender", kit.PageOptions{Templates: kit.TemplatesSvelte, Prerender: true}, true},
 		{"svelte-auto", kit.PageOptions{Templates: kit.TemplatesSvelte, PrerenderAuto: true}, true},

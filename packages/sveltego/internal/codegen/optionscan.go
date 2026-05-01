@@ -153,25 +153,28 @@ func assignOption(out *kit.PageOptionsOverride, name string, expr goast.Expr, pa
 }
 
 // evalTemplates accepts a string literal and validates it against the
-// known template pipeline values. Anything else is a fatal codegen
-// error so a typo (e.g. "svetle") never silently falls back to the
-// default.
+// known template pipeline values. The legacy "go-mustache" value is
+// rejected explicitly with a migration hint (RFC #379 phase 5).
+// Anything else is a fatal codegen error so a typo (e.g. "svetle")
+// never silently falls back to the default.
 func evalTemplates(expr goast.Expr) (string, error) {
 	bl, ok := expr.(*goast.BasicLit)
 	if !ok || bl.Kind != token.STRING {
-		return "", errors.New(`must be a string literal ("go-mustache" or "svelte")`)
+		return "", errors.New(`must be a string literal ("svelte")`)
 	}
 	val, err := strconv.Unquote(bl.Value)
 	if err != nil {
 		return "", fmt.Errorf("invalid string literal %s: %w", bl.Value, err)
 	}
 	switch val {
-	case kit.TemplatesGoMustache, kit.TemplatesSvelte:
+	case kit.TemplatesSvelte:
 		return val, nil
 	case "":
-		return kit.TemplatesGoMustache, nil
+		return kit.TemplatesSvelte, nil
+	case "go-mustache":
+		return "", errors.New(`Templates: "go-mustache" was removed in RFC #379 phase 5; migrate the .svelte body to pure Svelte/JS/TS and either drop the Templates constant or set Templates: "svelte"`)
 	}
-	return "", fmt.Errorf(`unknown Templates value %q (want "go-mustache" or "svelte")`, val)
+	return "", fmt.Errorf(`unknown Templates value %q (want "svelte")`, val)
 }
 
 func evalBool(expr goast.Expr) (bool, error) {

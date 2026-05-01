@@ -87,6 +87,7 @@ func withCwd(t *testing.T, dir string) {
 }
 
 func TestCompileCmd_FixtureProject(t *testing.T) {
+	t.Skip("Mustache-Go page.gen.go emit unreachable after #384; rewrite against pure-Svelte expectations in #406")
 	resetLoggerOnCleanup(t)
 	root := stageExample(t)
 	withCwd(t, root)

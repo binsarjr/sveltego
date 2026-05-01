@@ -16,6 +16,7 @@ import (
 // must produce sized variants on disk and emit the matching <img>
 // markup with srcset into the generated page.
 func TestBuild_ImageVariantsEndToEnd(t *testing.T) {
+	t.Skip("Mustache-Go <Image> body emitter unreachable after #384; rewrite against pure-Svelte expectations in #406")
 	t.Parallel()
 	root := t.TempDir()
 

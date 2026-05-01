@@ -232,7 +232,7 @@ const Templates = "svelte"
 	}
 }
 
-func TestScanPageOptions_templatesGoMustache(t *testing.T) {
+func TestScanPageOptions_templatesGoMustacheRejected(t *testing.T) {
 	t.Parallel()
 	body := `//go:build sveltego
 
@@ -241,12 +241,10 @@ package routes
 const Templates = "go-mustache"
 `
 	path := writeTempServerGo(t, body)
-	got, err := scanPageOptions(path)
-	if err != nil {
-		t.Fatalf("scan: %v", err)
-	}
-	if !got.HasTemplates || got.Templates != kit.TemplatesGoMustache {
-		t.Errorf("Templates not set to go-mustache: %+v", got)
+	if _, err := scanPageOptions(path); err == nil {
+		t.Fatal("expected error on legacy go-mustache value")
+	} else if !strings.Contains(err.Error(), "go-mustache") || !strings.Contains(err.Error(), "phase 5") {
+		t.Errorf("expected migration hint in err, got: %v", err)
 	}
 }
 

@@ -60,19 +60,18 @@ func (ts TrailingSlash) String() string {
 // root's default value is consulted; per-route overrides are ignored
 // because the pool is not partitioned by route.
 //
-// Templates picks the per-route template pipeline (RFC #379 phase 3):
-//   - "go-mustache" (Phase 3 default for backward compat): codegen parses
-//     the .svelte body and emits Go SSR (Mustache-Go expressions).
-//   - "svelte": codegen leaves the .svelte body for Vite + Svelte to
-//     compile; the server returns the app.html shell plus a JSON
-//     hydration payload, the client mounts and renders. Routes with
-//     Prerender: true plus Templates: "svelte" are rendered to static
-//     HTML at build time via a Node `svelte/server` sidecar; the runtime
-//     stays JS-free.
+// Templates picks the per-route template pipeline. Pure Svelte
+// ("svelte") is the only supported value as of RFC #379 phase 5: the
+// codegen leaves the .svelte body for Vite + Svelte to compile; the
+// server returns the app.html shell plus a JSON hydration payload, and
+// the client mounts and renders. Routes with Prerender: true are
+// rendered to static HTML at build time via a Node `svelte/server`
+// sidecar so the runtime stays JS-free.
 //
-// Phase 5 (#384) flips the default to "svelte" and removes the
-// Mustache-Go path. Empty Templates defaults to "go-mustache" until
-// then.
+// The field is kept as a string so future template pipelines can be
+// added without breaking the on-disk option contract. Empty Templates
+// resolves to "svelte" via DefaultPageOptions; the legacy "go-mustache"
+// value is rejected at codegen time.
 type PageOptions struct {
 	Prerender          bool
 	PrerenderAuto      bool
@@ -86,27 +85,22 @@ type PageOptions struct {
 	Templates          string
 }
 
-// TemplatesGoMustache is the legacy Mustache-Go template pipeline
-// (Phase 3 default for backward compat). The .svelte body is parsed
-// at codegen time and emitted as Go SSR.
-const TemplatesGoMustache = "go-mustache"
-
 // TemplatesSvelte is the pure-Svelte template pipeline (RFC #379).
 // The .svelte body is left for Vite + Svelte to compile; the server
 // returns app.html plus a JSON hydration payload.
 const TemplatesSvelte = "svelte"
 
 // DefaultPageOptions returns the framework defaults: SSR, CSR, and CSRF
-// on, Prerender off, TrailingSlash never, Templates "go-mustache".
-// Codegen seeds the cascade with this value so a project that declares
-// no options gets the same behavior as today.
+// on, Prerender off, TrailingSlash never, Templates "svelte". Codegen
+// seeds the cascade with this value so a project that declares no
+// options renders through the pure-Svelte pipeline.
 func DefaultPageOptions() PageOptions {
 	return PageOptions{
 		SSR:           true,
 		CSR:           true,
 		CSRF:          true,
 		TrailingSlash: TrailingSlashNever,
-		Templates:     TemplatesGoMustache,
+		Templates:     TemplatesSvelte,
 	}
 }
 

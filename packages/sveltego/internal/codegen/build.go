@@ -872,10 +872,9 @@ func resolveLayoutSource(layoutDir string) (string, error) {
 	return "", fmt.Errorf("codegen: %s contains no _layout.svelte", layoutDir)
 }
 
-// needsNodeForSvelteSSG reports whether at least one route opts into
-// the pure-Svelte template pipeline AND Prerender, requiring the Node
-// `svelte/server` sidecar at build time. Returns false fast for
-// projects that never use Templates: "svelte" or never set Prerender.
+// needsNodeForSvelteSSG reports whether at least one route combines
+// the pure-Svelte template pipeline (the default) with Prerender,
+// requiring the Node `svelte/server` sidecar at build time.
 func needsNodeForSvelteSSG(routes []routescan.ScannedRoute, routeOptions map[string]kit.PageOptions) bool {
 	for _, r := range routes {
 		if !r.HasPage {

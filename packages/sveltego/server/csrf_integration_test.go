@@ -20,13 +20,15 @@ func csrfRoute(t *testing.T) []router.Route {
 			return kit.ActionDataResult(200, "ok")
 		},
 	}
+	opts := kit.DefaultPageOptions()
+	opts.Templates = ""
 	return []router.Route{{
 		Pattern:  "/login",
 		Segments: []router.Segment{{Kind: router.SegmentStatic, Value: "login"}},
 		Page:     formAwarePage(),
 		Load:     formAwareLoad(),
 		Actions:  func() any { return actions },
-		Options:  kit.DefaultPageOptions(),
+		Options:  opts,
 	}}
 }
 
@@ -155,6 +157,7 @@ func TestCSRF_DisabledByPageOptions(t *testing.T) {
 	}
 	opts := kit.DefaultPageOptions()
 	opts.CSRF = false
+	opts.Templates = ""
 	srv := newTestServer(t, []router.Route{{
 		Pattern:  "/login",
 		Segments: []router.Segment{{Kind: router.SegmentStatic, Value: "login"}},
@@ -179,11 +182,13 @@ func TestCSRF_DisabledByPageOptions(t *testing.T) {
 
 func TestCSRF_RouteWithoutActionsSkipsCheck(t *testing.T) {
 	t.Parallel()
+	opts := kit.DefaultPageOptions()
+	opts.Templates = ""
 	srv := newTestServer(t, []router.Route{{
 		Pattern:  "/about",
 		Segments: []router.Segment{{Kind: router.SegmentStatic, Value: "about"}},
 		Page:     staticPage("<h1>about</h1>"),
-		Options:  kit.DefaultPageOptions(),
+		Options:  opts,
 	}})
 	ts := httptest.NewServer(srv)
 	defer ts.Close()
@@ -213,13 +218,15 @@ func TestCSRF_RenderCtxExposesToken(t *testing.T) {
 		w.WriteString("<h1>login</h1>")
 		return nil
 	}
+	opts := kit.DefaultPageOptions()
+	opts.Templates = ""
 	srv := newTestServer(t, []router.Route{{
 		Pattern:  "/login",
 		Segments: []router.Segment{{Kind: router.SegmentStatic, Value: "login"}},
 		Page:     pageHandler,
 		Load:     formAwareLoad(),
 		Actions:  func() any { return actions },
-		Options:  kit.DefaultPageOptions(),
+		Options:  opts,
 	}})
 	ts := httptest.NewServer(srv)
 	defer ts.Close()
