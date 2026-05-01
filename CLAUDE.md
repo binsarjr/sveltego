@@ -50,13 +50,16 @@ Always read both `tasks/` files at session start before proposing changes.
 
 This is a **rewrite of SvelteKit's shape in pure Go**, not an embed of SvelteKit-the-JS-server. The earlier "embed JS runtime via goja/v8go/Bun" direction was rejected — see [`tasks/lessons/2026-04-29-pivot-to-go-native-rewrite.md`](tasks/lessons/2026-04-29-pivot-to-go-native-rewrite.md) for the chain of reasoning. Do not reopen that decision without new evidence.
 
-Key invariants:
+As of 2026-05-01, [ADR 0008](tasks/decisions/0008-pure-svelte-pivot.md) supersedes [ADR 0007](tasks/decisions/0007-svelte-semantics-revisit.md): templates pivot to **100% pure Svelte/JS/TS**. Go expressions in mustaches are out. Server-side Go files own data; codegen reads their Go AST and emits TypeScript declaration files for IDE autocompletion. Runtime is hybrid: build-time SSG (Node only at build time) for prerendered routes, runtime SPA (Go-only) for everything else. Phases 2–6 land via [#381](https://github.com/binsarjr/sveltego/issues/381)–[#385](https://github.com/binsarjr/sveltego/issues/385); see [RFC #379](https://github.com/binsarjr/sveltego/issues/379) for the full plan.
 
-- **No JS runtime on the server.** `.svelte` compiles to Go source via codegen (`.gen/*.go`) for SSR. Vite produces the client bundle for hydration only.
-- **Mustache expressions are Go, not JS.** `{Data.User.Name}`, `{len(Data.Posts)}`, `nil` not `null`. PascalCase fields. Validated at codegen via `go/parser.ParseExpr`.
+Key invariants (post-ADR 0008):
+
+- **No JS runtime on the server at runtime.** Node may run during `sveltego build` to prerender SSG routes via `svelte/server`. The deployed Go binary plus `static/` is the entire deployable; no JS engine on the request path.
+- **Templates are pure Svelte.** `.svelte` files contain only Svelte/JS/TS — runes, JS expressions, lowercase props (`{data.user.name}`). Zero Go syntax in mustaches, blocks, or `<script>`. Svelte LSP and the npm Svelte ecosystem work without a fork.
+- **Go owns the server.** Server-side Go files return a typed data shape from `Load(ctx kit.LoadCtx)`; that shape becomes `data` in client `$props()`. JSON tags drive the Go ↔ TypeScript boundary.
+- **Codegen, not interpretation.** Static decisions at build time. Codegen now emits `.svelte.d.ts` declarations (Go AST → TypeScript) plus prerendered HTML for SSG routes, instead of the old `.gen/*.go` template artifacts. No per-request template walking.
 - **Svelte 5 only.** Runes (`$props`, `$state`, `$derived`, `$effect`, `$bindable`). Skip Svelte 4 legacy reactivity.
-- **Codegen, not interpretation.** Static decisions at build time, no per-request template walking.
-- **Performance target:** 20–40k rps mid-complexity SSR. If a proposal can't reach that, surface it before writing code.
+- **Performance target:** 20–40k rps for SSG (zero per-request work) and JSON-payload responses for SPA-mode dynamic routes. If a proposal can't reach that, surface it before writing code.
 
 ## Working rules (do not skip)
 
@@ -263,7 +266,7 @@ through `go/parser` directly. See ADR 0003 amendment (Phase 0i-fix).
 
 ## Out of scope (do not propose)
 
-See [ADR 0005](tasks/decisions/0005-non-goals.md) for the canonical list and reasoning. [ADR 0007](tasks/decisions/0007-svelte-semantics-revisit.md) revisits expression semantics (Proposed — consult before proposing a JS-runtime or full-Svelte alternative).
+See [ADR 0005](tasks/decisions/0005-non-goals.md) for the canonical list and reasoning. [ADR 0008](tasks/decisions/0008-pure-svelte-pivot.md) is the live decision on template semantics (pure Svelte/JS/TS, no Go in mustaches); [ADR 0007](tasks/decisions/0007-svelte-semantics-revisit.md) is superseded — consult ADR 0008 before proposing a JS-runtime-on-server, Go-mustache, or Go-VDOM alternative.
 
 - Universal (shared client+server) `Load` (`+page.ts` / `+layout.ts`). Server-only by design.
 - `<script context="module">` (deprecated upstream).
