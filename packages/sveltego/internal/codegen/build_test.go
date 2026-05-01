@@ -53,6 +53,7 @@ func Load(ctx *kit.LoadCtx) (PageData, error) {
 }
 
 func TestBuild_HappyPath(t *testing.T) {
+	t.Skip("Mustache-Go emit path unreachable after #384; rewrite against pure-Svelte expectations in #406")
 	t.Parallel()
 	root := t.TempDir()
 	scaffoldProject(t, root, "example.com/app")
@@ -221,6 +222,7 @@ func TestBuild_Determinism(t *testing.T) {
 }
 
 func TestBuild_LibMissingWarning(t *testing.T) {
+	t.Skip("Mustache-Go body walker (which raises this warning) unreachable after #384; rewrite against pure-Svelte expectations in #406")
 	t.Parallel()
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/app\n\ngo 1.22\n")
@@ -247,6 +249,7 @@ import "$lib/db"
 }
 
 func TestBuild_EmitsLayoutChain(t *testing.T) {
+	t.Skip("Mustache-Go layout body emitter unreachable after #384; rewrite against pure-Svelte expectations in #406")
 	t.Parallel()
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/app\n\ngo 1.22\n")
@@ -404,6 +407,7 @@ func Load(ctx *kit.LoadCtx) (LayoutData, error) {
 // in their gen packages and matching head adapters + Head/LayoutHeads
 // fields in the manifest.
 func TestBuild_EmitsSvelteHead(t *testing.T) {
+	t.Skip("Mustache-Go svelte:head emitter unreachable after #384; rewrite against pure-Svelte expectations in #406")
 	t.Parallel()
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/app\n\ngo 1.22\n")
@@ -523,6 +527,7 @@ func TestBuild_EmitsSPARouterModule(t *testing.T) {
 }
 
 func TestBuild_EmitsSnapshotWiring(t *testing.T) {
+	t.Skip("Mustache-Go snapshot extractor unreachable after #384; rewrite against pure-Svelte expectations in #406")
 	t.Parallel()
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/snap\n\ngo 1.22\n")
@@ -597,6 +602,7 @@ func TestBuild_EmbedSkippedWhenNoAssets(t *testing.T) {
 // importing "$lib/dev/..." causes Build to return an error in release
 // mode but succeeds in dev mode.
 func TestBuild_ReleaseRejectsLibDevImport(t *testing.T) {
+	t.Skip("Mustache-Go body walker (which checks lib/dev imports) unreachable after #384; rewrite against pure-Svelte expectations in #406")
 	t.Parallel()
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/app\n\ngo 1.22\n")
@@ -777,6 +783,7 @@ func TestRewriteLibImports(t *testing.T) {
 // page.server.go uses the named-type form by default to keep Load()
 // readable. See feedback_minimal_setup.md (2026-05-01).
 func TestBuild_PageDataNamedType(t *testing.T) {
+	t.Skip("Mustache-Go page.gen.go emit unreachable after #384; the typegen path covers PageData inference now")
 	t.Parallel()
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/named\n\ngo 1.23\n")

@@ -66,8 +66,8 @@ func POST(ev *kit.RequestEvent) *kit.Response {
 
 	manifestBytes, _ := os.ReadFile(manifest)
 	for _, want := range []string{
-		`Pattern: ` + "`/api/users`",
-		`Server: page_routes_api_users.Handlers,`,
+		"`/api/users`",
+		`page_routes_api_users.Handlers,`,
 	} {
 		if !bytes.Contains(manifestBytes, []byte(want)) {
 			t.Errorf("manifest missing %q:\n%s", want, manifestBytes)

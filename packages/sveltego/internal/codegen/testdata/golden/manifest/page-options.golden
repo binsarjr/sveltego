@@ -24,32 +24,6 @@ const (
 	RouteIDDashBilling = `/dash/billing`
 )
 
-// render__page_routes adapts page_routes.Page{}.Render to router.PageHandler.
-func render__page_routes(w *render.Writer, ctx *kit.RenderCtx, data any) error {
-	var typed page_routes.PageData
-	if data != nil {
-		v, ok := data.(page_routes.PageData)
-		if !ok {
-			return fmt.Errorf("sveltego: route %q: PageData type mismatch (got %T, want page_routes.PageData)", `/`, data)
-		}
-		typed = v
-	}
-	return page_routes.Page{}.Render(w, ctx, typed)
-}
-
-// render__page_routes_dash_billing adapts page_routes_dash_billing.Page{}.Render to router.PageHandler.
-func render__page_routes_dash_billing(w *render.Writer, ctx *kit.RenderCtx, data any) error {
-	var typed page_routes_dash_billing.PageData
-	if data != nil {
-		v, ok := data.(page_routes_dash_billing.PageData)
-		if !ok {
-			return fmt.Errorf("sveltego: route %q: PageData type mismatch (got %T, want page_routes_dash_billing.PageData)", `/dash/billing`, data)
-		}
-		typed = v
-	}
-	return page_routes_dash_billing.Page{}.Render(w, ctx, typed)
-}
-
 // render__layout__page_routes adapts page_routes.Layout{}.Render to router.LayoutHandler.
 func render__layout__page_routes(w *render.Writer, ctx *kit.RenderCtx, data any, children func(*render.Writer) error) error {
 	var typed page_routes.LayoutData
@@ -72,14 +46,13 @@ func Routes() []router.Route {
 		{
 			Pattern:  `/`,
 			Segments: []router.Segment{},
-			Page:     render__page_routes,
 			LayoutChain: []router.LayoutHandler{
 				render__layout__page_routes,
 			},
 			LayoutLoaders: []router.LayoutLoadHandler{
 				loadLayout__page_routes,
 			},
-			Options: kit.PageOptions{SSR: true, CSR: true, CSRF: true, TrailingSlash: kit.TrailingSlashAlways},
+			Options: kit.PageOptions{SSR: true, CSR: true, CSRF: true, TrailingSlash: kit.TrailingSlashAlways, Templates: `svelte`},
 		},
 		{
 			Pattern: `/dash/billing`,
@@ -87,7 +60,6 @@ func Routes() []router.Route {
 				{Kind: router.SegmentStatic, Value: `dash`},
 				{Kind: router.SegmentStatic, Value: `billing`},
 			},
-			Page:    render__page_routes_dash_billing,
 			Load:    page_routes_dash_billing.Load,
 			Actions: page_routes_dash_billing.Actions,
 			LayoutChain: []router.LayoutHandler{
@@ -96,7 +68,7 @@ func Routes() []router.Route {
 			LayoutLoaders: []router.LayoutLoadHandler{
 				loadLayout__page_routes,
 			},
-			Options: kit.PageOptions{Prerender: true, SSR: true, CSR: true, SSROnly: true, CSRF: true, TrailingSlash: kit.TrailingSlashIgnore},
+			Options: kit.PageOptions{Prerender: true, SSR: true, CSR: true, SSROnly: true, CSRF: true, TrailingSlash: kit.TrailingSlashIgnore, Templates: `svelte`},
 		},
 	}
 }

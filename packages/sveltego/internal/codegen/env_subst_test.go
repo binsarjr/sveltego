@@ -161,6 +161,7 @@ func readGenPageSrc(t *testing.T, root string) string {
 }
 
 func TestBuildSubstitutesPublicEnv(t *testing.T) {
+	t.Skip("Mustache-Go env.StaticPublic() body emitter unreachable after #384; rewrite against pure-Svelte expectations in #406")
 	root := envSubstRoot(t)
 	writePlainPage(t, root, `<p>{env.StaticPublic("PUBLIC_SITE_NAME")}</p>`)
 
@@ -189,6 +190,7 @@ func TestBuildSubstitutesPublicEnv(t *testing.T) {
 }
 
 func TestBuildRejectsUnsetKey(t *testing.T) {
+	t.Skip("Mustache-Go env.StaticPublic() body emitter unreachable after #384; rewrite against pure-Svelte expectations in #406")
 	root := envSubstRoot(t)
 	writePlainPage(t, root, `<p>{env.StaticPublic("PUBLIC_MISSING")}</p>`)
 
@@ -208,6 +210,7 @@ func TestBuildRejectsUnsetKey(t *testing.T) {
 // template is rejected by the private-leak guard. substituteStaticEnv does
 // not rewrite StaticPrivate, so checkPrivateEnv sees the call and aborts.
 func TestBuildRejectsPrivateEnvInTemplate(t *testing.T) {
+	t.Skip("Mustache-Go body env.StaticPrivate() check unreachable after #384; rewrite against pure-Svelte expectations in #406")
 	root := envSubstRoot(t)
 	writePlainPage(t, root, `<p>{env.StaticPrivate("DATABASE_URL")}</p>`)
 
@@ -226,6 +229,7 @@ func TestBuildRejectsPrivateEnvInTemplate(t *testing.T) {
 // TestBuildDefaultEnvLookupUsesOsEnv verifies that nil EnvLookup falls
 // back to os.LookupEnv.
 func TestBuildDefaultEnvLookupUsesOsEnv(t *testing.T) {
+	t.Skip("Mustache-Go env.StaticPublic() body emitter unreachable after #384; rewrite against pure-Svelte expectations in #406")
 	root := envSubstRoot(t)
 	writePlainPage(t, root, `<p>{env.StaticPublic("PUBLIC_SVELTEGO_TEST_SUBST")}</p>`)
 

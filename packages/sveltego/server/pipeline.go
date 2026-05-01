@@ -238,11 +238,12 @@ func (s *Server) resolve(w http.ResponseWriter, r *http.Request, ev *kit.Request
 		h(w, r)
 		return nil, errServerRouteWrote
 	}
-	// RFC #379 phase 3: Svelte-mode routes have no Go-side Page handler;
-	// the server returns the shell + JSON hydration payload and Vite's
-	// client bundle mounts and renders. The check sits before the
-	// Page == nil guard so the legacy "missing template" 404 stays in
-	// place for misconfigured Mustache-Go routes.
+	// Svelte-mode routes have no Go-side Page handler; the server
+	// returns the shell + JSON hydration payload and Vite's client
+	// bundle mounts and renders. As of RFC #379 phase 5, "svelte" is
+	// the only template pipeline new routes use; routes without a
+	// Templates value fall back to the legacy Page handler when one
+	// is wired (kept for runtime tests that construct Routes by hand).
 	isSvelteMode := route.Options.Templates == kit.TemplatesSvelte
 	if !isSvelteMode && route.Page == nil {
 		return nil, kit.SafeError{Code: http.StatusNotFound, Message: http.StatusText(http.StatusNotFound)}

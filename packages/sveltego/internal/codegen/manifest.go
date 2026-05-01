@@ -676,8 +676,9 @@ func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutBy
 
 // emitOptionsField writes one `Options: kit.PageOptions{...}` line per
 // route when routeOptions is non-nil. Routes without an entry default
-// to kit.DefaultPageOptions(); the default value is suppressed so the
-// generated source stays minimal for projects that declare no options.
+// to kit.DefaultPageOptions(). The Options literal is always emitted
+// so the runtime sees the resolved cascade (Templates in particular,
+// which gates the svelte vs legacy render path).
 func emitOptionsField(b *Builder, pattern string, routeOptions map[string]kit.PageOptions) {
 	if routeOptions == nil {
 		return
@@ -685,9 +686,6 @@ func emitOptionsField(b *Builder, pattern string, routeOptions map[string]kit.Pa
 	opts, ok := routeOptions[pattern]
 	if !ok {
 		opts = kit.DefaultPageOptions()
-	}
-	if opts.Equal(kit.DefaultPageOptions()) {
-		return
 	}
 	b.Linef("Options: %s,", formatPageOptions(opts))
 }
@@ -727,7 +725,7 @@ func formatPageOptions(o kit.PageOptions) string {
 	if o.TrailingSlash != kit.TrailingSlashNever {
 		parts = append(parts, "TrailingSlash: "+trailingSlashIdent(o.TrailingSlash))
 	}
-	if o.Templates != "" && o.Templates != kit.TemplatesGoMustache {
+	if o.Templates != "" {
 		parts = append(parts, "Templates: "+quoteGo(o.Templates))
 	}
 	return "kit.PageOptions{" + strings.Join(parts, ", ") + "}"
