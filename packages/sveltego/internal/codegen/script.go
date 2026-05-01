@@ -6,6 +6,7 @@ import (
 	goast "go/ast"
 	"go/printer"
 	"go/token"
+	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -36,23 +37,29 @@ func detectSnapshotExport(body string) bool {
 	return snapshotExportRegexp.MatchString(stripJSComments(body))
 }
 
-// detectFragmentSnapshot walks frag for a `<script module>` block and
-// reports whether it declares a `snapshot` export. Used by emitPage to
-// flag the route for the SPA router's snapshot wiring.
-func detectFragmentSnapshot(frag *ast.Fragment) bool {
-	if frag == nil {
-		return false
+// scriptModuleBlockRegexp matches a `<script ... context="module">` or
+// `<script module ...>` opening tag and captures the body up to its
+// closing tag. The lazy match keeps adjacent <script> blocks in the
+// same file independent.
+var scriptModuleBlockRegexp = regexp.MustCompile(
+	`(?s)<script\b[^>]*\b(?:context\s*=\s*["']module["']|module)\b[^>]*>(.*?)</script>`,
+)
+
+// detectSnapshotInSvelte reports whether the .svelte file at path
+// declares a `snapshot` export from a `<script module>` block. It runs
+// before the codegen parse to drive SPA-router snapshot wiring (#84)
+// without spending a full parser pass on every page route.
+func detectSnapshotInSvelte(path string) (bool, error) {
+	src, err := os.ReadFile(path) //nolint:gosec // path comes from the route scanner walk under projectRoot
+	if err != nil {
+		return false, fmt.Errorf("codegen: read %s: %w", path, err)
 	}
-	for _, n := range frag.Children {
-		s, ok := n.(*ast.Script)
-		if !ok || !s.Module {
-			continue
-		}
-		if detectSnapshotExport(s.Body) {
-			return true
+	for _, m := range scriptModuleBlockRegexp.FindAllSubmatch(src, -1) {
+		if detectSnapshotExport(string(m[1])) {
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }
 
 // stripJSComments removes // line comments and /* */ block comments from

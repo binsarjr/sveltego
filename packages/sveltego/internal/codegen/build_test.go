@@ -221,33 +221,6 @@ func TestBuild_Determinism(t *testing.T) {
 	}
 }
 
-func TestBuild_LibMissingWarning(t *testing.T) {
-	t.Skip("Mustache-Go body walker (which raises this warning) unreachable after #384; rewrite against pure-Svelte expectations in #406")
-	t.Parallel()
-	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/app\n\ngo 1.22\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "_page.svelte"),
-		`<script lang="go">
-import "$lib/db"
-</script>
-<h1>{db.Title()}</h1>
-`)
-	res, err := Build(BuildOptions{ProjectRoot: root})
-	if err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-	found := false
-	for _, d := range res.Diagnostics {
-		if strings.Contains(d.Message, "$lib referenced") {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Errorf("expected $lib-missing warning, got %v", res.Diagnostics)
-	}
-}
-
 func TestBuild_EmitsLayoutChain(t *testing.T) {
 	t.Skip("Mustache-Go layout body emitter unreachable after #384; rewrite against pure-Svelte expectations in #406")
 	t.Parallel()
@@ -527,7 +500,6 @@ func TestBuild_EmitsSPARouterModule(t *testing.T) {
 }
 
 func TestBuild_EmitsSnapshotWiring(t *testing.T) {
-	t.Skip("Mustache-Go snapshot extractor unreachable after #384; rewrite against pure-Svelte expectations in #406")
 	t.Parallel()
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/snap\n\ngo 1.22\n")
@@ -716,58 +688,6 @@ func assertParsesAsGo(t *testing.T, path string) {
 	fset := token.NewFileSet()
 	if _, err := parser.ParseFile(fset, path, src, parser.AllErrors|parser.SkipObjectResolution); err != nil {
 		t.Errorf("parse %s: %v\n--- src:\n%s", path, err, src)
-	}
-}
-
-func TestRewriteLibImports(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		name   string
-		in     string
-		module string
-		want   string
-		hit    bool
-	}{
-		{
-			name:   "single-pkg",
-			in:     `import "$lib/db"`,
-			module: "example.com/app",
-			want:   `import "example.com/app/lib/db"`,
-			hit:    true,
-		},
-		{
-			name:   "bare",
-			in:     `import "$lib"`,
-			module: "myapp",
-			want:   `import "myapp/lib"`,
-			hit:    true,
-		},
-		{
-			name:   "no-hit",
-			in:     `import "fmt"`,
-			module: "myapp",
-			want:   `import "fmt"`,
-			hit:    false,
-		},
-		{
-			name:   "multiple",
-			in:     `"$lib/a" "$lib/b"`,
-			module: "m",
-			want:   `"m/lib/a" "m/lib/b"`,
-			hit:    true,
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			got, hit := rewriteLibImports(tc.in, tc.module)
-			if got != tc.want {
-				t.Errorf("rewrite = %q want %q", got, tc.want)
-			}
-			if hit != tc.hit {
-				t.Errorf("hit = %v want %v", hit, tc.hit)
-			}
-		})
 	}
 }
 

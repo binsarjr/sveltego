@@ -155,15 +155,15 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 		return nil, err
 	}
 
-	// Resolve page-options cascade up front so per-route emission can
-	// branch on Templates (Mustache-Go vs pure Svelte). RFC #379 phase 3.
+	// Resolve page-options cascade up front so per-route emission sees
+	// the resolved kit.PageOptions for manifest emission and SSG gating.
+	// RFC #379 phase 5 made "svelte" the only template pipeline so the
+	// cascade no longer branches the page-body emit decision.
 	routeOptions, err := resolvePageOptions(scan)
 	if err != nil {
 		return nil, fmt.Errorf("codegen: resolve page options: %w", err)
 	}
 
-	libDir := filepath.Join(opts.ProjectRoot, "lib")
-	libRefs := 0
 	routeCount := 0
 	emittedLayouts := make(map[string]struct{})
 	emittedErrors := make(map[string]struct{})
@@ -199,28 +199,17 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 			if route.HasReset {
 				pageName = "_page@" + route.ResetTarget + ".svelte"
 			}
-			isSvelteMode := routeOptions[route.Pattern].Templates == kit.TemplatesSvelte
-			var hasSnapshot bool
-			if isSvelteMode {
-				// RFC #379 phase 3: skip Mustache-Go body parsing. Vite +
-				// Svelte own the .svelte body for client compile; the Go
-				// side keeps Load + manifest entry only. componentSeeds
-				// still receives the .svelte path so component discovery
-				// runs across mixed-mode projects.
-				routeCount++
-			} else {
-				refs, hasHead, snap, err := emitPage(opts.ProjectRoot, outDir, modulePath, route, opts.Release, opts.EnvLookup, opts.Provenance, start, imageVariants)
-				if err != nil {
-					return nil, err
-				}
-				libRefs += refs
-				if hasHead {
-					pageHeads[route.PackagePath] = true
-				}
-				hasSnapshot = snap
-				routeCount++
+			// Pure-Svelte page bodies are owned by Vite + svelte/server;
+			// the Go side keeps Load + manifest entry only. Snapshot
+			// detection still runs against the .svelte source so the
+			// SPA router wires the capture/restore hooks (#84).
+			pagePath := filepath.Join(route.Dir, pageName)
+			hasSnapshot, err := detectSnapshotInSvelte(pagePath)
+			if err != nil {
+				return nil, err
 			}
-			componentSeeds = append(componentSeeds, filepath.Join(route.Dir, pageName))
+			routeCount++
+			componentSeeds = append(componentSeeds, pagePath)
 
 			if !opts.NoClient {
 				ck, relSvelteFromRouter, cerr := emitClientEntry(opts.ProjectRoot, outDir, routesDir, route, pageName, hasSnapshot)
@@ -274,8 +263,6 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 			}
 		}
 	}
-	libExists := dirExists(libDir)
-
 	if _, err := emitComponentTree(opts.ProjectRoot, outDir, componentSeeds); err != nil {
 		return nil, fmt.Errorf("codegen: component tree: %w", err)
 	}
@@ -340,14 +327,6 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 		return nil, err
 	}
 
-	if libRefs > 0 && !libExists {
-		warnings = append(warnings, routescan.Diagnostic{
-			Path:    libDir,
-			Message: fmt.Sprintf("$lib referenced %d time(s) but %s/ does not exist", libRefs, filepath.Base(libDir)),
-			Hint:    "create lib/ at the project root for shared modules",
-		})
-	}
-
 	var viteConfigPath string
 	swEntry := ""
 	if !opts.NoClient && hasServiceWorker {
@@ -409,85 +388,6 @@ func serviceWorkerEntry(projectRoot string) string {
 		return path
 	}
 	return ""
-}
-
-// emitPage parses one _page.svelte, applies $lib import rewriting on the
-// hoisted script body, runs the generator, and writes the result. The
-// first returned int is 1 when at least one $lib literal was rewritten
-// in this file, 0 otherwise — the caller aggregates across routes to
-// decide whether the missing-lib warning fires. The bool reports
-// whether the page contributed a Head method (drives manifest
-// HeadFn wiring). When release is true, any $lib/dev/** import is a
-// fatal error. lookup is used to resolve env.Static* calls to literal
-// values at build time.
-func emitPage(projectRoot, outDir, modulePath string, route routescan.ScannedRoute, release bool, lookup EnvLookup, provenance bool, generatedAt time.Time, imageVariants map[string]images.Result) (int, bool, bool, error) {
-	pageName := "_page.svelte"
-	if route.HasReset {
-		pageName = "_page@" + route.ResetTarget + ".svelte"
-	}
-	pagePath := filepath.Join(route.Dir, pageName)
-	src, err := os.ReadFile(pagePath) //nolint:gosec // path comes from scanner walk under projectRoot
-	if err != nil {
-		return 0, false, false, fmt.Errorf("codegen: read %s: %w", pagePath, err)
-	}
-	if release {
-		if err := checkLibDevImports(string(src), pagePath); err != nil {
-			return 0, false, false, err
-		}
-	}
-	srcForHash := make([]byte, len(src)) // capture before rewrite for deterministic hash
-	copy(srcForHash, src)
-	substituted, err := substituteStaticEnv(string(src), lookup)
-	if err != nil {
-		return 0, false, false, fmt.Errorf("codegen: %s: %w", pagePath, err)
-	}
-	rewritten, hits := rewriteLibImports(substituted, modulePath)
-	src = []byte(rewritten)
-
-	frag, perrs := parser.Parse(src)
-	if len(perrs) > 0 {
-		return 0, false, false, fmt.Errorf("codegen: parse %s: %w", pagePath, perrs)
-	}
-
-	opts := Options{
-		PackageName:   route.PackageName,
-		Filename:      pagePath,
-		Provenance:    provenance,
-		SourceContent: srcForHash,
-		GeneratedAt:   generatedAt,
-		ImageVariants: imageVariants,
-	}
-	if route.HasPageServer {
-		opts.ServerFilePath = filepath.Join(route.Dir, "_page.server.go")
-		actionInfo, err := scanActions(opts.ServerFilePath)
-		if err != nil {
-			return 0, false, false, err
-		}
-		opts.HasActions = actionInfo.HasActions
-		encodedSub := strings.TrimPrefix(route.PackagePath, ".gen/")
-		opts.MirrorImportPath = modulePath + "/" + outDir + "/usersrc/" + encodedSub
-	}
-	out, err := Generate(frag, opts)
-	if err != nil {
-		return 0, false, false, fmt.Errorf("codegen: generate %s: %w", pagePath, err)
-	}
-
-	hasHead, _ := extractHeadChildren(frag.Children)
-	hasSnapshot := detectFragmentSnapshot(frag)
-
-	relPkg := strings.TrimPrefix(route.PackagePath, ".gen/")
-	target := filepath.Join(projectRoot, outDir, filepath.FromSlash(relPkg), "page.gen.go")
-	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-		return 0, false, false, fmt.Errorf("codegen: mkdir %s: %w", filepath.Dir(target), err)
-	}
-	if err := os.WriteFile(target, out, genFileMode); err != nil {
-		return 0, false, false, fmt.Errorf("codegen: write %s: %w", target, err)
-	}
-	libRefs := 0
-	if hits {
-		libRefs = 1
-	}
-	return libRefs, len(hasHead) > 0, hasSnapshot, nil
 }
 
 // emitClientEntry writes .gen/client/<routeKey>/entry.ts for one page route.
