@@ -134,7 +134,7 @@ func SidecarRoot() (string, error) {
 	dir := filepath.Join(filepath.Dir(thisFile), "sidecar")
 	entry := filepath.Join(dir, "index.mjs")
 	if _, err := os.Stat(entry); err != nil {
-		return "", fmt.Errorf("%w at %s: %v", errSidecarMissing, entry, err)
+		return "", fmt.Errorf("%w at %s: %w", errSidecarMissing, entry, err)
 	}
 	return dir, nil
 }
