@@ -74,7 +74,15 @@ func (e *emitter) formatMember(n *Node) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("%s[%s]", obj, idx), nil
+		def := fmt.Sprintf("%s[%s]", obj, idx)
+		// Phase 5 (#427) sees computed access too — strict-mode
+		// lowerers reject it because there's no JSON tag to look up.
+		if e.opts.Rewriter != nil {
+			if rep := e.opts.Rewriter.Rewrite(e.scope, n, def); rep != "" {
+				return rep, nil
+			}
+		}
+		return def, nil
 	}
 	if n.Property == nil || n.Property.Type != "Identifier" {
 		return "", unknownShape(n, "member-prop")
@@ -84,12 +92,6 @@ func (e *emitter) formatMember(n *Node) (string, error) {
 		if rep := e.opts.Rewriter.Rewrite(e.scope, n, def); rep != "" {
 			return rep, nil
 		}
-	}
-	// Optional chaining — for the limited subset we simulate the
-	// short-circuit by mapping to a runtime helper. Full nil-safe
-	// chains land in Phase 5.
-	if n.Optional {
-		return def, nil
 	}
 	return def, nil
 }
@@ -252,12 +254,22 @@ func (e *emitter) formatObject(n *Node) (string, error) {
 	parts := make([]string, 0, len(n.Properties))
 	for _, p := range n.Properties {
 		if p.Type == "SpreadElement" {
-			// Object spread — phase 5 territory; for now emit the
-			// inner expression with a comment marker so the build
-			// still fails if it isn't lowered later.
 			inner, err := e.formatExpression(p.Argument)
 			if err != nil {
 				return "", err
+			}
+			// Phase 5 (#427) sees spread via the optional
+			// SpreadRewriter interface — the lowerer either expands it
+			// using the typegen Shape or records a hard error. When no
+			// rewriter is configured we fall back to the legacy
+			// placeholder so Phase 3 goldens keep parsing under
+			// go/format.
+			if sr, ok := e.opts.Rewriter.(SpreadRewriter); ok {
+				rewritten, expanded := sr.RewriteObjectSpread(e.scope, p, inner)
+				if expanded {
+					parts = append(parts, rewritten)
+					continue
+				}
 			}
 			parts = append(parts, "/* spread */ "+inner)
 			continue
