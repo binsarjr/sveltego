@@ -2,7 +2,7 @@
 #
 # - PR runs (lite): 1 OS × 1 Go (ubuntu-latest, 1.25.x) + changes +
 #   commit-lint + agents-sync. Roughly 4 jobs per push.
-# - merge_group runs: full matrix [1.23.x, 1.25.x] + isolated-modules (no playground-smoke).
+# - merge_group runs: 1.25.x only + isolated-modules (no playground-smoke).
 #   CI runs once on the merged candidate; cancel-in-progress is disabled so
 #   the queue run always completes.
 # - Push to main: DISABLED. Flaky post-merge runs on main added noise without
@@ -327,8 +327,7 @@ jobs:
           directory: coverage
           fail_ci_if_error: false
 
-  # Full matrix on merge_group: 1 OS × 2 Go. ~2 jobs. Validates both toolchains
-  # before landing. Phase 4 of #387 drops 1.23.x once all modules declare 1.25.
+  # merge_group: 1 OS × 1 Go. Validates the merged candidate before landing.
   lint-and-test-merge:
     name: lint-and-test (${{ matrix.os }}, go${{ matrix.go }})
     if: github.event_name == 'merge_group'
@@ -337,7 +336,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        go: ['1.23.x', '1.25.x']
+        go: ['1.25.x']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -727,7 +726,7 @@ jobs:
           cat > "$driver/go.mod" <<EOF
           module example.com/init-smoke
 
-          go 1.23
+          go 1.25
 
           require github.com/binsarjr/sveltego/packages/init v0.0.0-00010101000000-000000000000
 
@@ -784,7 +783,7 @@ jobs:
           cat > "$driver/go.mod" <<MODEOF
           module example.com/sveltego-smoke
 
-          go 1.23
+          go 1.25
 
           require github.com/binsarjr/sveltego/packages/sveltego v0.0.0-00010101000000-000000000000
 

@@ -371,7 +371,7 @@ gh pr merge <num> --auto --squash --delete-branch
 
 | Check name | Job |
 |---|---|
-| `lint-and-test (ubuntu-latest, go1.23.x)` | Lite lint + test + build matrix |
+| `lint-and-test (ubuntu-latest, go1.25.x)` | Lite lint + test + build matrix |
 | `changes (path-aware fan-out)` | Path-filter fan-out |
 | `commit-lint` | Conventional Commits validation |
 | `agents-sync (AGENTS.md drift)` | AI doc sync drift check |
