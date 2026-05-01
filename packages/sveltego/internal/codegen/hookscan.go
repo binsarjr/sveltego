@@ -65,36 +65,62 @@ func scanHooksServer(projectRoot string) (HookSet, error) {
 
 	out := HookSet{SourcePath: path}
 	for _, decl := range f.Decls {
-		fn, ok := decl.(*goast.FuncDecl)
-		if !ok || fn.Recv != nil || fn.Name == nil {
-			continue
-		}
-		switch fn.Name.Name {
-		case "Handle":
-			if err := validateHandleSig(fn); err != nil {
-				return HookSet{}, fmt.Errorf("codegen: %s: %w", path, err)
+		switch d := decl.(type) {
+		case *goast.FuncDecl:
+			if d.Recv != nil || d.Name == nil {
+				continue
 			}
-			out.Handle = true
-		case "HandleError":
-			if err := validateHandleErrorSig(fn); err != nil {
-				return HookSet{}, fmt.Errorf("codegen: %s: %w", path, err)
+			switch d.Name.Name {
+			case "Handle":
+				if err := validateHandleSig(d); err != nil {
+					return HookSet{}, fmt.Errorf("codegen: %s: %w", path, err)
+				}
+				out.Handle = true
+			case "HandleError":
+				if err := validateHandleErrorSig(d); err != nil {
+					return HookSet{}, fmt.Errorf("codegen: %s: %w", path, err)
+				}
+				out.HandleError = true
+			case "HandleFetch":
+				if err := validateHandleFetchSig(d); err != nil {
+					return HookSet{}, fmt.Errorf("codegen: %s: %w", path, err)
+				}
+				out.HandleFetch = true
+			case "Reroute":
+				if err := validateRerouteSig(d); err != nil {
+					return HookSet{}, fmt.Errorf("codegen: %s: %w", path, err)
+				}
+				out.Reroute = true
+			case "Init":
+				if err := validateInitSig(d); err != nil {
+					return HookSet{}, fmt.Errorf("codegen: %s: %w", path, err)
+				}
+				out.Init = true
 			}
-			out.HandleError = true
-		case "HandleFetch":
-			if err := validateHandleFetchSig(fn); err != nil {
-				return HookSet{}, fmt.Errorf("codegen: %s: %w", path, err)
+		case *goast.GenDecl:
+			if d.Tok != token.VAR {
+				continue
 			}
-			out.HandleFetch = true
-		case "Reroute":
-			if err := validateRerouteSig(fn); err != nil {
-				return HookSet{}, fmt.Errorf("codegen: %s: %w", path, err)
+			for _, spec := range d.Specs {
+				vs, ok := spec.(*goast.ValueSpec)
+				if !ok {
+					continue
+				}
+				for _, name := range vs.Names {
+					switch name.Name {
+					case "Handle":
+						out.Handle = true
+					case "HandleError":
+						out.HandleError = true
+					case "HandleFetch":
+						out.HandleFetch = true
+					case "Reroute":
+						out.Reroute = true
+					case "Init":
+						out.Init = true
+					}
+				}
 			}
-			out.Reroute = true
-		case "Init":
-			if err := validateInitSig(fn); err != nil {
-				return HookSet{}, fmt.Errorf("codegen: %s: %w", path, err)
-			}
-			out.Init = true
 		}
 	}
 	return out, nil

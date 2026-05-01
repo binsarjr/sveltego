@@ -122,7 +122,7 @@ func TestBuildCmd_NoGoMod(t *testing.T) {
 }
 
 // TestHasRequire pins the go.mod parsing used by ensureSveltegoRequire
-// to decide whether `go get @latest` needs to run on first build. The
+// to decide whether `go get @main` needs to run on first build. The
 // rule matters because the fresh-scaffold (#110) deliberately omits the
 // require line and we must not run `go get` on already-tidy projects.
 func TestHasRequire(t *testing.T) {

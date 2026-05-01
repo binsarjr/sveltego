@@ -45,7 +45,7 @@ src/routes/
   [...rest]/             catch-all
 src/params/<name>.go     param matchers       — needs //go:build sveltego
 src/lib/                 shared modules ($lib alias)
-hooks.server.go          Handle, HandleError, HandleFetch, Reroute, Init
+src/hooks.server.go      Handle, HandleError, HandleFetch, Reroute, Init
 ```
 
 `_` prefix rules:
@@ -53,7 +53,7 @@ hooks.server.go          Handle, HandleError, HandleFetch, Reroute, Init
 - All route files use the `_` prefix: `_page.svelte`, `_layout.svelte`, `_error.svelte`, `_page.server.go`, `_layout.server.go`, `_server.go`.
 - The `_` prefix on `.go` files makes Go's default toolchain (build/vet/lint) skip them automatically. Codegen reads them via `go/parser` directly.
 
-Files outside the `_`-prefix convention — `hooks.server.go` (project root) and `src/params/<name>.go` — **must** start with `//go:build sveltego` so the standard Go toolchain skips them.
+Files outside the `_`-prefix convention — `src/hooks.server.go` and `src/params/<name>.go` — **must** start with `//go:build sveltego` so the standard Go toolchain skips them.
 
 ## Common patterns
 
@@ -144,7 +144,7 @@ func POST(ev *kit.RequestEvent) (*kit.Response, error) { ... }
 
 One verb per Go function; the dispatcher routes by HTTP method.
 
-### Hooks (`hooks.server.go`)
+### Hooks (`src/hooks.server.go`)
 
 ```go
 //go:build sveltego
@@ -153,8 +153,8 @@ package hooks
 
 import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
-var Handle kit.HandleFn = func(ev *kit.RequestEvent, resolve kit.ResolveFn) (*kit.Response, error) { ... }
-var HandleError kit.HandleErrorFn = func(ev *kit.RequestEvent, err error) kit.SafeError { ... }
+func Handle(ev *kit.RequestEvent, resolve kit.ResolveFn) (*kit.Response, error) { ... }
+func HandleError(ev *kit.RequestEvent, err error) (kit.SafeError, error) { ... }
 ```
 
 `HandleError` returns a sanitized `kit.SafeError` (Code, Message, ID). `_error.svelte` binds `data` to this type directly: `{data.code}`, `{data.message}`.
@@ -169,7 +169,7 @@ var HandleError kit.HandleErrorFn = func(ev *kit.RequestEvent, err error) kit.Sa
 - Editing `.gen/*` directly.
 - Universal `Load` (e.g. SvelteKit's `+page.ts`). sveltego is server-only.
 - `+` prefix on any route file (e.g. SvelteKit-style `+page.svelte`, `+layout.svelte`, `+page.server.go`). Use `_` prefix instead.
-- Omitting `//go:build sveltego` on `hooks.server.go` or `src/params/<name>.go` (route files no longer need it — `_` prefix auto-skips them).
+- Omitting `//go:build sveltego` on `src/hooks.server.go` or `src/params/<name>.go` (route files no longer need it — `_` prefix auto-skips them).
 
 ## Where to find more
 
