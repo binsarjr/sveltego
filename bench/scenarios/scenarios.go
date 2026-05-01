@@ -20,6 +20,7 @@ import (
 	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 	"github.com/binsarjr/sveltego/packages/sveltego/render"
 	"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
+	svelteServer "github.com/binsarjr/sveltego/packages/sveltego/runtime/svelte/server"
 	"github.com/binsarjr/sveltego/packages/sveltego/server"
 )
 
@@ -70,7 +71,19 @@ func All() ([]Scenario, error) {
 	if err != nil {
 		return nil, fmt.Errorf("svelte-spa: %w", err)
 	}
-	return []Scenario{hello, list, detail, action, spa}, nil
+	ssrHello, err := SSRHello()
+	if err != nil {
+		return nil, fmt.Errorf("ssr-hello: %w", err)
+	}
+	ssrTypical, err := SSRTypicalPage()
+	if err != nil {
+		return nil, fmt.Errorf("ssr-typical: %w", err)
+	}
+	ssrHeavy, err := SSRHeavyList()
+	if err != nil {
+		return nil, fmt.Errorf("ssr-heavy: %w", err)
+	}
+	return []Scenario{hello, list, detail, action, spa, ssrHello, ssrTypical, ssrHeavy}, nil
 }
 
 // Hello renders a static greeting at "/".
@@ -227,4 +240,142 @@ func newServer(routes []router.Route) (*server.Server, error) {
 		return nil, fmt.Errorf("server.New: %w", err)
 	}
 	return srv, nil
+}
+
+// ssrHelloData mirrors a real PageData a Phase 6 SSR Render would
+// receive: a typed Go struct populated by Load and threaded through
+// route.Page. Bench scenarios that simulate emitted Render() output go
+// through these typed values rather than a generic any so the cost
+// profile reflects the production path.
+type ssrHelloData struct {
+	Greeting string
+}
+
+type ssrTypicalData struct {
+	Title    string
+	LoggedIn bool
+	Username string
+	Items    []string
+}
+
+type ssrHeavyData struct {
+	Title string
+	Items []string
+}
+
+// SSRHello simulates the simplest emitted Render — a single Push +
+// EscapeHTML pair, mirroring what svelte_js2go emits for a
+// `<h1>{data.greeting}</h1>` template. Drives the ≥10k rps p50 target
+// from issue #429.
+func SSRHello() (Scenario, error) {
+	data := ssrHelloData{Greeting: "hello world"}
+	routes := []router.Route{{
+		Pattern:  "/",
+		Segments: []router.Segment{},
+		Page: func(w *render.Writer, _ *kit.RenderCtx, _ any) error {
+			var p svelteServer.Payload
+			p.Push("<h1>")
+			p.Push(svelteServer.EscapeHTML(data.Greeting))
+			p.Push("</h1>")
+			w.WriteString(p.Body())
+			return nil
+		},
+	}}
+	srv, err := newServer(routes)
+	if err != nil {
+		return Scenario{}, err
+	}
+	return Scenario{
+		Name:    "ssr-hello",
+		Server:  srv,
+		Request: httptest.NewRequest(http.MethodGet, "/", nil),
+	}, nil
+}
+
+// SSRTypicalPage simulates a mid-complexity page: header + conditional
+// + 10-item list + footer. Reflects the average production page
+// rendered through emitted Render.
+func SSRTypicalPage() (Scenario, error) {
+	data := ssrTypicalData{
+		Title:    "dashboard",
+		LoggedIn: true,
+		Username: "alice",
+		Items:    []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j"},
+	}
+	routes := []router.Route{{
+		Pattern: "/page",
+		Segments: []router.Segment{
+			{Kind: router.SegmentStatic, Value: "page"},
+		},
+		Page: func(w *render.Writer, _ *kit.RenderCtx, _ any) error {
+			var p svelteServer.Payload
+			p.Push("<header><h1>")
+			p.Push(svelteServer.EscapeHTML(data.Title))
+			p.Push("</h1></header>")
+			if data.LoggedIn {
+				p.Push("<p>Welcome back, ")
+				p.Push(svelteServer.EscapeHTML(data.Username))
+				p.Push(".</p>")
+			} else {
+				p.Push("<p>Please log in.</p>")
+			}
+			p.Push("<ul>")
+			for _, item := range data.Items {
+				p.Push("<li>")
+				p.Push(svelteServer.EscapeHTML(item))
+				p.Push("</li>")
+			}
+			p.Push("</ul><footer>fin</footer>")
+			w.WriteString(p.Body())
+			return nil
+		},
+	}}
+	srv, err := newServer(routes)
+	if err != nil {
+		return Scenario{}, err
+	}
+	return Scenario{
+		Name:    "ssr-typical",
+		Server:  srv,
+		Request: httptest.NewRequest(http.MethodGet, "/page", nil),
+	}, nil
+}
+
+// SSRHeavyList simulates a 100-item each-loop page. Stress-tests the
+// hot loop and per-iteration EscapeHTML cost.
+func SSRHeavyList() (Scenario, error) {
+	items := make([]string, 100)
+	for i := range items {
+		items[i] = "row " + strconv.Itoa(i)
+	}
+	data := ssrHeavyData{Title: "heavy", Items: items}
+	routes := []router.Route{{
+		Pattern: "/heavy",
+		Segments: []router.Segment{
+			{Kind: router.SegmentStatic, Value: "heavy"},
+		},
+		Page: func(w *render.Writer, _ *kit.RenderCtx, _ any) error {
+			var p svelteServer.Payload
+			p.Push("<h1>")
+			p.Push(svelteServer.EscapeHTML(data.Title))
+			p.Push("</h1><ul>")
+			for _, item := range data.Items {
+				p.Push("<li>")
+				p.Push(svelteServer.EscapeHTML(item))
+				p.Push("</li>")
+			}
+			p.Push("</ul>")
+			w.WriteString(p.Body())
+			return nil
+		},
+	}}
+	srv, err := newServer(routes)
+	if err != nil {
+		return Scenario{}, err
+	}
+	return Scenario{
+		Name:    "ssr-heavy",
+		Server:  srv,
+		Request: httptest.NewRequest(http.MethodGet, "/heavy", nil),
+	}, nil
 }

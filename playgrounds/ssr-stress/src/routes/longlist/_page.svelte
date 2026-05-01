@@ -3,6 +3,9 @@
   let { data }: { data: PageData } = $props();
 </script>
 
-<h1>{data.greeting}</h1>
-<p>Welcome to the sveltego basic playground.</p>
-<p><a href="/post/1">Read post 1</a></p>
+<h1>{data.title}</h1>
+<ul>
+  {#each data.items as item}
+    <li>{item}</li>
+  {/each}
+</ul>

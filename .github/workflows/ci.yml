@@ -64,7 +64,7 @@ jobs:
             init: 'packages/init/**'
             mcp: 'packages/mcp/**'
             lsp: 'packages/lsp/**'
-            playground: ['playgrounds/basic/**', 'playgrounds/blog/**', 'playgrounds/dashboard/**']
+            playground: ['playgrounds/basic/**', 'playgrounds/blog/**', 'playgrounds/dashboard/**', 'playgrounds/ssr-stress/**']
             benchmarks: 'benchmarks/**'
             shared:
               - 'go.work'
@@ -808,11 +808,19 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # ssr_home / ssr_extra are HTML fragments that MUST appear in the
+          # rendered <body> outside the hydration JSON payload. They pin the
+          # SSR contract for the original empty-`<div id="app">` regression
+          # (#420 / #421): plain `home_match` could match the JSON payload
+          # alone, masking a broken SSR pipeline. When unset for a playground
+          # the body assertion is skipped (soft-fallback / SPA-only routes).
           - playground: basic
             port: 3000
             home_match: 'Hello, sveltego!'
+            ssr_home: '<h1>Hello, sveltego!</h1>'
             extra_path: /post/123
             extra_match: 'Post 123'
+            ssr_extra: '<h1>Post 123</h1>'
           - playground: blog
             port: 8080
             home_match: 'sveltego blog'
@@ -823,6 +831,13 @@ jobs:
             home_match: 'sveltego dashboard'
             extra_path: /login
             extra_match: '"routeId":"/login"'
+          - playground: ssr-stress
+            port: 3000
+            home_match: 'ssr-stress index'
+            ssr_home: '<h1>ssr-stress index</h1>'
+            extra_path: /longlist
+            extra_match: '"routeId":"/longlist"'
+            ssr_extra: '<li>item 0</li>'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -831,6 +846,14 @@ jobs:
         with:
           go-version: '1.25.x'
           cache: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install sidecar deps
+        working-directory: packages/sveltego/internal/codegen/svelterender/sidecar
+        run: npm ci --no-audit --no-fund
 
       - name: Compile + Build
         working-directory: playgrounds/${{ matrix.playground }}
@@ -879,6 +902,17 @@ jobs:
           grep -F '${{ matrix.home_match }}' /tmp/root.html
           grep -F '<script id="sveltego-data" type="application/json">' /tmp/root.html
 
+      - name: Assert SSR body for /
+        if: matrix.ssr_home != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Strip the hydration JSON payload so we can prove SSR HTML lands
+          # in the page body, not just inside the JSON. Closes the original
+          # empty-`<div id="app">` regression (#420).
+          python3 -c 'import re,sys; s=open("/tmp/root.html").read(); s=re.sub(r"<script id=\"sveltego-data\"[\s\S]*?</script>","",s); sys.stdout.write(s)' > /tmp/root.body
+          grep -F '${{ matrix.ssr_home }}' /tmp/root.body
+
       - name: Curl ${{ matrix.extra_path }}
         shell: bash
         run: |
@@ -886,6 +920,14 @@ jobs:
           curl -fsS "http://localhost:${{ matrix.port }}${{ matrix.extra_path }}" | tee /tmp/extra.html
           grep -F '${{ matrix.extra_match }}' /tmp/extra.html
           grep -F '<script id="sveltego-data" type="application/json">' /tmp/extra.html
+
+      - name: Assert SSR body for ${{ matrix.extra_path }}
+        if: matrix.ssr_extra != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -c 'import re,sys; s=open("/tmp/extra.html").read(); s=re.sub(r"<script id=\"sveltego-data\"[\s\S]*?</script>","",s); sys.stdout.write(s)' > /tmp/extra.body
+          grep -F '${{ matrix.ssr_extra }}' /tmp/extra.body
 
       - name: Curl /__data.json
         shell: bash

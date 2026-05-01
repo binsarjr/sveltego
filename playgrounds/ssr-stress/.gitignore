@@ -1,0 +1,6 @@
+.gen/
+build/
+node_modules/
+static/_app/
+vite.config.gen.js
+/app

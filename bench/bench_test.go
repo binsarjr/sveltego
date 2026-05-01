@@ -15,11 +15,14 @@ import (
 	"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
 )
 
-func BenchmarkServeHTTP_Hello(b *testing.B)     { runScenario(b, mustHello) }
-func BenchmarkServeHTTP_List(b *testing.B)      { runScenario(b, mustList) }
-func BenchmarkServeHTTP_Detail(b *testing.B)    { runScenario(b, mustDetail) }
-func BenchmarkServeHTTP_Action(b *testing.B)    { runScenario(b, mustAction) }
-func BenchmarkServeHTTP_SvelteSPA(b *testing.B) { runScenario(b, mustSvelteSPA) }
+func BenchmarkServeHTTP_Hello(b *testing.B)      { runScenario(b, mustHello) }
+func BenchmarkServeHTTP_List(b *testing.B)       { runScenario(b, mustList) }
+func BenchmarkServeHTTP_Detail(b *testing.B)     { runScenario(b, mustDetail) }
+func BenchmarkServeHTTP_Action(b *testing.B)     { runScenario(b, mustAction) }
+func BenchmarkServeHTTP_SvelteSPA(b *testing.B)  { runScenario(b, mustSvelteSPA) }
+func BenchmarkServeHTTP_SSRHello(b *testing.B)   { runScenario(b, mustSSRHello) }
+func BenchmarkServeHTTP_SSRTypical(b *testing.B) { runScenario(b, mustSSRTypical) }
+func BenchmarkServeHTTP_SSRHeavy(b *testing.B)   { runScenario(b, mustSSRHeavy) }
 
 func runScenario(b *testing.B, build func(*testing.B) scenarios.Scenario) {
 	b.Helper()
@@ -71,11 +74,14 @@ func BenchmarkManifestColdStart(b *testing.B) {
 	}
 }
 
-func mustHello(b *testing.B) scenarios.Scenario     { return must(b, scenarios.Hello) }
-func mustList(b *testing.B) scenarios.Scenario      { return must(b, scenarios.List) }
-func mustDetail(b *testing.B) scenarios.Scenario    { return must(b, scenarios.Detail) }
-func mustAction(b *testing.B) scenarios.Scenario    { return must(b, scenarios.Action) }
-func mustSvelteSPA(b *testing.B) scenarios.Scenario { return must(b, scenarios.SvelteSPA) }
+func mustHello(b *testing.B) scenarios.Scenario      { return must(b, scenarios.Hello) }
+func mustList(b *testing.B) scenarios.Scenario       { return must(b, scenarios.List) }
+func mustDetail(b *testing.B) scenarios.Scenario     { return must(b, scenarios.Detail) }
+func mustAction(b *testing.B) scenarios.Scenario     { return must(b, scenarios.Action) }
+func mustSvelteSPA(b *testing.B) scenarios.Scenario  { return must(b, scenarios.SvelteSPA) }
+func mustSSRHello(b *testing.B) scenarios.Scenario   { return must(b, scenarios.SSRHello) }
+func mustSSRTypical(b *testing.B) scenarios.Scenario { return must(b, scenarios.SSRTypicalPage) }
+func mustSSRHeavy(b *testing.B) scenarios.Scenario   { return must(b, scenarios.SSRHeavyList) }
 
 func must(b *testing.B, build func() (scenarios.Scenario, error)) scenarios.Scenario {
 	b.Helper()

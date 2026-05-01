@@ -22,5 +22,6 @@ use (
 	./playgrounds/basic
 	./playgrounds/blog
 	./playgrounds/dashboard
+	./playgrounds/ssr-stress
 	./templates/ai
 )

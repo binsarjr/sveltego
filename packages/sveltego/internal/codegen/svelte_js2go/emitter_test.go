@@ -67,6 +67,43 @@ func TestTranspile_Programmatic(t *testing.T) {
 	}
 }
 
+// TestTranspile_Extended exercises the Phase 7 (#429) corpus expansion:
+// 50+ shape variants on top of the 30 priority cases, pushing coverage
+// toward the v1 ~95% target from RFC #421.
+func TestTranspile_Extended(t *testing.T) {
+	t.Parallel()
+	cases := extendedProgrammaticCases()
+	if len(cases) < 50 {
+		t.Fatalf("extended corpus has %d cases, want ≥50", len(cases))
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := TranspileNode(tc.root(), "/test/"+tc.name, Options{PackageName: "gen"})
+			if err != nil {
+				t.Fatalf("TranspileNode: %v", err)
+			}
+			if _, ferr := format.Source(got); ferr != nil {
+				t.Fatalf("not parseable Go: %v\n%s", ferr, got)
+			}
+			assertGolden(t, "shapes_extended/"+tc.name, got)
+		})
+	}
+}
+
+// TestCorpus_Total asserts the combined priority + extended + sidecar
+// fixture count meets the ≥80 acceptance bar from issue #429.
+func TestCorpus_Total(t *testing.T) {
+	t.Parallel()
+	priority := allProgrammaticCases()
+	extended := extendedProgrammaticCases()
+	total := len(priority) + len(extended) + len(sidecarCases)
+	if total < 80 {
+		t.Fatalf("total corpus = %d, acceptance bar from #429 is ≥80", total)
+	}
+}
+
 func TestTranspile_HTMLDeferred(t *testing.T) {
 	t.Parallel()
 	// {@html raw} is intentionally deferred per Phase 4 quirks.

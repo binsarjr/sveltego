@@ -1,0 +1,316 @@
+{
+  "kind": "templates",
+  "svelte_version": "5.55.5",
+  "cases": [
+    {
+      "name": "static-h1",
+      "ops": [
+        {"op": "push", "args": ["<h1>hello</h1>"]}
+      ],
+      "expected": "<h1>hello</h1>"
+    },
+    {
+      "name": "interp-name",
+      "ops": [
+        {"op": "push", "args": ["<h1>Hello "]},
+        {"op": "escape_html", "args": ["world"]},
+        {"op": "push", "args": ["</h1>"]}
+      ],
+      "expected": "<h1>Hello world</h1>"
+    },
+    {
+      "name": "interp-amp",
+      "ops": [
+        {"op": "push", "args": ["<p>"]},
+        {"op": "escape_html", "args": ["a & b"]},
+        {"op": "push", "args": ["</p>"]}
+      ],
+      "expected": "<p>a &amp; b</p>"
+    },
+    {
+      "name": "interp-lt",
+      "ops": [
+        {"op": "push", "args": ["<p>"]},
+        {"op": "escape_html", "args": ["1 < 2"]},
+        {"op": "push", "args": ["</p>"]}
+      ],
+      "expected": "<p>1 &lt; 2</p>"
+    },
+    {
+      "name": "static-attr",
+      "ops": [
+        {"op": "push", "args": ["<button class=\"btn\">click</button>"]}
+      ],
+      "expected": "<button class=\"btn\">click</button>"
+    },
+    {
+      "name": "attr-helper-string",
+      "ops": [
+        {"op": "push", "args": ["<input"]},
+        {"op": "attr", "args": ["value", "hello", false]},
+        {"op": "push", "args": [" />"]}
+      ],
+      "expected": "<input value=\"hello\" />"
+    },
+    {
+      "name": "attr-helper-bool-true",
+      "ops": [
+        {"op": "push", "args": ["<input"]},
+        {"op": "attr", "args": ["disabled", true, true]},
+        {"op": "push", "args": [" />"]}
+      ],
+      "expected": "<input disabled=\"\" />"
+    },
+    {
+      "name": "attr-helper-bool-false",
+      "ops": [
+        {"op": "push", "args": ["<input"]},
+        {"op": "attr", "args": ["disabled", false, true]},
+        {"op": "push", "args": [" />"]}
+      ],
+      "expected": "<input />"
+    },
+    {
+      "name": "attr-needs-escape",
+      "ops": [
+        {"op": "push", "args": ["<a"]},
+        {"op": "attr", "args": ["href", "/x?a=1&b=2", false]},
+        {"op": "push", "args": [">link</a>"]}
+      ],
+      "expected": "<a href=\"/x?a=1&amp;b=2\">link</a>"
+    },
+    {
+      "name": "attr-with-quote",
+      "ops": [
+        {"op": "push", "args": ["<a"]},
+        {"op": "attr", "args": ["title", "say \"hi\"", false]},
+        {"op": "push", "args": [">x</a>"]}
+      ],
+      "expected": "<a title=\"say &quot;hi&quot;\">x</a>"
+    },
+    {
+      "name": "class-clsx",
+      "ops": [
+        {"op": "push", "args": ["<span class=\""]},
+        {"op": "clsx", "args": ["base", "primary"]},
+        {"op": "push", "args": ["\"></span>"]}
+      ],
+      "expected": "<span class=\"base primary\"></span>"
+    },
+    {
+      "name": "class-clsx-with-cond",
+      "ops": [
+        {"op": "push", "args": ["<span class=\""]},
+        {"op": "clsx", "args": ["base", true, "primary"]},
+        {"op": "push", "args": ["\"></span>"]}
+      ],
+      "expected": "<span class=\"base primary\"></span>"
+    },
+    {
+      "name": "class-clsx-with-falsy",
+      "ops": [
+        {"op": "push", "args": ["<span class=\""]},
+        {"op": "clsx", "args": ["base", false, "primary"]},
+        {"op": "push", "args": ["\"></span>"]}
+      ],
+      "expected": "<span class=\"base primary\"></span>"
+    },
+    {
+      "name": "style-merge",
+      "ops": [
+        {"op": "push", "args": ["<div style=\""]},
+        {"op": "merge_styles", "args": ["color: red", "font-size: 12px"]},
+        {"op": "push", "args": ["\"></div>"]}
+      ],
+      "expected": "<div style=\"color: red; font-size: 12px;\"></div>"
+    },
+    {
+      "name": "style-merge-skip-empty",
+      "ops": [
+        {"op": "push", "args": ["<div style=\""]},
+        {"op": "merge_styles", "args": ["color: red", ""]},
+        {"op": "push", "args": ["\"></div>"]}
+      ],
+      "expected": "<div style=\"color: red;\"></div>"
+    },
+    {
+      "name": "stringify-number",
+      "ops": [
+        {"op": "push", "args": ["<p>n="]},
+        {"op": "escape_html", "args": [42]},
+        {"op": "push", "args": ["</p>"]}
+      ],
+      "expected": "<p>n=42</p>"
+    },
+    {
+      "name": "stringify-bool",
+      "ops": [
+        {"op": "push", "args": ["<p>"]},
+        {"op": "escape_html", "args": [true]},
+        {"op": "push", "args": ["</p>"]}
+      ],
+      "expected": "<p>true</p>"
+    },
+    {
+      "name": "stringify-null",
+      "ops": [
+        {"op": "push", "args": ["<p>"]},
+        {"op": "escape_html", "args": [null]},
+        {"op": "push", "args": ["</p>"]}
+      ],
+      "expected": "<p></p>"
+    },
+    {
+      "name": "two-paragraphs",
+      "ops": [
+        {"op": "push", "args": ["<p>first</p><p>second</p>"]}
+      ],
+      "expected": "<p>first</p><p>second</p>"
+    },
+    {
+      "name": "list-three-items",
+      "ops": [
+        {"op": "push", "args": ["<ul>"]},
+        {"op": "push", "args": ["<li>"]},
+        {"op": "escape_html", "args": ["a"]},
+        {"op": "push", "args": ["</li>"]},
+        {"op": "push", "args": ["<li>"]},
+        {"op": "escape_html", "args": ["b"]},
+        {"op": "push", "args": ["</li>"]},
+        {"op": "push", "args": ["<li>"]},
+        {"op": "escape_html", "args": ["c"]},
+        {"op": "push", "args": ["</li>"]},
+        {"op": "push", "args": ["</ul>"]}
+      ],
+      "expected": "<ul><li>a</li><li>b</li><li>c</li></ul>"
+    },
+    {
+      "name": "concat-href",
+      "ops": [
+        {"op": "push", "args": ["<a"]},
+        {"op": "attr", "args": ["href", "/post/123", false]},
+        {"op": "push", "args": [">link</a>"]}
+      ],
+      "expected": "<a href=\"/post/123\">link</a>"
+    },
+    {
+      "name": "interp-empty-string",
+      "ops": [
+        {"op": "push", "args": ["<p>"]},
+        {"op": "escape_html", "args": [""]},
+        {"op": "push", "args": ["</p>"]}
+      ],
+      "expected": "<p></p>"
+    },
+    {
+      "name": "interp-script-literal",
+      "ops": [
+        {"op": "push", "args": ["<p>"]},
+        {"op": "escape_html", "args": ["<script>"]},
+        {"op": "push", "args": ["</p>"]}
+      ],
+      "expected": "<p>&lt;script></p>"
+    },
+    {
+      "name": "title-with-amp",
+      "ops": [
+        {"op": "push", "args": ["<title>"]},
+        {"op": "escape_html", "args": ["A & B"]},
+        {"op": "push", "args": ["</title>"]}
+      ],
+      "expected": "<title>A &amp; B</title>"
+    },
+    {
+      "name": "div-static-classes",
+      "ops": [
+        {"op": "push", "args": ["<div class=\"max-w-3xl mx-auto\">content</div>"]}
+      ],
+      "expected": "<div class=\"max-w-3xl mx-auto\">content</div>"
+    },
+    {
+      "name": "img-with-alt",
+      "ops": [
+        {"op": "push", "args": ["<img"]},
+        {"op": "attr", "args": ["src", "/x.png", false]},
+        {"op": "attr", "args": ["alt", "logo", false]},
+        {"op": "push", "args": [" />"]}
+      ],
+      "expected": "<img src=\"/x.png\" alt=\"logo\" />"
+    },
+    {
+      "name": "input-checked",
+      "ops": [
+        {"op": "push", "args": ["<input"]},
+        {"op": "attr", "args": ["type", "checkbox", false]},
+        {"op": "attr", "args": ["checked", true, true]},
+        {"op": "push", "args": [" />"]}
+      ],
+      "expected": "<input type=\"checkbox\" checked=\"\" />"
+    },
+    {
+      "name": "input-not-checked",
+      "ops": [
+        {"op": "push", "args": ["<input"]},
+        {"op": "attr", "args": ["type", "checkbox", false]},
+        {"op": "attr", "args": ["checked", false, true]},
+        {"op": "push", "args": [" />"]}
+      ],
+      "expected": "<input type=\"checkbox\" />"
+    },
+    {
+      "name": "header-with-nav",
+      "ops": [
+        {"op": "push", "args": ["<header><nav>"]},
+        {"op": "push", "args": ["<a"]},
+        {"op": "attr", "args": ["href", "/", false]},
+        {"op": "push", "args": [">Home</a>"]},
+        {"op": "push", "args": ["<a"]},
+        {"op": "attr", "args": ["href", "/about", false]},
+        {"op": "push", "args": [">About</a>"]},
+        {"op": "push", "args": ["</nav></header>"]}
+      ],
+      "expected": "<header><nav><a href=\"/\">Home</a><a href=\"/about\">About</a></nav></header>"
+    },
+    {
+      "name": "form-action",
+      "ops": [
+        {"op": "push", "args": ["<form"]},
+        {"op": "attr", "args": ["method", "post", false]},
+        {"op": "attr", "args": ["action", "/?/login", false]},
+        {"op": "push", "args": [">"]},
+        {"op": "push", "args": ["<input"]},
+        {"op": "attr", "args": ["name", "user", false]},
+        {"op": "push", "args": [" />"]},
+        {"op": "push", "args": ["</form>"]}
+      ],
+      "expected": "<form method=\"post\" action=\"/?/login\"><input name=\"user\" /></form>"
+    },
+    {
+      "name": "code-with-escape",
+      "ops": [
+        {"op": "push", "args": ["<pre><code>"]},
+        {"op": "escape_html", "args": ["if (a < b && c > d) {}"]},
+        {"op": "push", "args": ["</code></pre>"]}
+      ],
+      "expected": "<pre><code>if (a &lt; b &amp;&amp; c > d) {}</code></pre>"
+    },
+    {
+      "name": "spread-empty-object",
+      "ops": [
+        {"op": "push", "args": ["<div"]},
+        {"op": "spread_attributes", "args": [{}]},
+        {"op": "push", "args": ["></div>"]}
+      ],
+      "expected": "<div></div>"
+    },
+    {
+      "name": "spread-with-class",
+      "ops": [
+        {"op": "push", "args": ["<div"]},
+        {"op": "spread_attributes", "args": [{"class": "x", "id": "y"}]},
+        {"op": "push", "args": ["></div>"]}
+      ],
+      "expected": "<div class=\"x\" id=\"y\"></div>"
+    }
+  ]
+}
