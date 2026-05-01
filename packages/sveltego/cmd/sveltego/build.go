@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -26,6 +27,9 @@ func newBuildCmd() *cobra.Command {
 			verbose := isVerbose(cmd)
 			root, err := resolveProjectRoot()
 			if err != nil {
+				return err
+			}
+			if err := ensureSveltegoRequire(cmd, root, verbose); err != nil {
 				return err
 			}
 			result, err := codegen.Build(codegen.BuildOptions{
@@ -153,6 +157,64 @@ func runViteBuild(cmd *cobra.Command, root, viteConfig string, verbose bool) err
 		return fmt.Errorf("vite build: %w — ensure Node >=18 and @sveltejs/vite-plugin-svelte are installed", err)
 	}
 	return nil
+}
+
+// sveltegoModulePath is the canonical Go module path of the framework
+// runtime. The fresh-scaffold go.mod (init #110) intentionally omits the
+// require line so the proxy can resolve whatever pseudo-version is
+// current. ensureSveltegoRequire bridges that gap on first build.
+const sveltegoModulePath = "github.com/binsarjr/sveltego/packages/sveltego"
+
+// ensureSveltegoRequire seeds the project's go.mod with a require line for
+// the framework runtime when one is missing. The fresh-scaffold (#110)
+// emits a bare `module ... / go 1.23` clause so we do not pin a literal
+// `v0.0.0` that the proxy cannot resolve. On the first `sveltego build`,
+// shell out to `go get <module>@latest` to let the proxy fill in the
+// current pseudo-version and seed go.sum at the same time.
+//
+// A go.mod that already requires the framework module is left untouched
+// so subsequent builds do not chase a moving target.
+func ensureSveltegoRequire(cmd *cobra.Command, root string, verbose bool) error {
+	goModPath := filepath.Join(root, "go.mod")
+	body, err := os.ReadFile(goModPath) //nolint:gosec // root is resolved from cwd
+	if err != nil {
+		return fmt.Errorf("read go.mod: %w", err)
+	}
+	if hasRequire(body, sveltegoModulePath) {
+		return nil
+	}
+	if verbose {
+		fmt.Fprintf(cmd.OutOrStdout(), "go.mod: adding require %s@latest\n", sveltegoModulePath)
+	}
+	getCmd := exec.Command("go", "get", sveltegoModulePath+"@latest") //nolint:gosec // module path is a fixed constant
+	getCmd.Dir = root
+	getCmd.Stdout = cmd.OutOrStdout()
+	getCmd.Stderr = cmd.ErrOrStderr()
+	if err := getCmd.Run(); err != nil {
+		return fmt.Errorf("go get %s@latest: %w", sveltegoModulePath, err)
+	}
+	return nil
+}
+
+// hasRequire reports whether goModBody declares a require directive for
+// the given module path. The check is line-based and tolerates both the
+// single-line `require <path> v1` and the parenthesized block form.
+func hasRequire(goModBody []byte, modulePath string) bool {
+	for _, line := range strings.Split(string(goModBody), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "//") {
+			continue
+		}
+		// `require github.com/foo/bar v1.2.3`
+		if strings.HasPrefix(trimmed, "require "+modulePath) || strings.HasPrefix(trimmed, "require\t"+modulePath) {
+			return true
+		}
+		// Inside a `require ( ... )` block: bare `<module> v1.2.3` lines.
+		if strings.HasPrefix(trimmed, modulePath+" ") || strings.HasPrefix(trimmed, modulePath+"\t") {
+			return true
+		}
+	}
+	return false
 }
 
 // detectPackageManager returns "pnpm", "bun", or "npm" based on lockfile

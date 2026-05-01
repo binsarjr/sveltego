@@ -185,7 +185,7 @@ func renderGoMod(module string) string {
 	var b strings.Builder
 	b.WriteString("module ")
 	b.WriteString(module)
-	b.WriteString("\n\ngo 1.23\n\nrequire github.com/binsarjr/sveltego/packages/sveltego v0.0.0\n")
+	b.WriteString("\n\ngo 1.23\n")
 	return b.String()
 }
 

@@ -18,6 +18,13 @@ type pageDataField struct {
 type pageDataResult struct {
 	Fields  []pageDataField
 	Imports []string
+	// HasNamedType is true when the user's server file declares
+	// `type PageData struct{...}` at package scope (instead of returning
+	// an inline anonymous struct). The codegen emits a `type PageData =
+	// <mirror>.PageData` alias in that case so the runtime type assertion
+	// in the manifest adapter sees the same Go type the user authored.
+	// See #109, the standalone-scaffold variant of #143.
+	HasNamedType bool
 }
 
 type importBinding struct {
@@ -25,11 +32,35 @@ type importBinding struct {
 	Alias string
 }
 
-// inferPageData parses serverFilePath, locates Load(), and reads its first
-// return composite literal. Only inline struct literals (struct{...}{...})
-// produce field inference. Named-type returns and missing files yield a
-// zero result, leaving the caller to emit `type PageData struct{}`.
+// inferPageData parses serverFilePath, locates Load(), and reads the
+// page's data shape. See inferDataShape for the two supported forms.
 func inferPageData(serverFilePath string) (pageDataResult, error) {
+	return inferDataShape(serverFilePath, "PageData")
+}
+
+// inferLayoutData parses serverFilePath, locates Load(), and reads the
+// layout's data shape. Mirrors inferPageData but keys on a `LayoutData`
+// named-type declaration instead.
+func inferLayoutData(serverFilePath string) (pageDataResult, error) {
+	return inferDataShape(serverFilePath, "LayoutData")
+}
+
+// inferDataShape parses serverFilePath, locates Load(), and reads its
+// data shape. Two source forms are supported:
+//
+//  1. Inline anonymous struct return — `return struct{...}{...}, nil`.
+//     The struct fields are extracted and the caller emits a `type
+//     <Data> = struct{...}` alias whose fields mirror them.
+//  2. Named-type declaration — a top-level `type <Data> struct{...}`
+//     accompanies a `func Load(...) (<Data>, error)`. The caller emits
+//     a `type <Data> = <mirror>.<Data>` alias instead, preserving type
+//     identity with the user-authored type so the manifest's adapter
+//     assertion succeeds.
+//
+// Missing files and unrecognized return shapes produce a zero result;
+// the caller falls back to the empty `type <Data> = struct{}` form.
+// dataTypeName selects between page (PageData) and layout (LayoutData).
+func inferDataShape(serverFilePath, dataTypeName string) (pageDataResult, error) {
 	if serverFilePath == "" {
 		return pageDataResult{}, nil
 	}
@@ -50,6 +81,16 @@ func inferPageData(serverFilePath string) (pageDataResult, error) {
 	if loadFn == nil {
 		return pageDataResult{}, nil
 	}
+
+	// Case 2: user declared `type <Data> ...` at package scope. The gen
+	// file aliases to the mirrored type rather than synthesizing a fresh
+	// inline struct. Detected first because a named-type Load return
+	// collides with the inline-struct branch (lit.Type is an Ident, not
+	// StructType).
+	if hasTypeDecl(f, dataTypeName) {
+		return pageDataResult{HasNamedType: true}, nil
+	}
+
 	lit := findFirstReturnComposite(loadFn)
 	if lit == nil {
 		return pageDataResult{}, nil
@@ -91,6 +132,31 @@ func inferPageData(serverFilePath string) (pageDataResult, error) {
 	sort.Strings(imps)
 
 	return pageDataResult{Fields: fields, Imports: imps}, nil
+}
+
+// hasTypeDecl reports whether the file declares a top-level type with
+// the given name (struct, alias, or any other type spec). Codegen uses
+// this to switch between the inline-struct alias form and the
+// mirror-import alias form. The check is purely structural — the type
+// body is not validated; the user-authored declaration is the source of
+// truth and the mirror compiles independently.
+func hasTypeDecl(f *goast.File, name string) bool {
+	for _, decl := range f.Decls {
+		gd, ok := decl.(*goast.GenDecl)
+		if !ok || gd.Tok != token.TYPE {
+			continue
+		}
+		for _, spec := range gd.Specs {
+			ts, ok := spec.(*goast.TypeSpec)
+			if !ok || ts.Name == nil {
+				continue
+			}
+			if ts.Name.Name == name {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func findLoadFunc(f *goast.File) *goast.FuncDecl {
@@ -182,13 +248,28 @@ func dropField(fields []pageDataField, name string) []pageDataField {
 	return out
 }
 
-// emitPageDataStruct writes `type PageData = struct{...}` as a type alias
-// (note the `=`). The alias preserves type identity between the user's
-// inline anonymous struct literal returned by Load() and PageData, so the
-// manifest adapter's `data.(PageData)` assertion succeeds. A new named
-// type would require an explicit value conversion at the wire boundary.
-// See #109. Empty fields produce the zero-field alias form.
-func emitPageDataStruct(b *Builder, fields []pageDataField) {
+// emitPageDataStruct writes the page's PageData type alias. Three shapes:
+//
+//  1. mirrorAlias != "" — the user's server file declares a named
+//     `type PageData ...`, mirrored into the usersrc tree. Emits
+//     `type PageData = <mirrorAlias>.PageData`. Type identity flows
+//     through the alias so the manifest adapter's runtime assertion
+//     against the user's authored type succeeds.
+//  2. mirrorAlias == "" and len(fields) > 0 — the user's Load() returns
+//     an inline anonymous struct literal whose fields were inferred.
+//     Emits `type PageData = struct{...}` mirroring those fields.
+//  3. Both empty — Load() returns nothing inferable. Emits the
+//     zero-field alias `type PageData = struct{}`.
+//
+// The alias `=` is load-bearing in cases 2 and 3 too: it preserves type
+// identity between the user's anonymous struct value and PageData. A
+// named type (no `=`) would force a value conversion at the wire
+// boundary. See #109.
+func emitPageDataStruct(b *Builder, fields []pageDataField, mirrorAlias string) {
+	if mirrorAlias != "" {
+		b.Linef("type PageData = %s.PageData", mirrorAlias)
+		return
+	}
 	if len(fields) == 0 {
 		b.Line("type PageData = struct{}")
 		return
