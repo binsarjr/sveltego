@@ -1,0 +1,12 @@
+{
+  "helper": "MergeStyles",
+  "svelte_version": "5.x",
+  "cases": [
+    { "name": "single", "args": ["color: red"], "want": "color: red;" },
+    { "name": "single-with-semi", "args": ["color: red;"], "want": "color: red;" },
+    { "name": "two", "args": ["color: red", "font-size: 12px"], "want": "color: red; font-size: 12px;" },
+    { "name": "trim-trailing-semis", "args": ["color: red;;;"], "want": "color: red;" },
+    { "name": "skip-empty", "args": [null, "color: red", ""], "want": "color: red;" },
+    { "name": "three", "args": ["a:1", "b:2", "c:3"], "want": "a:1; b:2; c:3;" }
+  ]
+}

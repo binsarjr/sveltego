@@ -1,0 +1,17 @@
+{
+  "helper": "EscapeHTMLAttr",
+  "svelte_version": "5.x",
+  "cases": [
+    { "name": "empty", "in": "", "want": "" },
+    { "name": "plain", "in": "hello", "want": "hello" },
+    { "name": "amp", "in": "a & b", "want": "a &amp; b" },
+    { "name": "lt", "in": "a < b", "want": "a &lt; b" },
+    { "name": "quote", "in": "say \"hi\"", "want": "say &quot;hi&quot;" },
+    { "name": "all-three", "in": "& < \"", "want": "&amp; &lt; &quot;" },
+    { "name": "gt-not-escaped", "in": "a > b", "want": "a > b" },
+    { "name": "apos-not-escaped", "in": "it's", "want": "it's" },
+    { "name": "null", "in": null, "want": "" },
+    { "name": "double-quotes-only", "in": "\"\"\"", "want": "&quot;&quot;&quot;" },
+    { "name": "json-like", "in": "{\"k\":1}", "want": "{&quot;k&quot;:1}" }
+  ]
+}

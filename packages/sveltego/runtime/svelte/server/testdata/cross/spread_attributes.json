@@ -1,0 +1,14 @@
+{
+  "helper": "SpreadAttributes",
+  "svelte_version": "5.x",
+  "cases": [
+    { "name": "single", "args": [{"id": "main"}], "want": " id=\"main\"" },
+    { "name": "two-sorted", "args": [{"id": "x", "class": "y"}], "want": " class=\"y\" id=\"x\"" },
+    { "name": "drop-on-handler", "args": [{"id": "a", "onclick": "x"}], "want": " id=\"a\"" },
+    { "name": "drop-dollar-internal", "args": [{"id": "a", "$$slots": {}}], "want": " id=\"a\"" },
+    { "name": "boolean-attr-true", "args": [{"disabled": true}], "want": " disabled=\"\"" },
+    { "name": "boolean-attr-false", "args": [{"disabled": false}], "want": "" },
+    { "name": "escape-quotes", "args": [{"title": "a \"b\""}], "want": " title=\"a &quot;b&quot;\"" },
+    { "name": "skip-invalid-name", "args": [{"id": "ok", "bad name": "no"}], "want": " id=\"ok\"" }
+  ]
+}

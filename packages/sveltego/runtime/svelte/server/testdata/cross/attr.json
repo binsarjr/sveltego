@@ -1,0 +1,18 @@
+{
+  "helper": "Attr",
+  "svelte_version": "5.x",
+  "cases": [
+    { "name": "plain", "args": ["id", "main", false], "want": " id=\"main\"" },
+    { "name": "escape-quote", "args": ["title", "say \"hi\"", false], "want": " title=\"say &quot;hi&quot;\"" },
+    { "name": "escape-amp", "args": ["data-x", "a&b", false], "want": " data-x=\"a&amp;b\"" },
+    { "name": "null-value", "args": ["id", null, false], "want": "" },
+    { "name": "boolean-true", "args": ["disabled", true, true], "want": " disabled=\"\"" },
+    { "name": "boolean-false", "args": ["disabled", false, true], "want": "" },
+    { "name": "boolean-empty-string", "args": ["disabled", "", true], "want": "" },
+    { "name": "hidden-true", "args": ["hidden", true, false], "want": " hidden=\"\"" },
+    { "name": "hidden-until-found", "args": ["hidden", "until-found", false], "want": " hidden=\"until-found\"" },
+    { "name": "translate-true", "args": ["translate", true, false], "want": " translate=\"yes\"" },
+    { "name": "translate-false", "args": ["translate", false, false], "want": " translate=\"no\"" },
+    { "name": "number-zero", "args": ["tabindex", 0, false], "want": " tabindex=\"0\"" }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "helper": "Stringify",
+  "svelte_version": "5.x",
+  "cases": [
+    { "name": "null", "in": null, "want": "" },
+    { "name": "empty-string", "in": "", "want": "" },
+    { "name": "string", "in": "hi", "want": "hi" },
+    { "name": "number", "in": 42, "want": "42" },
+    { "name": "negative-number", "in": -7, "want": "-7" },
+    { "name": "zero", "in": 0, "want": "0" },
+    { "name": "float", "in": 3.14, "want": "3.14" },
+    { "name": "true", "in": true, "want": "true" },
+    { "name": "false", "in": false, "want": "false" }
+  ]
+}
