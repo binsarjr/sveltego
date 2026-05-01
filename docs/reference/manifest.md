@@ -10,9 +10,9 @@ summary: The manifest.gen.go contract — registered routes, layouts, hooks, pag
 
 ## What it registers
 
-- **Routes.** Each `+page.svelte` and `+server.go` produces an entry with: pattern, render function, optional `Load`, optional `Actions`, resolved `PageOptions`.
-- **Layouts.** Each `+layout.svelte` produces an entry with: pattern, render function, optional `Load`, link to parent.
-- **Error boundaries.** Each `+error.svelte` registers under its mount point.
+- **Routes.** Each `_page.svelte` and `_server.go` produces an entry with: pattern, render function, optional `Load`, optional `Actions`, resolved `PageOptions`.
+- **Layouts.** Each `_layout.svelte` produces an entry with: pattern, render function, optional `Load`, link to parent.
+- **Error boundaries.** Each `_error.svelte` registers under its mount point.
 - **Param matchers.** Functions exported from `src/params/<name>.go` map to matcher names usable in patterns (`[id=hex]`).
 - **Hooks.** `Handle`, `HandleError`, `HandleFetch`, `Reroute`, `Init` from `hooks.server.go`. Missing fields are filled with `kit.Identity*` defaults.
 - **Page options.** Resolved per-route values for `Prerender`, `SSR`, `CSR`, `TrailingSlash` after layout cascade.

@@ -46,7 +46,7 @@ func TestEmitPageDataStruct_AliasForm(t *testing.T) {
 	})
 
 	// Mirror-alias form covers the named-type branch: when the user's
-	// page.server.go declares `type PageData struct{...}` at package
+	// _page.server.go declares `type PageData struct{...}` at package
 	// scope, the gen file aliases to <usersrc>.PageData rather than
 	// synthesizing a fresh inline struct so the manifest's runtime type
 	// assertion sees the user-authored type. Closes the standalone-

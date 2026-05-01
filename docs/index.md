@@ -23,7 +23,7 @@ features:
   - title: Pure Go server
     details: .svelte templates compile to .gen/*.go. No goja, v8go, or Bun on the request path.
   - title: Familiar conventions
-    details: +page.svelte, page.server.go, +layout.svelte, +error.svelte, hooks.server.go. Same shape as SvelteKit.
+    details: _page.svelte, page.server.go, _layout.svelte, _error.svelte, hooks.server.go. Same shape as SvelteKit.
   - title: Go expressions
     details: '{Data.User.Name}, {len(Data.Posts)}, nil not null. Validated at codegen via go/parser.'
   - title: Svelte 5 runes

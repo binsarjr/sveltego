@@ -255,7 +255,7 @@ func TestDataJSON_omitsManifest(t *testing.T) {
 }
 
 // TestBuildClientManifest_skipsServerOnly verifies routes without a Page
-// handler (e.g. pure +server.go endpoints) are excluded from the SPA
+// handler (e.g. pure _server.go endpoints) are excluded from the SPA
 // manifest, since the client cannot mount a component for them.
 func TestBuildClientManifest_skipsServerOnly(t *testing.T) {
 	t.Parallel()
@@ -649,7 +649,7 @@ func TestStreaming_emitsViteAssetTags(t *testing.T) {
 	t.Parallel()
 
 	const manifest = `{
-		"src/routes/streamed/+page.svelte": {
+		"src/routes/streamed/_page.svelte": {
 			"file": "_app/streamed-abc.js",
 			"css": ["_app/streamed-xyz.css"],
 			"imports": ["_shared"],
@@ -664,7 +664,7 @@ func TestStreaming_emitsViteAssetTags(t *testing.T) {
 		Routes: []router.Route{{
 			Pattern:   "/streamed",
 			Segments:  []router.Segment{{Kind: router.SegmentStatic, Value: "streamed"}},
-			ClientKey: "src/routes/streamed/+page.svelte",
+			ClientKey: "src/routes/streamed/_page.svelte",
 			Page: func(w *render.Writer, _ *kit.RenderCtx, _ any) error {
 				w.WriteString(`<h1>shell</h1>`)
 				return nil

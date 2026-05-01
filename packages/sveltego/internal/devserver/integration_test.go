@@ -136,7 +136,7 @@ func TestDevHotSwap_Svelte(t *testing.T) {
 		t.Fatalf("first fetch missing marker:original; body:\n%s", body)
 	}
 
-	page := filepath.Join(root, "src", "routes", "+page.svelte")
+	page := filepath.Join(root, "src", "routes", "_page.svelte")
 	if err := os.WriteFile(page, []byte("<h1>marker:edited</h1>\n"), 0o644); err != nil {
 		t.Fatalf("rewrite page: %v", err)
 	}

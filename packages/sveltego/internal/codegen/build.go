@@ -167,7 +167,7 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 	var clientRouteKeys []string
 	clientKeysByPkg := make(map[string]string)
 	// clientRouterMap maps each route's canonical pattern to the path of
-	// its +page.svelte source relative to the SPA router module
+	// its _page.svelte source relative to the SPA router module
 	// (.gen/client/__router/router.ts). It feeds vite.GenerateRouter so
 	// the SPA router can lazy-import the right component per navigation.
 	clientRouterMap := make(map[string]string)
@@ -195,9 +195,9 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 				pageHeads[route.PackagePath] = true
 			}
 			routeCount++
-			pageName := "+page.svelte"
+			pageName := "_page.svelte"
 			if route.HasReset {
-				pageName = "+page@" + route.ResetTarget + ".svelte"
+				pageName = "_page@" + route.ResetTarget + ".svelte"
 			}
 			componentSeeds = append(componentSeeds, filepath.Join(route.Dir, pageName))
 
@@ -374,7 +374,7 @@ func serviceWorkerEntry(projectRoot string) string {
 	return ""
 }
 
-// emitPage parses one +page.svelte, applies $lib import rewriting on the
+// emitPage parses one _page.svelte, applies $lib import rewriting on the
 // hoisted script body, runs the generator, and writes the result. The
 // first returned int is 1 when at least one $lib literal was rewritten
 // in this file, 0 otherwise — the caller aggregates across routes to
@@ -384,9 +384,9 @@ func serviceWorkerEntry(projectRoot string) string {
 // fatal error. lookup is used to resolve env.Static* calls to literal
 // values at build time.
 func emitPage(projectRoot, outDir, modulePath string, route routescan.ScannedRoute, release bool, lookup EnvLookup, provenance bool, generatedAt time.Time, imageVariants map[string]images.Result) (int, bool, bool, error) {
-	pageName := "+page.svelte"
+	pageName := "_page.svelte"
 	if route.HasReset {
-		pageName = "+page@" + route.ResetTarget + ".svelte"
+		pageName = "_page@" + route.ResetTarget + ".svelte"
 	}
 	pagePath := filepath.Join(route.Dir, pageName)
 	src, err := os.ReadFile(pagePath) //nolint:gosec // path comes from scanner walk under projectRoot
@@ -421,7 +421,7 @@ func emitPage(projectRoot, outDir, modulePath string, route routescan.ScannedRou
 		ImageVariants: imageVariants,
 	}
 	if route.HasPageServer {
-		opts.ServerFilePath = filepath.Join(route.Dir, "page.server.go")
+		opts.ServerFilePath = filepath.Join(route.Dir, "_page.server.go")
 		actionInfo, err := scanActions(opts.ServerFilePath)
 		if err != nil {
 			return 0, false, false, err
@@ -454,7 +454,7 @@ func emitPage(projectRoot, outDir, modulePath string, route routescan.ScannedRou
 }
 
 // emitClientEntry writes .gen/client/<routeKey>/entry.ts for one page route.
-// routeKey is e.g. "routes/+page" or "routes/post/[id]/+page". Returns
+// routeKey is e.g. "routes/_page" or "routes/post/[id]/_page". Returns
 // the routeKey, the .svelte source path relative to the SPA router
 // directory (.gen/client/__router/), and any error. The caller collects
 // the routeKey for vite.GenerateConfig and the relative source path for
@@ -518,7 +518,7 @@ func emitClientEntry(projectRoot, outDir, routesDir string, route routescan.Scan
 // emitClientRouter writes .gen/client/__router/router.ts — the shared
 // SPA router module imported by every per-route entry.ts. routeMap keys
 // are canonical route patterns (matching server-side router.Route.Pattern)
-// and values are paths to each route's +page.svelte source relative to
+// and values are paths to each route's _page.svelte source relative to
 // the router.ts file. snapshotRoutes flags which patterns export a
 // Snapshot so the generated router wires capture/restore hooks.
 func emitClientRouter(projectRoot, outDir string, routeMap map[string]string, snapshotRoutes map[string]bool) error {
@@ -627,11 +627,11 @@ func isFatalDiagnostic(d routescan.Diagnostic) bool {
 	switch {
 	case strings.Contains(msg, "route conflict"):
 		return true
-	case strings.Contains(msg, "orphan page.server.go"):
+	case strings.Contains(msg, "orphan _page.server.go"):
 		return true
 	case strings.Contains(msg, "unknown matcher"):
 		return true
-	case strings.Contains(msg, "may not have both +page.svelte and server.go"):
+	case strings.Contains(msg, "may not have both _page.svelte and _server.go"):
 		return true
 	}
 	return false
@@ -657,7 +657,7 @@ func emitMirrorAndWire(projectRoot, outDir, modulePath string, route routescan.S
 	encodedSub := strings.TrimPrefix(route.PackagePath, ".gen/")
 
 	usf := userSourceFile{
-		UserPath:    filepath.Join(route.Dir, "page.server.go"),
+		UserPath:    filepath.Join(route.Dir, "_page.server.go"),
 		MirrorPath:  filepath.Join(projectRoot, outDir, "usersrc", filepath.FromSlash(encodedSub), "page_server.go"),
 		PackageName: route.PackageName,
 	}
@@ -682,12 +682,12 @@ func dirExists(path string) bool {
 	return info.IsDir()
 }
 
-// emitErrorPage parses one +error.svelte and writes the generated
+// emitErrorPage parses one _error.svelte and writes the generated
 // error.gen.go into the route's encoded gen package directory. The
 // package may also host a layout.gen.go and/or page.gen.go from the
 // same directory; the distinct filename keeps them separate.
 func emitErrorPage(projectRoot, outDir, errorDir, pkgPath, pkgName string, provenance bool, generatedAt time.Time) error {
-	errPath := filepath.Join(errorDir, "+error.svelte")
+	errPath := filepath.Join(errorDir, "_error.svelte")
 	src, err := os.ReadFile(errPath) //nolint:gosec // path comes from scanner walk under projectRoot
 	if err != nil {
 		return fmt.Errorf("codegen: read %s: %w", errPath, err)
@@ -717,14 +717,15 @@ func emitErrorPage(projectRoot, outDir, errorDir, pkgPath, pkgName string, prove
 	return nil
 }
 
-// emitLayout parses one +layout.svelte and writes the generated
+// emitLayout parses one _layout.svelte and writes the generated
 // layout.gen.go into the encoded layout package directory. Layout files
-// share the directory with any +page.svelte / wire.gen.go for the same
+// share the directory with any _page.svelte / wire.gen.go for the same
 // dir; the distinct filename keeps them in separate generated artifacts.
-// The leading character must not be "_" because Go's build system
-// silently ignores files whose name starts with "_". serverFile, when
-// non-empty, points at a sibling layout.server.go whose Load() inline
-// struct return is used to infer LayoutData fields. When release is true,
+// The generated filename layout.gen.go has no leading underscore; the
+// `_layout.gen.go` form would be silently dropped by Go's build system.
+// serverFile, when non-empty, points at a sibling _layout.server.go
+// whose Load() inline struct return is used to infer LayoutData fields.
+// When release is true,
 // any $lib/dev/** import is a fatal error. lookup resolves env.Static*
 // calls to literal string values at build time.
 func emitLayout(projectRoot, outDir, modulePath, layoutDir, pkgPath, pkgName, serverFile string, release bool, lookup EnvLookup, provenance bool, generatedAt time.Time, imageVariants map[string]images.Result) (bool, error) {
@@ -807,13 +808,13 @@ func emitLayoutMirrorAndWire(projectRoot, outDir, modulePath, pkgPath, pkgName, 
 	})
 }
 
-// resolveLayoutSource returns the path of the +layout.svelte (or its
+// resolveLayoutSource returns the path of the _layout.svelte (or its
 // reset variant) inside layoutDir. The plain filename takes precedence;
-// otherwise the first matching `+layout@*.svelte` entry wins. The
+// otherwise the first matching `_layout@*.svelte` entry wins. The
 // scanner already guarantees the directory contains exactly one
 // layout source, so the search is unambiguous.
 func resolveLayoutSource(layoutDir string) (string, error) {
-	plain := filepath.Join(layoutDir, "+layout.svelte")
+	plain := filepath.Join(layoutDir, "_layout.svelte")
 	if _, err := os.Stat(plain); err == nil {
 		return plain, nil
 	}
@@ -826,12 +827,12 @@ func resolveLayoutSource(layoutDir string) (string, error) {
 			continue
 		}
 		base, _, ok := routescan.ParseResetFilename(e.Name())
-		if !ok || base != "+layout" {
+		if !ok || base != "_layout" {
 			continue
 		}
 		return filepath.Join(layoutDir, e.Name()), nil
 	}
-	return "", fmt.Errorf("codegen: %s contains no +layout.svelte", layoutDir)
+	return "", fmt.Errorf("codegen: %s contains no _layout.svelte", layoutDir)
 }
 
 // layoutPackageName extracts the directory's package name from a

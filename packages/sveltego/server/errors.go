@@ -31,7 +31,7 @@ type httpStatuser interface {
 }
 
 // methodNotAllowed writes a plain-text 405 with the Allow header for
-// a +server.go route that lacks a handler for the request method.
+// a _server.go route that lacks a handler for the request method.
 func (s *Server) methodNotAllowed(w http.ResponseWriter, r *http.Request, allowed []string) {
 	s.Logger.Info("server: method not allowed", logKeyMethod, r.Method, logKeyPath, r.URL.Path)
 	w.Header().Set("Allow", strings.Join(allowed, ", "))
@@ -172,7 +172,7 @@ func (s *Server) handlePipelineError(w http.ResponseWriter, r *http.Request, ev 
 	s.respondWithError(w, r, ev, route, safe, err)
 }
 
-// respondWithError dispatches a SafeError to the route's +error.svelte
+// respondWithError dispatches a SafeError to the route's _error.svelte
 // boundary when one applies; otherwise it falls back to the plain-text
 // writer that has handled error responses since Phase 0h.
 func (s *Server) respondWithError(w http.ResponseWriter, r *http.Request, ev *kit.RequestEvent, route *router.Route, safe kit.SafeError, original error) {
@@ -298,7 +298,7 @@ func writePlain(w http.ResponseWriter, status int, body string) {
 	_, _ = w.Write([]byte(body))
 }
 
-// methodsOf returns sorted method keys from a +server.go handler map
+// methodsOf returns sorted method keys from a _server.go handler map
 // for use in the Allow header.
 func methodsOf(m map[string]http.HandlerFunc) []string {
 	out := make([]string, 0, len(m))

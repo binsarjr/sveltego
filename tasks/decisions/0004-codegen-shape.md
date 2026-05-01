@@ -20,7 +20,7 @@
 - **`<script lang="go">` content (Q8):** **hoist to package-level.** User imports become package imports of the generated file. User funcs become package-level funcs in the same package as `Page`. Visibility default unexported; user can export with PascalCase. Mirrors Svelte upstream where `<script>` is module scope.
 - **Snippet method naming (Q9):** **lowercase + `snippet_` prefix on Page receiver.** `{#snippet item(post)}...{/snippet}` becomes `func (p Page) snippet_item(w *render.Writer, ctx *kit.RenderCtx, post Post) error`. Lowercase signals internal-only (Go visibility); prefix avoids future clash with Page methods that the framework may add.
 - **`{@html ...}`:** emits `w.WriteRaw(...)` instead of `w.WriteEscape(...)`. CONTRIBUTING.md documents the XSS risk and recommends `bluemonday` for user-supplied HTML.
-- **PageData inference (struct-literal-only):** Codegen reads sibling `+page.server.go`, locates `Load()`, and if the first return expression is a composite struct literal extracts its fields into `type PageData struct{...}`. Named-type returns and missing files fall back to `type PageData struct{}`. Explicit `type PageData struct{...}` declarations in `+page.server.go` are out of scope until a future RFC. Tracked in `internal/codegen/pagedata.go`.
+- **PageData inference (struct-literal-only):** Codegen reads sibling `_page.server.go`, locates `Load()`, and if the first return expression is a composite struct literal extracts its fields into `type PageData struct{...}`. Named-type returns and missing files fall back to `type PageData struct{}`. Explicit `type PageData struct{...}` declarations in `_page.server.go` are out of scope until a future RFC. Tracked in `internal/codegen/pagedata.go`.
 
 ## Generated shape
 
@@ -39,7 +39,7 @@ import (
 type Page struct{}
 
 type PageData struct {
-    Post Post  // inferred from +page.server.go Load() return type
+    Post Post  // inferred from _page.server.go Load() return type
 }
 
 func (p Page) Render(w *render.Writer, ctx *kit.RenderCtx, data PageData) error {
@@ -110,12 +110,12 @@ type RenderCtx struct {
 
 ## Load and Actions stay user-written
 
-`Page.Load()` is **not** a method on the generated `Page` struct. Reason: signature varies per route, generics don't fit cleanly, and it lets users keep server logic in `+page.server.go` separate from generated code.
+`Page.Load()` is **not** a method on the generated `Page` struct. Reason: signature varies per route, generics don't fit cleanly, and it lets users keep server logic in `_page.server.go` separate from generated code.
 
 User writes:
 
 ```go
-// src/routes/posts/[slug]/+page.server.go
+// src/routes/posts/[slug]/_page.server.go
 package posts_slug
 
 func Load(ctx *kit.LoadCtx) (PageData, error) {
@@ -143,7 +143,7 @@ User code stays in user space, generated wire glue is replaced atomically on reb
 
 ## Implementation outline
 
-1. Codegen walks parsed AST, emits a single `.gen/.../page.gen.go` per `+page.svelte`.
+1. Codegen walks parsed AST, emits a single `.gen/.../page.gen.go` per `_page.svelte`.
 2. Render method body is a sequence of `WriteString` / `WriteEscape` calls interleaved with control flow lowered from `{#if}`, `{#each}`, etc. `{@html}` lowers to `WriteRaw`.
 3. `wire.gen.go` companion file holds the `init()` registration and the Load/Actions glue.
 4. Adapter codegen produces `manifest.gen.go` aggregating all routes.
@@ -156,4 +156,4 @@ User code stays in user space, generated wire glue is replaced atomically on reb
 ### Amendments
 
 - **2026-04-29 (Phase 0f wrap):** Render writer surface locked to as-shipped methods. `WriteAttr` rejected. PageData inference rule pinned to struct-literal-only.
-- **2026-04-30 (Phase 0i-fix):** User `.go` filename convention amended (see ADR 0003 amendment): `+page.server.go` → `page.server.go`, `+layout.server.go` → `layout.server.go`, `+server.go` → `server.go`. All sveltego user `.go` files start with `//go:build sveltego`. The above examples in this ADR predate the rename; treat them as historical. Manifest now emits per-route `render__<alias>` adapters wrapping `Page{}.Render(data PageData)` to satisfy `router.PageHandler(data any)`. Wire `wire.gen.go` re-exports user Load via a user-source mirror tree at `.gen/usersrc/<encoded>/` (codegen-emitted, never imports the user `src/` tree directly because directory names like `[slug]/` are not valid Go import paths).
+- **2026-04-30 (Phase 0i-fix):** User `.go` filename convention amended (see ADR 0003 amendment): `_page.server.go` → `page.server.go`, `_layout.server.go` → `layout.server.go`, `_server.go` → `server.go`. All sveltego user `.go` files start with `//go:build sveltego`. The above examples in this ADR predate the rename; treat them as historical. Manifest now emits per-route `render__<alias>` adapters wrapping `Page{}.Render(data PageData)` to satisfy `router.PageHandler(data any)`. Wire `wire.gen.go` re-exports user Load via a user-source mirror tree at `.gen/usersrc/<encoded>/` (codegen-emitted, never imports the user `src/` tree directly because directory names like `[slug]/` are not valid Go import paths).

@@ -199,14 +199,14 @@ When designing, codegen, or runtime work touches these names, treat them as **lo
 
 ```
 src/routes/
-  +page.svelte           // SSR template, Go expressions inside {...}
-  page.server.go         // Load(), Actions()           — needs //go:build sveltego
-  +layout.svelte         // layout chain
-  layout.server.go       // parent data flow            — needs //go:build sveltego
-  server.go              // REST endpoints (GET, POST)  — needs //go:build sveltego
-  +error.svelte          // error boundary
+  _page.svelte           // SSR template, Go expressions inside {...}
+  _page.server.go        // Load(), Actions()           (Go skips _* automatically)
+  _layout.svelte         // layout chain
+  _layout.server.go      // parent data flow            (Go skips _* automatically)
+  _server.go             // REST endpoints (GET, POST)  (Go skips _* automatically)
+  _error.svelte          // error boundary
   (group)/               // route group, no URL segment
-  +page@.svelte          // layout reset
+  _page@.svelte          // layout reset
   [param]/               // route param
   [[optional]]/          // optional segment
   [...rest]/             // catch-all
@@ -216,7 +216,7 @@ src/service-worker.ts    // service worker convention
 hooks.server.go          // Handle, HandleError, HandleFetch, Reroute, Init
 ```
 
-Generated output lives under `.gen/` (gitignored). Every `.gen/*.go` starts with a provenance header — do not edit generated files directly; edit the `.svelte` source. User `.go` files under `src/routes/**` and `src/params/**` MUST start with `//go:build sveltego` so Go's default toolchain skips them; codegen parses them via `go/parser`. See ADR 0003 amendment (Phase 0i-fix).
+Generated output lives under `.gen/` (gitignored). Every `.gen/*.go` starts with a provenance header — do not edit generated files directly; edit the `.svelte` source. Files under `src/routes/**` use the `_` prefix (`_page.server.go`, `_layout.server.go`, `_server.go`); Go's default toolchain skips files whose names start with `_`, so no `//go:build sveltego` constraint is required there (RFC #379 phase 1b). Files under `src/params/**` MUST still start with `//go:build sveltego` because their filenames have no `_` prefix. Codegen parses every user `.go` file via `go/parser` regardless. See ADR 0003 amendment (Phase 0i-fix) and RFC #379.
 
 ---
 

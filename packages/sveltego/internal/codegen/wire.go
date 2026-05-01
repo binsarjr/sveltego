@@ -149,7 +149,7 @@ func hasActionsVar(f *goast.File) bool {
 	return false
 }
 
-// emitWire writes one wire.gen.go per route with a +page.server.go (or
+// emitWire writes one wire.gen.go per route with a _page.server.go (or
 // other server .go file). The wire file lives next to page.gen.go in
 // the encoded gen directory; it imports the user-source mirror by an
 // alias because the mirror's package name and the gen package name
@@ -182,7 +182,7 @@ func emitWire(genRoot, modulePath string, route mirrorRoute) error {
 		b.Line("func Actions() any { return usersrc.Actions }")
 	} else {
 		b.Line("// Actions is emitted as a nil-returning stub because the user's")
-		b.Line("// page.server.go does not declare an Actions variable. The manifest")
+		b.Line("// _page.server.go does not declare an Actions variable. The manifest")
 		b.Line("// references this symbol unconditionally when HasPageServer is set.")
 		b.Line("func Actions() any { return nil }")
 	}
@@ -220,7 +220,7 @@ type mirrorRoute struct {
 // adapter that re-exports the user-authored Load() from the layout
 // server mirror at .gen/layoutsrc/<encoded>/layout_server.go. The
 // layoutsrc tree is a sibling of usersrc so a route directory that owns
-// both +page.server.go and +layout.server.go does not produce two Load
+// both _page.server.go and _layout.server.go does not produce two Load
 // declarations in the same Go package.
 func emitLayoutWire(genRoot, modulePath string, route mirrorRoute) error {
 	importPath := modulePath + "/" + genRoot + "/layoutsrc/" + route.encodedSubpath

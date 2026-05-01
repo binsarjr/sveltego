@@ -52,7 +52,7 @@ func TestIntegrationSmoke(t *testing.T) {
 	// without rune placeholders or non-compiling stubs. Companion `decls.go`
 	// supplies the unbound names referenced in mustache expressions so the
 	// sandbox compiles in isolation; in production those names come from a
-	// sibling +page.server.go.
+	// sibling _page.server.go.
 	type fixture struct {
 		dir    string
 		svelte string
@@ -121,7 +121,7 @@ func TestIntegrationSmoke(t *testing.T) {
 
 // TestIntegrationManifestComposes runs Build end-to-end on a synthetic
 // project tree exercising the cases that broke Phase 0j: a typed
-// PageData inferred from a page.server.go inline-struct return, a
+// PageData inferred from a _page.server.go inline-struct return, a
 // route directory with a `[id]` segment whose .go files carry
 // //go:build sveltego, and a manifest that wires Render adapters plus
 // wire.gen.go Load/Actions wrappers. The sandbox is then built with
@@ -163,8 +163,8 @@ func TestIntegrationManifestComposes(t *testing.T) {
 		}
 	}
 
-	mustWrite("src/routes/+page.svelte", "<h1>hello</h1>\n")
-	mustWrite("src/routes/page.server.go", `//go:build sveltego
+	mustWrite("src/routes/_page.svelte", "<h1>hello</h1>\n")
+	mustWrite("src/routes/_page.server.go", `//go:build sveltego
 
 package routes
 
@@ -175,8 +175,8 @@ func Load(ctx *kit.LoadCtx) (any, error) {
 }
 `)
 
-	mustWrite("src/routes/post/[id]/+page.svelte", "<h2>post id</h2>\n")
-	mustWrite("src/routes/post/[id]/page.server.go", `//go:build sveltego
+	mustWrite("src/routes/post/[id]/_page.svelte", "<h2>post id</h2>\n")
+	mustWrite("src/routes/post/[id]/_page.server.go", `//go:build sveltego
 
 package _id_
 

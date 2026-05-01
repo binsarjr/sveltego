@@ -23,7 +23,7 @@ type LinkEmitOptions struct {
 // LinkRoute summarizes one entry in the generated links package: the
 // canonical SvelteKit-style pattern, the Go-ident helper name, and the
 // HTTP method label printed by `sveltego routes` ("GET" for pages and
-// servers; "POST", etc. when a +server.go advertises specific methods).
+// servers; "POST", etc. when a _server.go advertises specific methods).
 //
 // LinkRoute is intentionally part of the public contract: the CLI (`sveltego
 // routes`), the LSP, and AI-codegen tools all consume it to enumerate
@@ -46,7 +46,7 @@ type LinkParam struct {
 
 // GenerateLinks emits a deterministic, gofmt-clean Go source file
 // declaring one *Params struct + URL-builder func per linkable route in
-// the scan result. Routes without a +page.svelte or +server.go are
+// the scan result. Routes without a _page.svelte or _server.go are
 // skipped; the manifest emitter applies the same filter.
 func GenerateLinks(scan *routescan.ScanResult, opts LinkEmitOptions) ([]byte, error) {
 	if scan == nil {

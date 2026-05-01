@@ -172,14 +172,14 @@ func evalTrailingSlash(expr goast.Expr) (kit.TrailingSlash, error) {
 
 // resolvePageOptions walks scan.Routes and returns one effective
 // PageOptions per route Pattern. The cascade starts at
-// kit.DefaultPageOptions(), folds each layout's layout.server.go
+// kit.DefaultPageOptions(), folds each layout's _layout.server.go
 // override outer -> inner, then applies the route's own
-// page.server.go (or server.go) override last. Layout overrides are
+// _page.server.go (or _server.go) override last. Layout overrides are
 // memoized so chains shared across routes parse once.
 //
-// `<svelte:options prerender=...>` declarations on +layout.svelte and
-// +page.svelte are folded in alongside their server-file siblings so a
-// page can opt in to prerendering without authoring a +page.server.go.
+// `<svelte:options prerender=...>` declarations on _layout.svelte and
+// _page.svelte are folded in alongside their server-file siblings so a
+// page can opt in to prerendering without authoring a _page.server.go.
 func resolvePageOptions(scan *routescan.ScanResult) (map[string]kit.PageOptions, error) {
 	if scan == nil {
 		return nil, nil
@@ -201,7 +201,7 @@ func resolvePageOptions(scan *routescan.ScanResult) (map[string]kit.PageOptions,
 					base = base.Merge(over)
 				}
 			}
-			// 2. +layout.svelte's <svelte:options prerender>
+			// 2. _layout.svelte's <svelte:options prerender>
 			layoutSveltePath, err := resolveLayoutSource(layoutDir)
 			if err == nil {
 				over, err := loadCachedSveltePrerender(layoutSveltePath, sveltePrerenderCache)
@@ -214,9 +214,9 @@ func resolvePageOptions(scan *routescan.ScanResult) (map[string]kit.PageOptions,
 		var routeFile string
 		switch {
 		case r.HasPageServer:
-			routeFile = filepath.Join(r.Dir, "page.server.go")
+			routeFile = filepath.Join(r.Dir, "_page.server.go")
 		case r.HasServer:
-			routeFile = filepath.Join(r.Dir, "server.go")
+			routeFile = filepath.Join(r.Dir, "_server.go")
 		}
 		if routeFile != "" {
 			over, err := scanPageOptions(routeFile)
@@ -226,9 +226,9 @@ func resolvePageOptions(scan *routescan.ScanResult) (map[string]kit.PageOptions,
 			base = base.Merge(over)
 		}
 		if r.HasPage {
-			pageName := "+page.svelte"
+			pageName := "_page.svelte"
 			if r.HasReset {
-				pageName = "+page@" + r.ResetTarget + ".svelte"
+				pageName = "_page@" + r.ResetTarget + ".svelte"
 			}
 			pageSvelte := filepath.Join(r.Dir, pageName)
 			over, err := loadCachedSveltePrerender(pageSvelte, sveltePrerenderCache)

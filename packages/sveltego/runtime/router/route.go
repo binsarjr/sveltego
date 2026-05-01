@@ -7,7 +7,7 @@ import (
 	"github.com/binsarjr/sveltego/packages/sveltego/render"
 )
 
-// PageHandler renders a +page.svelte for the given context and load data.
+// PageHandler renders a _page.svelte for the given context and load data.
 type PageHandler func(w *render.Writer, ctx *kit.RenderCtx, data any) error
 
 // PageHeadHandler renders a page's <svelte:head> contributions into a
@@ -16,7 +16,7 @@ type PageHandler func(w *render.Writer, ctx *kit.RenderCtx, data any) error
 // </head>. nil entries denote pages without any head content.
 type PageHeadHandler func(w *render.Writer, ctx *kit.RenderCtx, data any) error
 
-// LayoutHandler renders a +layout.svelte. It composes outer layouts around
+// LayoutHandler renders a _layout.svelte. It composes outer layouts around
 // inner content by writing its template up to <slot />, invoking children,
 // then writing the rest. children is non-nil; layout templates dispatch
 // the slot lowering through it.
@@ -27,25 +27,25 @@ type LayoutHandler func(w *render.Writer, ctx *kit.RenderCtx, data any, children
 // layouts without any head content.
 type LayoutHeadHandler func(w *render.Writer, ctx *kit.RenderCtx, data any) error
 
-// ErrorHandler renders a +error.svelte. It receives the SafeError produced
+// ErrorHandler renders a _error.svelte. It receives the SafeError produced
 // by HandleError and writes the error template into w. The pipeline wraps
 // the call in any outer layouts that survive the boundary.
 type ErrorHandler func(w *render.Writer, ctx *kit.RenderCtx, safe kit.SafeError) error
 
-// ServerHandlers maps HTTP methods to handlers emitted from +server.go.
+// ServerHandlers maps HTTP methods to handlers emitted from _server.go.
 type ServerHandlers map[string]http.HandlerFunc
 
-// LoadHandler runs the user-written Load() from +page.server.go and
+// LoadHandler runs the user-written Load() from _page.server.go and
 // returns the data threaded into the page render.
 type LoadHandler func(ctx *kit.LoadCtx) (any, error)
 
-// LayoutLoadHandler runs the user-written Load() from +layout.server.go.
+// LayoutLoadHandler runs the user-written Load() from _layout.server.go.
 // One handler per layout in the chain; nil entries denote layouts without
 // a sibling layout.server.go and are skipped by the pipeline.
 type LayoutLoadHandler func(ctx *kit.LoadCtx) (any, error)
 
 // ActionsHandler returns the typed Actions value declared in
-// +page.server.go. The router keeps it as `any` to remain type-erased;
+// _page.server.go. The router keeps it as `any` to remain type-erased;
 // the dispatcher casts back to the concrete type.
 type ActionsHandler func() any
 
@@ -61,13 +61,13 @@ type Route struct {
 	Pattern string
 	// Segments is the parsed form of Pattern.
 	Segments []Segment
-	// Page is non-nil when the route owns a +page.svelte.
+	// Page is non-nil when the route owns a _page.svelte.
 	Page PageHandler
-	// Server holds method handlers when the route owns a +server.go.
+	// Server holds method handlers when the route owns a _server.go.
 	Server ServerHandlers
-	// Load is non-nil when the route owns a +page.server.go with Load().
+	// Load is non-nil when the route owns a _page.server.go with Load().
 	Load LoadHandler
-	// Actions is non-nil when +page.server.go declares Actions().
+	// Actions is non-nil when _page.server.go declares Actions().
 	Actions ActionsHandler
 	// LayoutChain holds the layout handlers wrapping Page, ordered
 	// outer -> inner. The server pipeline composes them so the outermost
@@ -75,7 +75,7 @@ type Route struct {
 	LayoutChain []LayoutHandler
 	// LayoutLoaders runs in lockstep with LayoutChain. Index i holds the
 	// loader for layout chain[i] or nil when that layout has no
-	// +layout.server.go. The pipeline invokes them outer -> inner before
+	// _layout.server.go. The pipeline invokes them outer -> inner before
 	// the page Load and pushes each result onto the LoadCtx parent stack.
 	LayoutLoaders []LayoutLoadHandler
 	// Head is non-nil when the page contributes <svelte:head> content.
@@ -91,7 +91,7 @@ type Route struct {
 	// PageOptions value. The pipeline reads SSR/CSR/TrailingSlash
 	// directly from this field; no per-request layout walk is needed.
 	Options kit.PageOptions
-	// Error renders the +error.svelte covering this route. nil when no
+	// Error renders the _error.svelte covering this route. nil when no
 	// boundary applies; the pipeline falls back to a minimal hardcoded
 	// HTML response in that case.
 	Error ErrorHandler
@@ -100,7 +100,7 @@ type Route struct {
 	// inside the broken subtree and are skipped.
 	ErrorLayoutDepth int
 	// ClientKey is the Vite manifest input key for this route's client
-	// entry, e.g. "routes/+page". The server uses it for asset tag injection.
+	// entry, e.g. "routes/_page". The server uses it for asset tag injection.
 	// Empty for server-only routes.
 	ClientKey string
 }

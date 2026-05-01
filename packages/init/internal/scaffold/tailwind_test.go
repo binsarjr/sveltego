@@ -80,12 +80,12 @@ func TestRun_TailwindV4_WritesPlugin(t *testing.T) {
 		t.Errorf("install command shape wrong: %q", res.InstallCommand)
 	}
 
-	layout, err := os.ReadFile(filepath.Join(dir, "src/routes/+layout.svelte"))
+	layout, err := os.ReadFile(filepath.Join(dir, "src/routes/_layout.svelte"))
 	if err != nil {
 		t.Fatalf("read layout: %v", err)
 	}
 	if !bytes.Contains(layout, []byte(`import "./app.css"`)) {
-		t.Errorf("+layout.svelte missing app.css import, got: %s", layout)
+		t.Errorf("_layout.svelte missing app.css import, got: %s", layout)
 	}
 }
 

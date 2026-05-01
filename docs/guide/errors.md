@@ -1,7 +1,7 @@
 ---
 title: Errors
 order: 60
-summary: kit.Error, kit.Redirect, kit.Fail, +error.svelte, SafeError contract.
+summary: kit.Error, kit.Redirect, kit.Fail, _error.svelte, SafeError contract.
 ---
 
 # Errors
@@ -35,7 +35,7 @@ func Load(ctx *kit.LoadCtx) (PageData, error) {
 
 ## Error boundary
 
-`+error.svelte` catches errors from any descendant page or layout. The nearest `+error.svelte` walking up from the failing route is rendered.
+`_error.svelte` catches errors from any descendant page or layout. The nearest `_error.svelte` walking up from the failing route is rendered.
 
 ```svelte
 <script lang="go">

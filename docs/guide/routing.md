@@ -1,7 +1,7 @@
 ---
 title: Routing
 order: 20
-summary: File-based routing — +page.svelte, page.server.go, server.go, params, groups.
+summary: File-based routing — _page.svelte, page.server.go, server.go, params, groups.
 ---
 
 # Routing
@@ -12,23 +12,23 @@ sveltego uses file-based routing under `src/routes/`. The conventions match Svel
 
 | File | Purpose |
 |---|---|
-| `+page.svelte` | SSR template. Mustache expressions are Go. |
+| `_page.svelte` | SSR template. Mustache expressions are Go. |
 | `page.server.go` | Page server module: `Load`, `Actions`. No `+` prefix; identified by `//go:build sveltego`. |
-| `+layout.svelte` | Layout chain. Wraps descendant `+page.svelte`. |
+| `_layout.svelte` | Layout chain. Wraps descendant `_page.svelte`. |
 | `layout.server.go` | Layout-level `Load` cascading to children. No `+` prefix. |
 | `server.go` | REST endpoints (`GET`, `POST`, ...). No template, no `+` prefix. |
-| `+error.svelte` | Error boundary for the subtree. |
-| `+page@.svelte` | Layout reset — opt out of the parent chain. |
+| `_error.svelte` | Error boundary for the subtree. |
+| `_page@.svelte` | Layout reset — opt out of the parent chain. |
 
 ## Path patterns
 
 | Pattern | Example | Description |
 |---|---|---|
-| `[param]` | `blog/[slug]/+page.svelte` | Required parameter. |
-| `[[optional]]` | `[[lang]]/+page.svelte` | Optional segment. |
-| `[...rest]` | `docs/[...path]/+page.svelte` | Catch-all rest. |
-| `(group)` | `(marketing)/+layout.svelte` | Group with no URL segment. |
-| `[name=matcher]` | `users/[id=int]/+page.svelte` | Param matcher. |
+| `[param]` | `blog/[slug]/_page.svelte` | Required parameter. |
+| `[[optional]]` | `[[lang]]/_page.svelte` | Optional segment. |
+| `[...rest]` | `docs/[...path]/_page.svelte` | Catch-all rest. |
+| `(group)` | `(marketing)/_layout.svelte` | Group with no URL segment. |
+| `[name=matcher]` | `users/[id=int]/_page.svelte` | Param matcher. |
 
 ## Param matchers
 
@@ -79,7 +79,7 @@ If a method is not exported, the router answers `405 Method Not Allowed` with a 
 
 ## Layouts and reset
 
-A `+page@.svelte` (note the trailing `@`) opts out of the parent layout chain — useful for full-bleed pages inside a section that otherwise applies a marketing shell.
+A `_page@.svelte` (note the trailing `@`) opts out of the parent layout chain — useful for full-bleed pages inside a section that otherwise applies a marketing shell.
 
 ## Out of scope
 

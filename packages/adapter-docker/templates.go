@@ -6,7 +6,7 @@ package adapterdocker
 // package manager, ~2MB) and runs the binary as a non-root user.
 //
 // The HEALTHCHECK targets /healthz on port 8080. The user is expected
-// to expose that endpoint via a `+server.go` file under
+// to expose that endpoint via a `_server.go` file under
 // `src/routes/healthz/`. The framework does not provide one because the
 // liveness contract belongs to the application.
 const dockerfileTemplate = `# syntax=docker/dockerfile:1.7

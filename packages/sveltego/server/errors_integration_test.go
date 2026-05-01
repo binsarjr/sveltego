@@ -529,7 +529,7 @@ func TestRenderCtx_OriginalURL_SuccessPath(t *testing.T) {
 
 // TestErrorBoundary_OriginalURL_PreservedThroughReroute asserts that
 // OriginalURL in an error-boundary RenderCtx reflects the inbound URL
-// before Reroute rewrote the match path, so +error.svelte templates can
+// before Reroute rewrote the match path, so _error.svelte templates can
 // always recover the URL the browser actually sent.
 func TestErrorBoundary_OriginalURL_PreservedThroughReroute(t *testing.T) {
 	t.Parallel()

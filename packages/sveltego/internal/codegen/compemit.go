@@ -42,7 +42,7 @@ type componentGenResult struct {
 }
 
 // emitComponentTree walks every .svelte file referenced (transitively) from
-// seeds (typically each +page.svelte and +layout.svelte encountered during
+// seeds (typically each _page.svelte and _layout.svelte encountered during
 // Build), discovers component imports via <script lang="go"> relative import
 // declarations, detects cycles and casing collisions, and emits one
 // component.gen.go per unique component.

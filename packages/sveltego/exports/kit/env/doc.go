@@ -3,7 +3,7 @@
 // DynamicPrivate, and DynamicPublic. Public accessors enforce a
 // PUBLIC_ key prefix so leaks into client bundles are detectable;
 // private accessors carry no prefix constraint and must never appear
-// in +page.svelte or +layout.svelte template expressions.
+// in _page.svelte or _layout.svelte template expressions.
 //
 // The Static* accessors panic on missing keys and are intended for
 // values whose absence should fail process startup (DATABASE_URL,

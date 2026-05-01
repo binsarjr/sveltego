@@ -128,7 +128,7 @@ func TestScanMatchers(t *testing.T) {
 func TestScanConflictPageServer(t *testing.T) {
 	t.Parallel()
 	res := mustScan(t, "conflict-page-server", "")
-	if got := diagsContaining(res.Diagnostics, "may not have both +page.svelte and server.go"); got == 0 {
+	if got := diagsContaining(res.Diagnostics, "may not have both _page.svelte and _server.go"); got == 0 {
 		t.Fatalf("want page+server conflict diagnostic, got %v", res.Diagnostics)
 	}
 }
@@ -144,7 +144,7 @@ func TestScanConflictPattern(t *testing.T) {
 func TestScanOrphanPageServer(t *testing.T) {
 	t.Parallel()
 	res := mustScan(t, "orphan-pageserver", "")
-	if got := diagsContaining(res.Diagnostics, "orphan page.server.go"); got == 0 {
+	if got := diagsContaining(res.Diagnostics, "orphan _page.server.go"); got == 0 {
 		t.Fatalf("want orphan diagnostic, got %v", res.Diagnostics)
 	}
 }
@@ -239,18 +239,6 @@ func TestScanLayoutChain(t *testing.T) {
 	}
 }
 
-func TestScanMissingBuildTag(t *testing.T) {
-	t.Parallel()
-	res := mustScan(t, "missing-buildtag", "")
-	if got := diagsContaining(res.Diagnostics, "missing //go:build sveltego"); got == 0 {
-		t.Fatalf("want missing-buildtag diagnostic, got %v", res.Diagnostics)
-	}
-	// The route still scans cleanly otherwise (HasPage + HasPageServer set).
-	if len(res.Routes) != 1 || !res.Routes[0].HasPageServer {
-		t.Fatalf("want one route with HasPageServer, got %+v", res.Routes)
-	}
-}
-
 func TestScanReset(t *testing.T) {
 	t.Parallel()
 	res := mustScan(t, "reset", "")
@@ -261,7 +249,7 @@ func TestScanReset(t *testing.T) {
 		t.Fatalf("want empty ResetTarget for root reset, got %q", res.Routes[0].ResetTarget)
 	}
 	if !res.Routes[0].HasPage {
-		t.Fatal("want HasPage true for +page@.svelte")
+		t.Fatal("want HasPage true for _page@.svelte")
 	}
 }
 
@@ -317,7 +305,7 @@ func TestScanLayoutResetGroup(t *testing.T) {
 		t.Fatalf("want ResetTarget=(app), got HasReset=%v ResetTarget=%q", dash.HasReset, dash.ResetTarget)
 	}
 	// chain truncates at the (app) ancestor inclusive: root layout dropped,
-	// (app)/+layout.svelte kept.
+	// (app)/_layout.svelte kept.
 	if len(dash.LayoutChain) != 1 {
 		t.Fatalf("want LayoutChain length 1 after (app) reset, got %v", dash.LayoutChain)
 	}
@@ -359,16 +347,16 @@ func TestParseResetFilename(t *testing.T) {
 		target string
 		ok     bool
 	}{
-		{"+page@.svelte", "+page", "", true},
-		{"+page@(app).svelte", "+page", "(app)", true},
-		{"+layout@.svelte", "+layout", "", true},
-		{"+layout@(admin).svelte", "+layout", "(admin)", true},
-		{"+error@.svelte", "+error", "", true},
-		{"+page.svelte", "", "", false},
-		{"+page@.html", "", "", false},
-		{"+page@(.svelte", "", "", false},
-		{"+page@(123).svelte", "", "", false},
-		{"+other@.svelte", "", "", false},
+		{"_page@.svelte", "_page", "", true},
+		{"_page@(app).svelte", "_page", "(app)", true},
+		{"_layout@.svelte", "_layout", "", true},
+		{"_layout@(admin).svelte", "_layout", "(admin)", true},
+		{"_error@.svelte", "_error", "", true},
+		{"_page.svelte", "", "", false},
+		{"_page@.html", "", "", false},
+		{"_page@(.svelte", "", "", false},
+		{"_page@(123).svelte", "", "", false},
+		{"_other@.svelte", "", "", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.in, func(t *testing.T) {

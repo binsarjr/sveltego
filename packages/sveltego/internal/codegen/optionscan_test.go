@@ -12,7 +12,7 @@ import (
 func writeTempServerGo(t *testing.T, body string) string {
 	t.Helper()
 	dir := t.TempDir()
-	path := filepath.Join(dir, "page.server.go")
+	path := filepath.Join(dir, "_page.server.go")
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
@@ -199,7 +199,7 @@ func TestScanPrerenderFromSvelte(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			dir := t.TempDir()
-			p := filepath.Join(dir, "+page.svelte")
+			p := filepath.Join(dir, "_page.svelte")
 			if err := os.WriteFile(p, []byte(tc.body), 0o644); err != nil {
 				t.Fatal(err)
 			}

@@ -147,7 +147,7 @@ func Detail() (Scenario, error) {
 	}, nil
 }
 
-// Action exercises the +server.go POST path at "/api/echo". The handler
+// Action exercises the _server.go POST path at "/api/echo". The handler
 // writes a fixed payload — enough to round-trip the server pipeline,
 // without measuring user-side encoding cost.
 func Action() (Scenario, error) {

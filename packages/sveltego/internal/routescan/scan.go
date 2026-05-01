@@ -1,7 +1,6 @@
 package routescan
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -14,31 +13,20 @@ import (
 )
 
 // specialFiles names the file conventions a route directory may
-// own. Presence of any one materializes a ScannedRoute. The .svelte
-// names retain the SvelteKit-style "+" prefix; the .go names drop it
-// because Go's tooling rejects the "+" character in source filenames
-// (see ADR 0003 amendment, Phase 0i-fix). Reset-suffixed names like
-// `+page@.svelte` and `+page@(app).svelte` are matched separately by
-// ParseResetFilename and normalized into the base (+page / +layout /
-// +error) entry plus a per-route ResetTarget.
+// own. Presence of any one materializes a ScannedRoute. All names use
+// the `_` prefix so Go's default toolchain (`go build`, `go vet`,
+// `golangci-lint`) skips per-route Go files automatically — see RFC
+// #379 phase 1b. Reset-suffixed names like `_page@.svelte` and
+// `_page@(app).svelte` are matched separately by ParseResetFilename
+// and normalized into the base (_page / _layout / _error) entry plus
+// a per-route ResetTarget.
 var specialFiles = map[string]struct{}{
-	"+page.svelte":     {},
-	"+layout.svelte":   {},
-	"+error.svelte":    {},
-	"page.server.go":   {},
-	"layout.server.go": {},
-	"server.go":        {},
-}
-
-// serverGoFiles is the subset of specialFiles that are user-authored Go
-// source. Each one MUST start with `//go:build sveltego` so the default
-// Go toolchain (`go build`, `go vet`, `golangci-lint`) skips the file
-// and silently skips its containing directory when the directory name
-// itself is invalid as a Go import path (e.g. `[slug]/`).
-var serverGoFiles = map[string]struct{}{
-	"page.server.go":   {},
-	"layout.server.go": {},
-	"server.go":        {},
+	"_page.svelte":      {},
+	"_layout.svelte":    {},
+	"_error.svelte":     {},
+	"_page.server.go":   {},
+	"_layout.server.go": {},
+	"_server.go":        {},
 }
 
 // Scan walks RoutesDir and returns one ScannedRoute per directory that
@@ -150,10 +138,10 @@ func walkRoutes(routesDir string) ([]ScannedRoute, []Diagnostic, error) {
 	dirsWithLayout := make(map[string]struct{})
 	dirsWithError := make(map[string]struct{})
 	for _, di := range dirs {
-		if _, ok := di.files["+layout.svelte"]; ok {
+		if _, ok := di.files["_layout.svelte"]; ok {
 			dirsWithLayout[di.path] = struct{}{}
 		}
-		if _, ok := di.files["+error.svelte"]; ok {
+		if _, ok := di.files["_error.svelte"]; ok {
 			dirsWithError[di.path] = struct{}{}
 		}
 	}
@@ -173,9 +161,9 @@ func walkRoutes(routesDir string) ([]ScannedRoute, []Diagnostic, error) {
 
 // readSpecialFiles enumerates the special files in dir. The returned
 // map carries one entry per matched filename. Reset-suffixed names
-// (`+page@.svelte`, `+page@(group).svelte`, plus the +layout/+error
+// (`_page@.svelte`, `_page@(group).svelte`, plus the _layout/_error
 // equivalents) are normalized to the base name so downstream code can
-// continue to consult `+page.svelte` etc; hasReset reflects whether
+// continue to consult `_page.svelte` etc; hasReset reflects whether
 // any reset variant was found and resetTarget records the parsed
 // @<target> portion (empty for root reset).
 func readSpecialFiles(dir string) (files map[string]struct{}, hasReset bool, resetTarget string, err error) {
@@ -265,7 +253,7 @@ func buildRoute(routesDir, dir string, files map[string]struct{}, dirsWithLayout
 			continue
 		}
 		chainPkgs = append(chainPkgs, pkg)
-		serverPath := filepath.Join(c, "layout.server.go")
+		serverPath := filepath.Join(c, "_layout.server.go")
 		if _, err := os.Stat(serverPath); err == nil {
 			chainServers = append(chainServers, serverPath)
 		} else {
@@ -282,14 +270,14 @@ func buildRoute(routesDir, dir string, files map[string]struct{}, dirsWithLayout
 		LayoutChain:        chain,
 		LayoutPackagePaths: chainPkgs,
 		LayoutServerFiles:  chainServers,
-		HasPage:            has(files, "+page.svelte"),
-		HasLayout:          has(files, "+layout.svelte"),
-		HasError:           has(files, "+error.svelte"),
+		HasPage:            has(files, "_page.svelte"),
+		HasLayout:          has(files, "_layout.svelte"),
+		HasError:           has(files, "_error.svelte"),
 		HasReset:           hasReset,
 		ResetTarget:        resetTarget,
-		HasPageServer:      has(files, "page.server.go"),
-		HasLayoutServer:    has(files, "layout.server.go"),
-		HasServer:          has(files, "server.go"),
+		HasPageServer:      has(files, "_page.server.go"),
+		HasLayoutServer:    has(files, "_layout.server.go"),
+		HasServer:          has(files, "_server.go"),
 	}
 	if boundaryDir := nearestErrorDir(routesDir, dir, dirsWithError); boundaryDir != "" {
 		pkgPath, encErr := encodeLayoutPackagePath(routesDir, boundaryDir)
@@ -305,7 +293,7 @@ func buildRoute(routesDir, dir string, files map[string]struct{}, dirsWithLayout
 }
 
 // nearestErrorDir walks from dir up to routesDir and returns the first
-// directory that owns a +error.svelte. Empty when none cover the route.
+// directory that owns a _error.svelte. Empty when none cover the route.
 func nearestErrorDir(routesDir, dir string, dirsWithError map[string]struct{}) string {
 	cur := dir
 	for {
@@ -437,87 +425,17 @@ func validateRouteFiles(r ScannedRoute) []Diagnostic {
 	if r.HasPage && r.HasServer {
 		ds = append(ds, Diagnostic{
 			Path:    r.Dir,
-			Message: fmt.Sprintf("route %q may not have both +page.svelte and server.go", r.Pattern),
+			Message: fmt.Sprintf("route %q may not have both _page.svelte and _server.go", r.Pattern),
 			Hint:    "use either a page or an API endpoint",
 		})
 	}
 	if r.HasPageServer && !r.HasPage && !r.HasServer {
 		ds = append(ds, Diagnostic{
 			Path:    r.Dir,
-			Message: fmt.Sprintf("orphan page.server.go: route %q has no +page.svelte or server.go", r.Pattern),
-		})
-	}
-	ds = append(ds, validateBuildTags(r)...)
-	return ds
-}
-
-// validateBuildTags returns one Diagnostic per recognized server .go file
-// in r.Dir whose first non-blank line is not `//go:build sveltego`. The
-// build constraint is mandatory: without it the default Go toolchain
-// either rejects the file (legacy `+`-prefix names, no longer used) or
-// walks into a directory whose name is not a valid Go import path
-// (`[slug]/`, `(group)/`, etc.) and fails. Severity is warning, not
-// error, so users mid-migration still get a buildable .gen tree.
-func validateBuildTags(r ScannedRoute) []Diagnostic {
-	var ds []Diagnostic
-	for name := range serverGoFiles {
-		switch name {
-		case "page.server.go":
-			if !r.HasPageServer {
-				continue
-			}
-		case "layout.server.go":
-			if !r.HasLayoutServer {
-				continue
-			}
-		case "server.go":
-			if !r.HasServer {
-				continue
-			}
-		}
-		path := filepath.Join(r.Dir, name)
-		if hasSveltegoBuildTag(path) {
-			continue
-		}
-		ds = append(ds, Diagnostic{
-			Path:    path,
-			Message: "missing //go:build sveltego constraint; this file may be parsed by go build and break the build",
-			Hint:    "add `//go:build sveltego` as the first line so the default Go toolchain skips it",
+			Message: fmt.Sprintf("orphan _page.server.go: route %q has no _page.svelte or _server.go", r.Pattern),
 		})
 	}
 	return ds
-}
-
-// hasSveltegoBuildTag returns true when the first non-blank line of path
-// is a `//go:build` directive whose expression mentions the `sveltego`
-// constraint. Boolean operators (`&&`, `||`, `!`, parentheses) and other
-// constraints may coexist; the directive simply has to include the
-// `sveltego` token as one of its identifiers.
-func hasSveltegoBuildTag(path string) bool {
-	f, err := os.Open(path) //nolint:gosec // path is scanner-controlled
-	if err != nil {
-		return false
-	}
-	defer f.Close()
-	scan := bufio.NewScanner(f)
-	for scan.Scan() {
-		trimmed := strings.TrimSpace(scan.Text())
-		if trimmed == "" {
-			continue
-		}
-		if !strings.HasPrefix(trimmed, "//go:build") {
-			return false
-		}
-		rest := strings.TrimSpace(strings.TrimPrefix(trimmed, "//go:build"))
-		cleaned := strings.NewReplacer("&&", " ", "||", " ", "(", " ", ")", " ", "!", " ").Replace(rest)
-		for _, tok := range strings.Fields(cleaned) {
-			if tok == "sveltego" {
-				return true
-			}
-		}
-		return false
-	}
-	return false
 }
 
 func detectPatternConflicts(routes []ScannedRoute) []Diagnostic {

@@ -6,7 +6,7 @@ package kit
 // returned [ActionResult] tells the pipeline how to finish the request.
 type ActionFn = func(ev *RequestEvent) ActionResult
 
-// ActionMap is the type a +page.server.go exports as `var Actions`.
+// ActionMap is the type a _page.server.go exports as `var Actions`.
 // Keys are action names (`"default"`, `"submit"`, ...); the dispatcher
 // matches the request's `?/<name>` query against them.
 type ActionMap = map[string]ActionFn

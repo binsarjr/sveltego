@@ -8,7 +8,7 @@ import (
 	"github.com/binsarjr/sveltego/packages/sveltego/internal/parser"
 )
 
-// scanPrerenderFromSvelte parses a +page.svelte or +layout.svelte and
+// scanPrerenderFromSvelte parses a _page.svelte or _layout.svelte and
 // returns the override fragment derived from the file's
 // `<svelte:options prerender>` declaration. A missing file or absent
 // attribute yields the zero override so callers can fold it into the

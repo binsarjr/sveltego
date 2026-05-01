@@ -2,21 +2,21 @@
 
 Reference playground demonstrating cookie-session auth, multi-route protection
 via the `Handle` hook, CRUD with form actions, and a JSON polling endpoint
-backed by `+server.go`. Closes [#63](https://github.com/binsarjr/sveltego/issues/63).
+backed by `_server.go`. Closes [#63](https://github.com/binsarjr/sveltego/issues/63).
 
 ## Features demonstrated
 
 | Concept | Where |
 |---|---|
 | `Handle` hook for cookie-session auth | `src/hooks.server.go` |
-| `kit.Cookies.Get/Set/Delete` | `src/hooks.server.go`, `src/routes/login/page.server.go` |
-| `kit.ActionMap` (default + named actions) | `src/routes/login/page.server.go`, `src/routes/dashboard/page.server.go` |
+| `kit.Cookies.Get/Set/Delete` | `src/hooks.server.go`, `src/routes/login/_page.server.go` |
+| `kit.ActionMap` (default + named actions) | `src/routes/login/_page.server.go`, `src/routes/dashboard/_page.server.go` |
 | `RequestEvent.BindForm` | every `Action` in this app |
-| `kit.Redirect` (Load redirect) | `src/routes/page.server.go` |
-| `kit.ActionRedirect` (post-action redirect) | `src/routes/login/page.server.go` |
+| `kit.Redirect` (Load redirect) | `src/routes/_page.server.go` |
+| `kit.ActionRedirect` (post-action redirect) | `src/routes/login/_page.server.go` |
 | `kit.SafeError` via `kit.Fail` | login validation errors |
 | `Locals[user]` (request-scoped state) | hooks → Load |
-| `+server.go` REST endpoint (JSON) | `src/routes/api/metrics/server.go` |
+| `_server.go` REST endpoint (JSON) | `src/routes/api/metrics/_server.go` |
 | Dynamic route param `[id]` | `src/routes/dashboard/items/[id]/` |
 | `bcrypt` password hashing | `src/lib/store.go` |
 
@@ -31,14 +31,14 @@ playgrounds/dashboard/
 │   ├── hooks.server.go               # cookie session → Locals.User; redirect-to-login on /dashboard
 │   ├── lib/store.go                  # in-memory user + items store, bcrypt
 │   └── routes/
-│       ├── +layout.svelte            # nav + slot
-│       ├── +page.svelte              # welcome / link to dashboard
+│       ├── _layout.svelte            # nav + slot
+│       ├── _page.svelte              # welcome / link to dashboard
 │       ├── page.server.go            # Load (Locals.User), Actions{logout}
-│       ├── login/+page.svelte        # login form
+│       ├── login/_page.svelte        # login form
 │       ├── login/page.server.go      # Actions{default: login}
-│       ├── dashboard/+page.svelte    # items list + chart panel
+│       ├── dashboard/_page.svelte    # items list + chart panel
 │       ├── dashboard/page.server.go  # Load (items) + Actions{create, delete}
-│       ├── dashboard/items/[id]/+page.svelte    # edit form
+│       ├── dashboard/items/[id]/_page.svelte    # edit form
 │       ├── dashboard/items/[id]/page.server.go  # Load (item) + Actions{update, delete}
 │       └── api/metrics/server.go     # GET → JSON metrics for polling chart
 ```
