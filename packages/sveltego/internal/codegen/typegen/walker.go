@@ -20,10 +20,23 @@ type RouteShape struct {
 
 // Field is one entry on the data interface. Name is the JSON-style
 // property name (post JSON-tag resolution); TSType is the rendered
-// TypeScript type for the field.
+// TypeScript type for the field. GoName preserves the original Go
+// struct field identifier so SSR property-access lowering (Phase 5,
+// #427) can rewrite `data.<json>` to `data.<GoName>` without a second
+// AST walk. GoType is the original Go type expression as written in
+// the source (e.g. "string", "*User", "[]Post"); the lowerer reads its
+// pointer-ness, slice-ness, and named-type root for nested chains.
 type Field struct {
-	Name   string
-	TSType string
+	Name    string
+	TSType  string
+	GoName  string
+	GoType  string
+	Pointer bool
+	Slice   bool
+	// NamedType is the root struct identifier when the field's Go type
+	// resolves to (or wraps) a top-level struct in the same file. Empty
+	// for primitives, maps, generics, or anonymous nested structs.
+	NamedType string
 }
 
 // NamedType is a top-level Go struct declaration referenced from the
@@ -194,6 +207,7 @@ func (r *structResolver) fieldsFromStruct(st *goast.StructType) ([]Field, []Diag
 		jsonName, hasTag := jsonTagName(f.Tag)
 		ts, fdiags := r.mapType(f.Type)
 		diags = append(diags, fdiags...)
+		isPtr, isSlice, named, goSrc := describeGoType(f.Type)
 		for _, n := range f.Names {
 			if !n.IsExported() {
 				continue
@@ -212,10 +226,76 @@ func (r *structResolver) fieldsFromStruct(st *goast.StructType) ([]Field, []Diag
 			if name == "-" {
 				continue
 			}
-			fields = append(fields, Field{Name: name, TSType: ts})
+			fields = append(fields, Field{
+				Name:      name,
+				TSType:    ts,
+				GoName:    n.Name,
+				GoType:    goSrc,
+				Pointer:   isPtr,
+				Slice:     isSlice,
+				NamedType: named,
+			})
 		}
 	}
 	return fields, diags
+}
+
+// describeGoType extracts shape-affecting facts from a Go type
+// expression: whether it's a pointer at the outer layer, whether it's
+// a slice/array, the named-struct root identifier (when the type is —
+// or wraps — a same-file struct), and a stable string rendering of the
+// expression suitable for diagnostics. The walk strips one layer of
+// `*`/`[]` to get to the named identifier; deeper compositions
+// (`[]*T`, `*[]T`) still report the leaf named type for the lowerer's
+// chain walk.
+func describeGoType(expr goast.Expr) (pointer, slice bool, named, src string) {
+	src = renderGoType(expr)
+	cur := expr
+	for {
+		switch t := cur.(type) {
+		case *goast.StarExpr:
+			pointer = true
+			cur = t.X
+			continue
+		case *goast.ArrayType:
+			slice = true
+			cur = t.Elt
+			continue
+		case *goast.ParenExpr:
+			cur = t.X
+			continue
+		case *goast.Ident:
+			named = t.Name
+			return
+		}
+		return
+	}
+}
+
+// renderGoType produces a stable, gofmt-style string for a Go type
+// expression. The shape covers the cases the SSR lowerer needs to
+// surface in error messages: primitives, pointers, slices, named
+// types, selectors, and a generic `<expr>` placeholder for anything
+// else so the diagnostic stays useful even on exotic types.
+func renderGoType(expr goast.Expr) string {
+	switch t := expr.(type) {
+	case *goast.Ident:
+		return t.Name
+	case *goast.StarExpr:
+		return "*" + renderGoType(t.X)
+	case *goast.ArrayType:
+		return "[]" + renderGoType(t.Elt)
+	case *goast.SelectorExpr:
+		if id, ok := t.X.(*goast.Ident); ok && t.Sel != nil {
+			return id.Name + "." + t.Sel.Name
+		}
+		return "<selector>"
+	case *goast.MapType:
+		return "map[" + renderGoType(t.Key) + "]" + renderGoType(t.Value)
+	case *goast.ParenExpr:
+		return renderGoType(t.X)
+	}
+	return "<expr>"
 }
 
 // recordNamedType registers a referenced struct under name and walks

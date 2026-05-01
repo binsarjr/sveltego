@@ -43,6 +43,18 @@ type ExprRewriter interface {
 	Rewrite(scope *Scope, n *Node, def string) string
 }
 
+// SpreadRewriter is an optional interface a rewriter can implement to
+// also lower {`...expr`} object-spread elements that the Phase 3
+// emitter renders as `/* spread */ <expr>` placeholders. The emitter
+// invokes RewriteObjectSpread on each SpreadElement found in an
+// ObjectExpression; the returned string replaces the placeholder when
+// expanded is true. expanded=false leaves the placeholder in place
+// (the legacy Phase 3 rendering) so callers without spread support
+// keep working unchanged.
+type SpreadRewriter interface {
+	RewriteObjectSpread(scope *Scope, spread *Node, inner string) (rewritten string, expanded bool)
+}
+
 // Scope tracks locals introduced inside the render function. Phase 5
 // reads it to know which identifiers are user-data references (subject
 // to lowering) and which are emitter-introduced bookkeeping (left
