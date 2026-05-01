@@ -122,7 +122,7 @@ Codegen reads the Go AST and emits a sibling `.svelte.d.ts` declaration so Svelt
 | **v0.4** | 19 | Svelte 5 runes, slots, snippets, special elements, `<svelte:options>`, scoped CSS, a11y warnings |
 | **v0.5** | 23 | SvelteKit-parity catch-up: upstream-tracked enhancements (`kit.After`, `HandleAction`, `RawParam`, `RouteID`, etc.) and the cookie-session auth core |
 | **v0.6** | 40 | Authentication: `sveltego-auth` master plan (#155), storage adapters, sessions, password / magic-link / OTP / OAuth flows |
-| **v1.0** | 25 | Benchmarks, docs, examples, streaming/SSG/CSP, sitemap, image opt, deploy adapters, CI/release/LSP, service worker, post-merge code-quality follow-ups |
+| **v1.0** | 28 | Benchmarks, docs, examples, streaming/SSG/CSP, sitemap, image opt, deploy adapters, CI/release/LSP, service worker, post-merge code-quality follow-ups |
 | **v1.1** | 6 | LLM tooling: `llms.txt`, MCP server, copy-for-LLM, AI templates, provenance |
 
 ## Repository layout
@@ -142,6 +142,7 @@ packages/
   adapter-lambda/       # AWS Lambda via aws-lambda-go-api-proxy
   adapter-static/       # SSG output (stub; tracks #65)
   adapter-cloudflare/   # Cloudflare Workers (stub; tracks Workers Go runtime)
+  adapter-fastly/       # Fastly Compute@Edge (Wasm; #298)
   adapter-auto/         # Dispatch by env / target name + standalone CLI
 bench/                  # Benchmark harness vs adapter-bun (RFC #105)
 benchmarks/             # Per-package microbenchmarks
