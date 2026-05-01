@@ -460,14 +460,14 @@ func (p *parser) parseScript() ast.Node {
 	}
 	p.advance()
 	switch {
-	case module && lang != "" && lang != "ts":
+	case module && lang != "" && lang != "ts" && lang != "js":
 		p.errorWithHint(open,
 			"unsupported `<script module>` lang `"+lang+"`",
 			"<script module> compiles to JS via Vite; drop `lang` or use lang=\"ts\"")
-	case !module && lang != "" && lang != "go":
+	case !module && lang != "" && lang != "go" && lang != "ts" && lang != "js":
 		p.errorWithHint(open,
 			"unsupported script lang `"+lang+"`",
-			"sveltego compiles Go inside <script>; remove `lang` or use lang=\"go\"")
+			"use lang=\"go\" for server-side Go, lang=\"ts\"/lang=\"js\" for client-side, or omit for default")
 	}
 	return &ast.Script{P: tokPos(open), Lang: lang, Module: module, Body: body}
 }

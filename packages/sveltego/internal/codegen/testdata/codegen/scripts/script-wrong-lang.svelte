@@ -1,4 +1,4 @@
-<script lang="ts">
-const x: number = 1;
+<script lang="coffee">
+x = 1
 </script>
 <p>hi</p>

@@ -199,14 +199,27 @@ func TestScriptGoLang(t *testing.T) {
 	}
 }
 
+// TestScriptInstanceAcceptsTSLang pins post-RFC-379 behavior: the parser
+// accepts <script lang="ts"> and <script lang="js"> on instance scripts
+// because Vite's Svelte plugin compiles them client-side. The Go-side
+// codegen treats non-go instance scripts as opaque (no Go hoisting).
+func TestScriptInstanceAcceptsTSLang(t *testing.T) {
+	for _, lang := range []string{"ts", "js"} {
+		frag, errs := Parse([]byte(`<script lang="` + lang + `">let x = 1;</script>`))
+		if len(errs) != 0 {
+			t.Fatalf("lang=%q: unexpected errors: %v", lang, errs)
+		}
+		s := frag.Children[0].(*ast.Script)
+		if s.Lang != lang {
+			t.Fatalf("lang=%q: got %q", lang, s.Lang)
+		}
+	}
+}
+
 func TestScriptUnsupportedLangIsError(t *testing.T) {
-	frag, errs := Parse([]byte(`<script lang="ts">type X = number;</script>`))
+	_, errs := Parse([]byte(`<script lang="coffee">x = 1</script>`))
 	if len(errs) != 1 {
 		t.Fatalf("expected 1 error, got %d (%v)", len(errs), errs)
-	}
-	s := frag.Children[0].(*ast.Script)
-	if s.Lang != "ts" {
-		t.Fatalf("lang: %q", s.Lang)
 	}
 }
 

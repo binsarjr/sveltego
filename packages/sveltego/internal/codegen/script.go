@@ -158,10 +158,10 @@ func extractScripts(frag *ast.Fragment) (scriptOutput, error) {
 			continue
 		}
 		if s.Lang != "go" {
-			return scriptOutput{}, &CodegenError{
-				Pos: s.P,
-				Msg: fmt.Sprintf("<script> requires lang=\"go\" (got %q)", s.Lang),
-			}
+			// Post-RFC-379 instance scripts may be JS/TS for the Vite/Svelte
+			// client compile path. The Go side is opaque to them: Vite reads
+			// the .svelte source directly. Skip Go hoisting for non-Go langs.
+			continue
 		}
 		body, runeNames := rewriteRunes(s.Body)
 		for _, name := range runeNames {
