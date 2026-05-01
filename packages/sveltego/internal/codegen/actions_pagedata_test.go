@@ -10,7 +10,7 @@ import (
 )
 
 // TestGenerate_HasActions_AddsFormField pins the codegen behavior
-// linking page.server.go's `var Actions = ...` to PageData.Form.
+// linking _page.server.go's `var Actions = ...` to PageData.Form.
 func TestGenerate_HasActions_AddsFormField(t *testing.T) {
 	t.Parallel()
 	src := []byte("<h1>{Data.Name}</h1>")
@@ -48,7 +48,7 @@ func TestGenerate_NoActions_NoFormField(t *testing.T) {
 }
 
 // TestGenerate_HasActions_UserDeclaredFormDeduped verifies that when a
-// page.server.go Load() return already contains `Form any` AND HasActions is
+// _page.server.go Load() return already contains `Form any` AND HasActions is
 // true, codegen emits exactly one Form field (no compile-error duplicate).
 // This is the fix for #143.
 func TestGenerate_HasActions_UserDeclaredFormDeduped(t *testing.T) {
@@ -68,7 +68,7 @@ func Load() (struct {
 }
 `
 	dir := t.TempDir()
-	serverPath := filepath.Join(dir, "page.server.go")
+	serverPath := filepath.Join(dir, "_page.server.go")
 	if err := os.WriteFile(serverPath, []byte(serverSrc), 0o644); err != nil {
 		t.Fatalf("write server file: %v", err)
 	}

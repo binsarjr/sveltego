@@ -7,7 +7,7 @@ import "github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
 // and the per-special-file flags needed to decide what to emit.
 //
 // LayoutChain is ordered ancestor -> self: the first entry is the topmost
-// directory under RoutesDir that owns a +layout.svelte; the last entry is
+// directory under RoutesDir that owns a _layout.svelte; the last entry is
 // the route's own directory when the route also owns a layout.
 //
 // LayoutPackagePaths runs in lockstep with LayoutChain and holds each
@@ -16,7 +16,7 @@ import "github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
 // generated layout package without re-deriving the encoding.
 //
 // LayoutServerFiles also runs in lockstep with LayoutChain. Each entry is
-// the absolute path to <layoutDir>/layout.server.go when that file exists,
+// the absolute path to <layoutDir>/_layout.server.go when that file exists,
 // otherwise the empty string. The codegen emitter uses these paths to
 // mirror layout server sources and emit per-layout Load wires.
 type ScannedRoute struct {
@@ -36,13 +36,13 @@ type ScannedRoute struct {
 	LayoutPackagePaths []string
 	LayoutServerFiles  []string
 	// ResetTarget records the @<target> suffix parsed from a reset
-	// filename like +page@(app).svelte. The empty string means a root
+	// filename like _page@(app).svelte. The empty string means a root
 	// reset (skip every intermediate layout); a non-empty value names
-	// the group whose +layout.svelte the chain truncates at, inclusive.
+	// the group whose _layout.svelte the chain truncates at, inclusive.
 	// Meaningful only when HasReset is true.
 	ResetTarget string
 	// ErrorBoundaryDir is the absolute path of the nearest ancestor (or
-	// self) directory that owns a +error.svelte. Empty when no error
+	// self) directory that owns a _error.svelte. Empty when no error
 	// boundary covers this route.
 	ErrorBoundaryDir string
 	// ErrorBoundaryPackagePath is the .gen package path for

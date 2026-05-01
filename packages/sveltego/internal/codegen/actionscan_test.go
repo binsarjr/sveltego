@@ -9,7 +9,7 @@ import (
 func writeTempServerActions(t *testing.T, body string) string {
 	t.Helper()
 	dir := t.TempDir()
-	path := filepath.Join(dir, "page.server.go")
+	path := filepath.Join(dir, "_page.server.go")
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}

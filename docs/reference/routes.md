@@ -10,14 +10,14 @@ summary: File names, build tag, generated output, and the route-matching contrac
 
 ```
 src/routes/
-  +page.svelte               # SSR template
+  _page.svelte               # SSR template
   page.server.go             # Load(), Actions       (//go:build sveltego)
-  +layout.svelte             # layout chain
+  _layout.svelte             # layout chain
   layout.server.go           # parent data flow      (//go:build sveltego)
   server.go                  # REST endpoints        (//go:build sveltego)
-  +error.svelte              # error boundary
+  _error.svelte              # error boundary
   (group)/                   # route group, no URL segment
-  +page@.svelte              # layout reset
+  _page@.svelte              # layout reset
   [param]/                   # required param
   [[optional]]/              # optional segment
   [...rest]/                 # catch-all
@@ -44,7 +44,7 @@ The router prefers more specific patterns. Roughly:
 2. Required `[name]` beats optional `[[name]]`.
 3. Optional beats catch-all `[...rest]`.
 4. Param matchers (`[id=int]`) tie-break toward the matcher that accepts.
-5. Layout reset (`+page@.svelte`) participates without affecting precedence.
+5. Layout reset (`_page@.svelte`) participates without affecting precedence.
 
 `sveltego routes` prints the resolved table for inspection.
 
@@ -60,10 +60,10 @@ Two builds of the same source produce byte-identical `.gen/` output. Golden test
 
 ## File naming gotchas
 
-- `+page.svelte` — leading `+` is required on Svelte template files.
+- `_page.svelte` — leading `+` is required on Svelte template files.
 - `page.server.go` — note the `.server.` infix; no leading `+`. The `//go:build sveltego` tag identifies it to codegen.
-- `+page.server.go` (with `+`) is **not** recognized by routescan. Drop the `+`.
+- `_page.server.go` (with `+`) is **not** recognized by routescan. Drop the `+`.
 - `server.go` — REST endpoint, no template. No `+` prefix.
-- `+page@.svelte` — trailing `@` (before the extension) signals a layout reset.
+- `_page@.svelte` — trailing `@` (before the extension) signals a layout reset.
 
 When in doubt, run `sveltego routes` and verify the entry appears.

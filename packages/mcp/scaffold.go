@@ -39,7 +39,7 @@ func scaffold(routePath, kind string) (string, error) {
 
 func scaffoldPage(dir, rel string) string {
 	title := titleFor(rel, "Page")
-	svelte := fmt.Sprintf(`<!-- %s/+page.svelte -->
+	svelte := fmt.Sprintf(`<!-- %s/_page.svelte -->
 <script lang="go">
 type PageData = struct {
 	Title string
@@ -63,14 +63,14 @@ func Load(ctx *kit.LoadCtx) (any, error) {
 }
 `, title)
 	return joinFiles(
-		fileBlock(path.Join(dir, "+page.svelte"), svelte),
+		fileBlock(path.Join(dir, "_page.svelte"), svelte),
 		fileBlock(path.Join(dir, "page.server.go"), server),
 	)
 }
 
 func scaffoldLayout(dir, rel string) string {
 	title := titleFor(rel, "Layout")
-	svelte := fmt.Sprintf(`<!-- %s/+layout.svelte -->
+	svelte := fmt.Sprintf(`<!-- %s/_layout.svelte -->
 <script lang="go">
 type LayoutData = struct {
 	Title string
@@ -100,7 +100,7 @@ func Load(ctx *kit.LoadCtx) (any, error) {
 }
 `, title)
 	return joinFiles(
-		fileBlock(path.Join(dir, "+layout.svelte"), svelte),
+		fileBlock(path.Join(dir, "_layout.svelte"), svelte),
 		fileBlock(path.Join(dir, "layout.server.go"), server),
 	)
 }
@@ -126,7 +126,7 @@ func GET(ev *kit.RequestEvent) (*kit.Response, error) {
 }
 
 func scaffoldError(dir, _ string) string {
-	body := `<!-- +error.svelte -->
+	body := `<!-- _error.svelte -->
 <script lang="go">
 type PageData = struct {
 	Status  int
@@ -136,7 +136,7 @@ type PageData = struct {
 
 <h1>{Data.Status} — {Data.Message}</h1>
 `
-	return fileBlock(path.Join(dir, "+error.svelte"), body)
+	return fileBlock(path.Join(dir, "_error.svelte"), body)
 }
 
 func titleFor(rel, fallback string) string {

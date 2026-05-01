@@ -82,7 +82,7 @@ func hasAnyLayoutLoader(loaders []router.LayoutLoadHandler) bool {
 	return false
 }
 
-// errServerRouteWrote is the sentinel resolve returns when a +server.go
+// errServerRouteWrote is the sentinel resolve returns when a _server.go
 // handler has already written directly to the http.ResponseWriter and
 // the surrounding pipeline must not emit anything else.
 var errServerRouteWrote = errors.New("server: server route wrote response")
@@ -345,7 +345,7 @@ type clientPayload struct {
 // router. Pattern is the SvelteKit-canonical pattern (the same string
 // used as RouteID), Segments is the parsed form so the client can match
 // URLs without re-parsing the bracket syntax. Only routes with a Page
-// handler are emitted; pure +server.go routes do not participate in SPA
+// handler are emitted; pure _server.go routes do not participate in SPA
 // navigation.
 type clientManifestEntry struct {
 	Pattern  string                  `json:"pattern"`

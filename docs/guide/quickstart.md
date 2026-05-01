@@ -45,9 +45,9 @@ sveltego version
 hello/
   src/
     routes/
-      +page.svelte
+      _page.svelte
       page.server.go         # //go:build sveltego (no `+` prefix on user .go files)
-      +layout.svelte
+      _layout.svelte
     lib/                     # $lib alias target ($lib/.gitkeep)
   hooks.server.go            # //go:build sveltego
   sveltego.config.go         # //go:build sveltego
@@ -60,7 +60,7 @@ The scaffold writes `cmd/app/main.go`, `app.html`, `package.json`, and `vite.con
 
 ## A minimal route
 
-`src/routes/+page.svelte`:
+`src/routes/_page.svelte`:
 
 ```svelte
 <script lang="go">
@@ -72,7 +72,7 @@ The scaffold writes `cmd/app/main.go`, `app.html`, `package.json`, and `vite.con
 <h1>{Data.Greeting}</h1>
 ```
 
-`src/routes/page.server.go` (no `+` prefix — user `.go` files use the `//go:build sveltego` tag instead, so the standard Go toolchain ignores them):
+`src/routes/_page.server.go` (no `+` prefix — user `.go` files use the `//go:build sveltego` tag instead, so the standard Go toolchain ignores them):
 
 ```go
 //go:build sveltego
@@ -106,7 +106,7 @@ sveltego build           # codegen + Vite + go build, in one step
 
 ## Next steps
 
-- [Routing](/guide/routing) — `+page.svelte`, params, groups, optional and rest segments.
+- [Routing](/guide/routing) — `_page.svelte`, params, groups, optional and rest segments.
 - [Load](/guide/load) — server-side data loading, parent layouts, fetch.
 - [Form actions](/guide/actions) — POST handlers tied to a page.
 - [Hooks](/guide/hooks) — `Handle`, `HandleError`, `HandleFetch`, `Reroute`, `Init`.

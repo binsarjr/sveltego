@@ -136,22 +136,22 @@ func TestScaffoldRoute(t *testing.T) {
 	}{
 		{
 			"about", "page",
-			[]string{"src/routes/about/+page.svelte", "src/routes/about/page.server.go", "//go:build sveltego", "func Load(ctx *kit.LoadCtx)"},
-			[]string{"+page.server.go"},
+			[]string{"src/routes/about/_page.svelte", "src/routes/about/page.server.go", "//go:build sveltego", "func Load(ctx *kit.LoadCtx)"},
+			[]string{"_page.server.go"},
 		},
 		{
 			"dash", "layout",
-			[]string{"src/routes/dash/+layout.svelte", "src/routes/dash/layout.server.go", "<slot />"},
+			[]string{"src/routes/dash/_layout.svelte", "src/routes/dash/layout.server.go", "<slot />"},
 			nil,
 		},
 		{
 			"api/health", "server",
 			[]string{"src/routes/api/health/server.go", "func GET(ev *kit.RequestEvent)", "//go:build sveltego"},
-			[]string{"+server.go"},
+			[]string{"_server.go"},
 		},
 		{
 			"", "error",
-			[]string{"src/routes/+error.svelte", "Data.Status"},
+			[]string{"src/routes/_error.svelte", "Data.Status"},
 			nil,
 		},
 	}

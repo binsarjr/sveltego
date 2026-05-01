@@ -46,14 +46,14 @@ Imports for any package referenced inside `{...}` (e.g. `strconv`) go in the `<s
 
 ```
 src/routes/
-  +page.svelte           SSR template, Go expressions inside {...}
-  page.server.go         Load(), Actions      — needs //go:build sveltego
-  +layout.svelte         layout chain
-  layout.server.go       layout-level Load    — needs //go:build sveltego
-  server.go              REST endpoints       — needs //go:build sveltego
-  +error.svelte          error boundary
+  _page.svelte           SSR template, Go expressions inside {...}
+  _page.server.go        Load(), Actions      (Go skips '_*' automatically)
+  _layout.svelte         layout chain
+  _layout.server.go      layout-level Load    (Go skips '_*' automatically)
+  _server.go             REST endpoints       (Go skips '_*' automatically)
+  _error.svelte          error boundary
   (group)/               route group, no URL segment
-  +page@.svelte          layout reset
+  _page@.svelte          layout reset
   [param]/               route param
   [[optional]]/          optional segment
   [...rest]/             catch-all
@@ -62,12 +62,12 @@ src/lib/                 shared modules ($lib alias)
 hooks.server.go          Handle, HandleError, HandleFetch, Reroute, Init
 ```
 
-**`+` prefix rules (do not invert):**
+**`_` prefix rules:**
 
-- `.svelte` files keep the `+` prefix: `+page.svelte`, `+layout.svelte`, `+error.svelte`, `+page@.svelte`.
-- User `.go` files **drop** the `+` prefix: `page.server.go`, `layout.server.go`, `server.go`, `hooks.server.go`. SvelteKit-style `+page.server.go` is rejected by the scanner.
+- All route files under `src/routes/` use the `_` prefix: `_page.svelte`, `_layout.svelte`, `_error.svelte`, `_page@.svelte`, `_page.server.go`, `_layout.server.go`, `_server.go`. The `_` prefix on `.go` files makes Go's default toolchain skip them automatically.
+- `hooks.server.go` (project root) and `src/params/<name>.go` keep the `//go:build sveltego` constraint because their filenames have no `_` prefix.
 
-**Build constraint:** every user `.go` file under `src/` (and `hooks.server.go` at project root) **must** start with:
+**Build constraint:** files under `src/routes/**` use the `_` prefix (`_page.server.go`, `_layout.server.go`, `_server.go`); Go's default toolchain skips files whose names start with `_`, so no constraint is required there. Files outside the `_`-prefix convention — `hooks.server.go` (project root) and `src/params/<name>.go` — **must** still start with:
 
 ```go
 //go:build sveltego
@@ -75,17 +75,15 @@ hooks.server.go          Handle, HandleError, HandleFetch, Reroute, Init
 package myroute
 ```
 
-Without that line, `go build` / `go vet` / `golangci-lint` would try to compile the file in a default Go module that lacks sveltego's generated context. The constraint makes the standard toolchain skip these files; codegen reads them through `go/parser` directly.
+Without that line on those files, `go build` / `go vet` / `golangci-lint` would try to compile them in a default Go module that lacks sveltego's generated context. Codegen reads every user `.go` file through `go/parser` directly regardless of the constraint.
 
 ---
 
 ## 4. Common patterns
 
-### `Load`
+### `Load` (`_page.server.go`)
 
 ```go
-//go:build sveltego
-
 package routes
 
 import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
@@ -155,11 +153,9 @@ func Load(ctx *kit.LoadCtx) (PageData, error) {
 
 `LoadCtx.Parent()` returns `any`. Type-assert to the immediate parent's data type.
 
-### REST endpoints (`server.go`)
+### REST endpoints (`_server.go`)
 
 ```go
-//go:build sveltego
-
 package api
 
 func GET(ev *kit.RequestEvent) (*kit.Response, error) { ... }
@@ -181,7 +177,7 @@ var Handle kit.HandleFn = func(ev *kit.RequestEvent, resolve kit.ResolveFn) (*ki
 var HandleError kit.HandleErrorFn = func(ev *kit.RequestEvent, err error) kit.SafeError { ... }
 ```
 
-`HandleError` returns a sanitized `kit.SafeError` (Code, Message, ID). The `+error.svelte` template binds `data` to this type directly: `{data.Code}`, `{data.Message}`.
+`HandleError` returns a sanitized `kit.SafeError` (Code, Message, ID). The `_error.svelte` template binds `data` to this type directly: `{data.Code}`, `{data.Message}`.
 
 ---
 
@@ -195,9 +191,9 @@ Reject these at code review. They will fail at codegen or produce wrong runtime 
 - **camelCase field access in templates.** `{data.user.name}` will not compile against a `PageData` whose field is `User`.
 - **Adding a JS server runtime.** No Node, no Bun, no Deno on the server. The point of sveltego is Go-only SSR.
 - **Editing `.gen/*.go`.** Generated files are overwritten on every `sveltego compile`.
-- **Universal `Load` (`+page.ts`).** sveltego is server-only by design (ADR 0005). All `Load` runs on the server in Go.
-- **`+page.server.go` filename.** Drop the `+` prefix on user `.go` files.
-- **Missing `//go:build sveltego`.** Codegen will warn; the standard Go toolchain will then try to compile a file that references undeclared symbols.
+- **Universal `Load` (e.g. SvelteKit's `+page.ts`).** sveltego is server-only by design (ADR 0005). All `Load` runs on the server in Go.
+- **`+` prefix on route files** (SvelteKit-style `+page.svelte`, `+layout.svelte`, `+page.server.go`). Use `_` prefix instead (`_page.svelte`, `_layout.svelte`, `_page.server.go`).
+- **Missing `//go:build sveltego` on `hooks.server.go` or `src/params/<name>.go`.** The standard Go toolchain will try to compile those files (they have no `_` prefix to auto-skip them). Route files under `src/routes/**` no longer need the constraint — the `_` prefix handles skipping.
 
 ---
 

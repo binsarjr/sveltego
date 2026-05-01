@@ -8,7 +8,7 @@ import (
 func TestGenerateClientEntry_ImportsEnhance(t *testing.T) {
 	t.Parallel()
 	out := GenerateClientEntry(ClientEntryOptions{
-		RelSveltePath: "../../../src/routes/+page.svelte",
+		RelSveltePath: "../../../src/routes/_page.svelte",
 		RelRouterPath: "../../__router/router",
 	})
 	if !strings.Contains(out, "import { enhance } from './enhance';") {
@@ -17,7 +17,7 @@ func TestGenerateClientEntry_ImportsEnhance(t *testing.T) {
 	if !strings.Contains(out, "(window as any).__sveltego__ = { ...payload, enhance }") {
 		t.Errorf("expected enhance to be exposed on window.__sveltego__:\n%s", out)
 	}
-	if !strings.Contains(out, "import Page from \"../../../src/routes/+page.svelte\";") {
+	if !strings.Contains(out, "import Page from \"../../../src/routes/_page.svelte\";") {
 		t.Errorf("expected Page import:\n%s", out)
 	}
 }

@@ -69,7 +69,7 @@ type ManifestOptions struct {
 	// <alias> adapter and a LayoutHeads slot for keys present here.
 	LayoutHeads map[string]bool
 	// ClientKeys maps ScannedRoute.PackagePath to the Vite client entry
-	// key (e.g. "routes/+page"). When present the manifest emits a
+	// key (e.g. "routes/_page"). When present the manifest emits a
 	// ClientKey field on each matching router.Route.
 	ClientKeys map[string]string
 	// HasServiceWorker, when true, makes the manifest declare a
@@ -83,12 +83,12 @@ type ManifestOptions struct {
 // GenerateManifest emits a deterministic, gofmt-clean Go source file
 // declaring `func Routes() []router.Route` from a [routescan.ScanResult].
 //
-// Routes with neither a +page.svelte nor a +server.go are skipped (e.g.
-// orphan +page.server.go directories — the scanner already emits a
+// Routes with neither a _page.svelte nor a _server.go are skipped (e.g.
+// orphan _page.server.go directories — the scanner already emits a
 // diagnostic for these). Page routes emit Page: <pkg>.Page{}.Render and
-// optionally Load / Actions when a +page.server.go is present alongside.
+// optionally Load / Actions when a _page.server.go is present alongside.
 // API-only routes emit Server: <pkg>.Handlers; the generated package's
-// +server.go is expected to declare `var Handlers map[string]http.HandlerFunc`.
+// _server.go is expected to declare `var Handlers map[string]http.HandlerFunc`.
 //
 // Symbol existence is not verified — Load / Actions / Handlers are emitted
 // unconditionally on file presence and `go build` surfaces the missing
@@ -168,7 +168,7 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 
 	// Reserve aliases for error-page packages. A boundary may live in a
 	// directory that itself contributes neither a page nor a layout
-	// (orphan +error.svelte), so the lookup walks every route's
+	// (orphan _error.svelte), so the lookup walks every route's
 	// ErrorBoundaryPackagePath rather than relying on entries / layouts.
 	var errorImports []errorImport
 	seenErrorPkg := make(map[string]struct{})

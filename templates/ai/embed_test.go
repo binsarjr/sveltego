@@ -14,8 +14,8 @@ var anchorStrings = []string{
 	"PageData",
 	"kit.Redirect",
 	"kit.ActionMap",
-	"page.server.go",
-	"+page.svelte",
+	"_page.server.go",
+	"_page.svelte",
 	"$props",
 	"https://sveltego.dev",
 	"github.com/binsarjr/sveltego",
@@ -83,11 +83,11 @@ func TestTemplates_CrossLink(t *testing.T) {
 
 func TestTemplates_NameAntiPatterns(t *testing.T) {
 	// The templates must explicitly name the patterns agents should avoid
-	// so a tool grepping for the rejected form (e.g. `+page.server.go`,
+	// so a tool grepping for the rejected form (e.g. `+page.svelte`,
 	// `export let`) finds the rejection context, not a permissive
 	// example. The list mirrors the "Don't" / "Anti-patterns" section.
 	rejectedTokens := []string{
-		"+page.server.go",
+		"+page.svelte",
 		"export let",
 	}
 	for _, name := range Files {

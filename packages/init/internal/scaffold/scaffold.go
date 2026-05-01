@@ -154,9 +154,9 @@ func baseFiles(module string, flavor TailwindFlavor) []file {
 		{path: "sveltego.config.go", body: []byte(configBody)},
 		{path: "hooks.server.go", body: []byte(hooksBody)},
 		{path: "cmd/app/main.go", body: []byte(renderMainGo(module))},
-		{path: "src/routes/+page.svelte", body: []byte(renderPageSvelte(flavor))},
-		{path: "src/routes/page.server.go", body: []byte(pageServerBody)},
-		{path: "src/routes/+layout.svelte", body: []byte(renderLayoutSvelte(flavor))},
+		{path: "src/routes/_page.svelte", body: []byte(renderPageSvelte(flavor))},
+		{path: "src/routes/_page.server.go", body: []byte(pageServerBody)},
+		{path: "src/routes/_layout.svelte", body: []byte(renderLayoutSvelte(flavor))},
 		{path: "src/lib/.gitkeep", body: []byte{}},
 	}
 }
@@ -332,9 +332,7 @@ const pageSvelteBody = `<script lang="go"></script>
 <h1>{data.Greeting}</h1>
 `
 
-const pageServerBody = `//go:build sveltego
-
-package routes
+const pageServerBody = `package routes
 
 import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 

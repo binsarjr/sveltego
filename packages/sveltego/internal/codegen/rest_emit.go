@@ -28,18 +28,18 @@ func emitRESTRoute(projectRoot, outDir, modulePath string, route routescan.Scann
 	if !route.HasServer {
 		return nil
 	}
-	verbs, err := scanRESTHandlers(filepath.Join(route.Dir, "server.go"))
+	verbs, err := scanRESTHandlers(filepath.Join(route.Dir, "_server.go"))
 	if err != nil {
 		return err
 	}
 	if len(verbs.Verbs) == 0 {
-		return fmt.Errorf("codegen: %s/server.go declares no HTTP verb handlers", route.Dir)
+		return fmt.Errorf("codegen: %s/_server.go declares no HTTP verb handlers", route.Dir)
 	}
 
 	encodedSub := strings.TrimPrefix(route.PackagePath, ".gen/")
 
 	mirror := userSourceFile{
-		UserPath:    filepath.Join(route.Dir, "server.go"),
+		UserPath:    filepath.Join(route.Dir, "_server.go"),
 		MirrorPath:  filepath.Join(projectRoot, outDir, "usersrc", filepath.FromSlash(encodedSub), "server.go"),
 		PackageName: route.PackageName,
 	}

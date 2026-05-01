@@ -30,7 +30,7 @@ func collectLocalsPrerenderWarnings(scan *routescan.ScanResult, routeOptions map
 			continue
 		}
 		if r.HasPageServer {
-			path := filepath.Join(r.Dir, "page.server.go")
+			path := filepath.Join(r.Dir, "_page.server.go")
 			if _, ok := seen[path]; !ok {
 				seen[path] = struct{}{}
 				ds, err := scanLocalsAccessUnderPrerender(path)
@@ -63,8 +63,8 @@ func collectLocalsPrerenderWarnings(scan *routescan.ScanResult, routeOptions map
 // access is fine (e.g. defaulting a value when the map is empty).
 const localsAllowDirective = "//sveltego:allow-locals-prerender"
 
-// scanLocalsAccessUnderPrerender walks a +page.server.go (or
-// +layout.server.go) file's Load and LayoutLoad declarations looking for
+// scanLocalsAccessUnderPrerender walks a _page.server.go (or
+// _layout.server.go) file's Load and LayoutLoad declarations looking for
 // reads of ctx.Locals or ev.Locals. Each hit becomes one
 // routescan.Diagnostic so the build surfaces the warning to stderr.
 //

@@ -38,7 +38,7 @@ func Text(status int, body string) *Response {
 }
 
 // XML builds a Response carrying body as application/xml. Used by
-// kit.SitemapBuilder.Bytes() callers and any +server.go route that
+// kit.SitemapBuilder.Bytes() callers and any _server.go route that
 // emits XML directly.
 func XML(status int, body []byte) *Response {
 	res := NewResponse(status, body)

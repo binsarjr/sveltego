@@ -710,7 +710,7 @@ jobs:
             --module example.com/x "$out_direct"
           test -f "$out_direct/go.mod"
           test -f "$out_direct/cmd/app/main.go"
-          test -f "$out_direct/src/routes/+page.svelte"
+          test -f "$out_direct/src/routes/_page.svelte"
 
       - name: go run via deep import path produces identical tree
         shell: bash

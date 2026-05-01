@@ -43,7 +43,7 @@ export default defineConfig({
 Import the stylesheet in your root layout:
 
 ```svelte
-<!-- src/routes/+layout.svelte -->
+<!-- src/routes/_layout.svelte -->
 <script lang="go">
   import "../app.css";
 </script>

@@ -10,7 +10,7 @@
 
 ## Rationale
 
-- One-to-one source-to-output mapping makes debugging trivial. `src/routes/posts/[slug]/+page.svelte` → `.gen/routes/posts/_slug_/page.gen.go`.
+- One-to-one source-to-output mapping makes debugging trivial. `src/routes/posts/[slug]/_page.svelte` → `.gen/routes/posts/_slug_/page.gen.go`.
 - Each output directory becomes its own Go package — namespace isolation per route prevents identifier collisions.
 - Selector reads naturally: `gen.Routes.Posts._slug_.Page` mirrors URL path.
 - Tooling friendly: file watcher invalidates one output file per source change. No global manifest churn for a single edit.
@@ -22,22 +22,22 @@
   - `[lang]` → `_lang_`
   - `[[lang]]` → `__lang__`
   - `[...path]` → `___path`
-- **Layout reset `+page@.svelte` filename (Q6):** `page_reset.gen.go`. Semantically meaningful; reader sees "this page resets the layout chain".
+- **Layout reset `_page@.svelte` filename (Q6):** `page_reset.gen.go`. Semantically meaningful; reader sees "this page resets the layout chain".
 
 ## Naming rules (full)
 
 | Source | `.gen/` path | Package name |
 |---|---|---|
-| `src/routes/+page.svelte` | `.gen/routes/page.gen.go` | `routes` |
-| `src/routes/+layout.svelte` | `.gen/routes/layout.gen.go` | `routes` |
-| `src/routes/+page@.svelte` | `.gen/routes/page_reset.gen.go` | `routes` |
-| `src/routes/+error.svelte` | `.gen/routes/error.gen.go` | `routes` |
-| `src/routes/about/+page.svelte` | `.gen/routes/about/page.gen.go` | `about` |
-| `src/routes/posts/[slug]/+page.svelte` | `.gen/routes/posts/_slug_/page.gen.go` | `_slug_` |
-| `src/routes/posts/[[lang]]/+page.svelte` | `.gen/routes/posts/__lang__/page.gen.go` | `__lang__` |
-| `src/routes/files/[...path]/+page.svelte` | `.gen/routes/files/___path/page.gen.go` | `___path` |
-| `src/routes/(marketing)/+page.svelte` | `.gen/routes/_g_marketing/page.gen.go` | `_g_marketing` |
-| `src/routes/api/users/server.go` | `.gen/routes/api/users/server.gen.go` | `users` |
+| `src/routes/_page.svelte` | `.gen/routes/page.gen.go` | `routes` |
+| `src/routes/_layout.svelte` | `.gen/routes/layout.gen.go` | `routes` |
+| `src/routes/_page@.svelte` | `.gen/routes/page_reset.gen.go` | `routes` |
+| `src/routes/_error.svelte` | `.gen/routes/error.gen.go` | `routes` |
+| `src/routes/about/_page.svelte` | `.gen/routes/about/page.gen.go` | `about` |
+| `src/routes/posts/[slug]/_page.svelte` | `.gen/routes/posts/_slug_/page.gen.go` | `_slug_` |
+| `src/routes/posts/[[lang]]/_page.svelte` | `.gen/routes/posts/__lang__/page.gen.go` | `__lang__` |
+| `src/routes/files/[...path]/_page.svelte` | `.gen/routes/files/___path/page.gen.go` | `___path` |
+| `src/routes/(marketing)/_page.svelte` | `.gen/routes/_g_marketing/page.gen.go` | `_g_marketing` |
+| `src/routes/api/users/_server.go` | `.gen/routes/api/users/server.gen.go` | `users` |
 
 `hooks.server.go` lives at `src/hooks.server.go` (user-written, not under `.gen/`). Codegen produces `.gen/hooks.gen.go` containing the dispatch wiring that calls user hooks.
 
@@ -111,3 +111,25 @@ Router (`packages/sveltego/runtime/router`) consumes this slice at startup, buil
   unconditionally, so the stub keeps the build clean.
 
 This unblocks #23 (hello-world) and closes #106, #107, #108.
+
+**2026-05-01 (RFC #379 phase 1b, closes #397):** Route file prefix
+collapsed from `+`/bare to uniform `_`.
+
+- `+page.svelte` → `_page.svelte`, `+layout.svelte` → `_layout.svelte`,
+  `+error.svelte` → `_error.svelte`, `+page@.svelte` → `_page@.svelte`.
+- `page.server.go` → `_page.server.go`, `layout.server.go` →
+  `_layout.server.go`, `server.go` → `_server.go`.
+- The `_` prefix on `.go` files makes Go's default toolchain
+  (`go build/vet/list/test`, `golangci-lint`) skip them automatically. The
+  `//go:build sveltego` constraint is no longer required on per-route Go
+  files — it remains mandatory on `hooks.server.go` (project root) and
+  `src/params/<name>.go` because those filenames have no `_` prefix.
+- The scanner's build-tag warning (`missing //go:build sveltego`) is
+  removed for route files. Constraint stripping in the user-source mirror
+  emitter still runs; with no constraint to strip it is a no-op.
+- Codegen emit filenames (`page.gen.go`, `layout.gen.go`, `error.gen.go`,
+  `wire.gen.go`, `manifest.gen.go`) are unchanged: those live under
+  `.gen/` and must remain visible to Go's toolchain (no `_` prefix).
+- The `+` prefix is borrowed from SvelteKit; sveltego rewrites SvelteKit's
+  shape in pure Go and `+` is foreign to the Go ecosystem. Pre-alpha so
+  the breaking change is acceptable.

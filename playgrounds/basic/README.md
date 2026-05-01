@@ -32,12 +32,12 @@ playgrounds/basic/
 ├── go.mod                    # require + replace points at packages/sveltego
 ├── app.html                  # shell with %sveltego.head% / %sveltego.body%
 ├── src/routes/
-│   ├── +layout.svelte        # inert in MVP — layout chain is v0.2 (#24)
-│   ├── +page.svelte          # uses {data.Greeting} + {#each Posts}
+│   ├── _layout.svelte        # inert in MVP — layout chain is v0.2 (#24)
+│   ├── _page.svelte          # uses {data.Greeting} + {#each Posts}
 │   ├── page.server.go        # //go:build sveltego; inline-struct-literal Load
 │   └── post/
 │       └── [id]/
-│           ├── +page.svelte
+│           ├── _page.svelte
 │           └── page.server.go
 └── cmd/app/main.go           # boots server with gen.Routes()
 ```
@@ -50,13 +50,13 @@ playgrounds/basic/
   `.gen/usersrc/<encoded>/` with the constraint stripped and the package
   clause rewritten to the encoded directory name. See ADR 0003 amendment
   (Phase 0i-fix).
-- `+page.svelte` files keep the `+` prefix; only user `.go` files dropped
+- `_page.svelte` files keep the `+` prefix; only user `.go` files dropped
   it in Phase 0i-fix.
 - `Load()` returns an inline anonymous struct literal so PageData
   inference (ADR 0004) extracts its fields into `type PageData struct{...}`
   in the generated page package. Named-type returns are out of scope
   until a future RFC.
-- The `+layout.svelte` is inert in the MVP. Layout chain rendering lands
+- The `_layout.svelte` is inert in the MVP. Layout chain rendering lands
   in v0.2 (#24).
 
 ## Run (once #109 ships)

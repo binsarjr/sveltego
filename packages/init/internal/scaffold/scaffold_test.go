@@ -33,9 +33,9 @@ func TestRun_BaseScaffold(t *testing.T) {
 		"sveltego.config.go",
 		"hooks.server.go",
 		"cmd/app/main.go",
-		"src/routes/+page.svelte",
-		"src/routes/page.server.go",
-		"src/routes/+layout.svelte",
+		"src/routes/_page.svelte",
+		"src/routes/_page.server.go",
+		"src/routes/_layout.svelte",
 		"src/lib/.gitkeep",
 	}
 	for _, p := range wantPaths {

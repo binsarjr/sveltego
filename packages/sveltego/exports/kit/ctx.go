@@ -78,7 +78,7 @@ func (c *RenderCtx) CSRFToken() string {
 }
 
 // LoadCtx is the request-scoped context handed to user-written Load
-// functions in +page.server.go and +layout.server.go.
+// functions in _page.server.go and _layout.server.go.
 //
 // Locals is the same map the Handle hook populated before any Load runs;
 // reading it never requires calling [LoadCtx.Parent]. Values set by a

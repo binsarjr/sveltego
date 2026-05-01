@@ -42,7 +42,7 @@ func (s *Server) builtinTools() []Tool {
 		},
 		{
 			Name:        "scaffold_route",
-			Description: "Return boilerplate text for a +page.svelte / page.server.go / server.go / +error.svelte under src/routes/<path>.",
+			Description: "Return boilerplate text for a _page.svelte / page.server.go / server.go / _error.svelte under src/routes/<path>.",
 			InputSchema: schemaScaffoldRoute,
 			Handler:     s.handleScaffoldRoute,
 		},
@@ -98,7 +98,7 @@ var (
     "kind": {
       "type": "string",
       "enum": ["page", "layout", "server", "error"],
-      "description": "page = +page.svelte + page.server.go; layout = +layout.svelte + layout.server.go; server = server.go REST endpoint; error = +error.svelte"
+      "description": "page = _page.svelte + page.server.go; layout = _layout.svelte + layout.server.go; server = server.go REST endpoint; error = _error.svelte"
     }
   },
   "required": ["path", "kind"]

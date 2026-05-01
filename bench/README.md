@@ -41,7 +41,7 @@ go run ./bench/cmd/sveltego-bench -scenario hello -duration 5s
 | hello  | `GET /`         | static greeting — measures pipeline floor                |
 | list   | `GET /posts`    | 10-row index — measures iterative writer + escape        |
 | detail | `GET /posts/[id]` | param resolution + small body                          |
-| action | `POST /api/echo` | +server.go path — bypasses page render, exercises mux  |
+| action | `POST /api/echo` | _server.go path — bypasses page render, exercises mux  |
 
 Beyond the four HTTP scenarios:
 

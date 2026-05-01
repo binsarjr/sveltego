@@ -12,13 +12,13 @@ sveltego mirrors SvelteKit's *shape*, not its *implementation*. The file convent
 
 | SvelteKit | sveltego |
 |---|---|
-| `+page.svelte` | `+page.svelte` |
-| `+page.server.ts` | `page.server.go` (no `+` prefix; use `//go:build sveltego`) |
-| `+layout.svelte` | `+layout.svelte` |
-| `+layout.server.ts` | `layout.server.go` (no `+` prefix; use `//go:build sveltego`) |
-| `+server.ts` | `server.go` (no `+` prefix; use `//go:build sveltego`) |
-| `+error.svelte` | `+error.svelte` |
-| `hooks.server.ts` | `hooks.server.go` |
+| `+page.svelte` | `_page.svelte` |
+| `+page.server.ts` | `_page.server.go` (`_` prefix auto-skips Go toolchain) |
+| `+layout.svelte` | `_layout.svelte` |
+| `+layout.server.ts` | `_layout.server.go` (`_` prefix auto-skips Go toolchain) |
+| `+server.ts` | `_server.go` (`_` prefix auto-skips Go toolchain) |
+| `+error.svelte` | `_error.svelte` |
+| `hooks.server.ts` | `hooks.server.go` (still needs `//go:build sveltego` — no `_` prefix) |
 | `[param]`, `[[opt]]`, `[...rest]`, `(group)` | identical |
 | `$lib` alias | `$lib` alias (resolves to `src/lib`) |
 | `$env/static/private`, `$env/static/public`, `$env/dynamic/*` | `kit/env` package |
@@ -31,7 +31,7 @@ sveltego mirrors SvelteKit's *shape*, not its *implementation*. The file convent
 - **Length.** `len(xs)`, not `xs.length`.
 - **Errors.** Idiomatic Go errors. `kit.Redirect(303, ...)` and `kit.Error(404, ...)` are returned, not thrown.
 - **Form actions.** `kit.ActionResult` is a sealed sum: `ActionData`, `ActionFailData`, `ActionRedirectResult`. Construct via `kit.ActionDataResult`, `kit.ActionFail`, `kit.ActionRedirect`.
-- **Build constraint.** Every `.go` file under `src/routes/**` and `src/params/**` MUST start with `//go:build sveltego` so Go's default toolchain skips them; codegen reads them through `go/parser`.
+- **Build constraint.** Files under `src/routes/**` use the `_` prefix (`_page.server.go`, `_layout.server.go`, `_server.go`); Go's default toolchain skips files whose names start with `_`, so no `//go:build sveltego` constraint is required there. Files under `src/params/**` and `hooks.server.go` (project root) MUST still start with `//go:build sveltego` because their filenames have no `_` prefix. Codegen reads every user `.go` file through `go/parser`.
 
 ## What does not exist
 
@@ -65,9 +65,9 @@ export async function load({ locals, params }) {
 
 ### sveltego
 
-```go
-//go:build sveltego
+`src/routes/posts/[slug]/_page.server.go`:
 
+```go
 package routes
 
 import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"

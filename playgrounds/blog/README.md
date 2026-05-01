@@ -25,11 +25,11 @@ fix can be validated against this app.
 
 | File | Framework features |
 |---|---|
-| `src/routes/+layout.svelte` | Layout chain (#24): root layout wraps every page in shared chrome (header / footer / nav). |
-| `src/routes/+page.svelte` | Mustache Go expressions (`len(data.Posts)`, conditional `{#if}`/`{:else}`, `{#each}`). |
-| `src/routes/page.server.go` | `kit.LoadCtx` + `ctx.URL.Query()` for `?page=N` pagination, anonymous-struct PageData inference (ADR 0004), `kit.Error` short-circuit. |
-| `src/routes/[slug]/+page.svelte` | Dynamic `[slug]` param, `{@html}` for sanitized markdown, conditional rendering of comments and form-error state. |
-| `src/routes/[slug]/page.server.go` | `kit.LoadCtx.Params` for `[slug]`, `goldmark` + `bluemonday` for safe markdown, `kit.ActionMap` with default action, `ev.BindForm` for form binding, `kit.ActionFail` / `kit.ActionRedirect`, `kit.Cookies.Set` for the last-author cookie. |
+| `src/routes/_layout.svelte` | Layout chain (#24): root layout wraps every page in shared chrome (header / footer / nav). |
+| `src/routes/_page.svelte` | Mustache Go expressions (`len(data.Posts)`, conditional `{#if}`/`{:else}`, `{#each}`). |
+| `src/routes/_page.server.go` | `kit.LoadCtx` + `ctx.URL.Query()` for `?page=N` pagination, anonymous-struct PageData inference (ADR 0004), `kit.Error` short-circuit. |
+| `src/routes/[slug]/_page.svelte` | Dynamic `[slug]` param, `{@html}` for sanitized markdown, conditional rendering of comments and form-error state. |
+| `src/routes/[slug]/_page.server.go` | `kit.LoadCtx.Params` for `[slug]`, `goldmark` + `bluemonday` for safe markdown, `kit.ActionMap` with default action, `ev.BindForm` for form binding, `kit.ActionFail` / `kit.ActionRedirect`, `kit.Cookies.Set` for the last-author cookie. |
 | `content/posts/*.md` | Frontmatter-driven content; index reads metadata, detail renders the body. |
 | `cmd/app/main.go` | `server.Config{Routes, Matchers, Shell, Hooks}` boot — same shape every sveltego app uses. |
 
@@ -50,11 +50,11 @@ playgrounds/blog/
 ├── go.mod                      # require + replace points at packages/sveltego
 ├── app.html                    # shell with %sveltego.head% / %sveltego.body%
 ├── src/routes/
-│   ├── +layout.svelte          # root chrome
-│   ├── +page.svelte            # paginated post list
+│   ├── _layout.svelte          # root chrome
+│   ├── _page.svelte            # paginated post list
 │   ├── page.server.go          # //go:build sveltego — list Load
 │   └── [slug]/
-│       ├── +page.svelte        # post detail + comment form
+│       ├── _page.svelte        # post detail + comment form
 │       └── page.server.go      # //go:build sveltego — detail Load + comment Action
 ├── content/posts/*.md          # markdown sources with `---` frontmatter
 └── cmd/app/main.go             # boots server.New on :8080

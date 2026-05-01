@@ -38,7 +38,7 @@ Codegen only. Writes `.gen/*.go`. Use this when iterating on templates without r
 
 ### `sveltego check`
 
-**Stub today.** Will validate without writing output: parser pass + Go expression validator over every `+page.svelte` / `+layout.svelte`, intended for CI before `build`. Milestone TBD.
+**Stub today.** Will validate without writing output: parser pass + Go expression validator over every `_page.svelte` / `_layout.svelte`, intended for CI before `build`. Milestone TBD.
 
 ### `sveltego routes`
 
