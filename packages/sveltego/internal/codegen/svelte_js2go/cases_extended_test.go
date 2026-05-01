@@ -104,12 +104,6 @@ func extendedProgrammaticCases() []programmaticCase {
 	}
 }
 
-// allCases combines the 30 priority shapes with the extended corpus.
-func allCases() []programmaticCase {
-	cases := allProgrammaticCases()
-	return append(cases, extendedProgrammaticCases()...)
-}
-
 // --- Builders ---
 
 func unary(op string, arg *Node) *Node {
