@@ -2,21 +2,22 @@
 
 > SvelteKit-shape framework for Go. Pure-Svelte templates, Go-only server, zero JS at runtime.
 
-Rewritten from scratch in Go. File layout and DX mirror SvelteKit (file-based routing, server-side Go data loaders, layouts, hooks, form actions). Templates are 100% pure Svelte/JS/TS; Go owns the server and emits TypeScript declarations for IDE autocompletion. The runtime is hybrid: build-time static prerender (SSG) for marketing-style routes, client-side render (SPA) for everything else. The deployed Go binary has no JS engine.
+Rewritten from scratch in Go. File layout and DX mirror SvelteKit (file-based routing, server-side Go data loaders, layouts, hooks, form actions). Templates are 100% pure Svelte/JS/TS; Go owns the server and emits TypeScript declarations for IDE autocompletion. The runtime is hybrid: build-time static prerender (SSG) for marketing routes, build-time JS-to-Go transpile of `svelte/server` output for request-time SSR on dynamic routes, and an opt-in Node sidecar fallback for routes whose JS the transpiler cannot lower. The deployed Go binary has no JS engine.
 
 ## Status
 
-🚧 Pre-alpha. MVP closed; v0.2 (form actions, hooks), v0.4 (Svelte 5 runes), and v1.1 (LLM tooling) shipped. v0.3 (client SPA + hydration), v0.5 (SvelteKit-parity catch-up), v0.6 (auth), and v1.0 (production hardening) in flight. See [GitHub issues](https://github.com/binsarjr/sveltego/issues) for the live roadmap.
+🚧 Pre-alpha. MVP closed; v0.2 (form actions, hooks), v0.4 (Svelte 5 runes), v1.1 (LLM tooling), and the SSR Option B track ([RFC #421](https://github.com/binsarjr/sveltego/issues/421), 9 phases) shipped. v0.3 (client SPA + hydration), v0.5 (SvelteKit-parity catch-up), v0.6 (auth), and v1.0 (production hardening) in flight. See [GitHub issues](https://github.com/binsarjr/sveltego/issues) for the live roadmap.
 
-[ADR 0008](tasks/decisions/0008-pure-svelte-pivot.md) (2026-05-01) pivots templates from Go-decorated mustaches to **100% pure Svelte/JS/TS**. Migration phases land via [RFC #379](https://github.com/binsarjr/sveltego/issues/379) → [#380](https://github.com/binsarjr/sveltego/issues/380)–[#385](https://github.com/binsarjr/sveltego/issues/385).
+[ADR 0008](tasks/decisions/0008-pure-svelte-pivot.md) (2026-05-01) pivots templates from Go-decorated mustaches to **100% pure Svelte/JS/TS**. [ADR 0009](tasks/decisions/0009-ssr-option-b.md) (2026-05-02) restores request-time SSR by mechanically transpiling `svelte/server` compiled JS to Go at build time (Option B per [RFC #421](https://github.com/binsarjr/sveltego/issues/421)). Pure-Svelte pivot phases land via [#380](https://github.com/binsarjr/sveltego/issues/380)–[#385](https://github.com/binsarjr/sveltego/issues/385); SSR phases land via [#423](https://github.com/binsarjr/sveltego/issues/423)–[#431](https://github.com/binsarjr/sveltego/issues/431) under tracking [#422](https://github.com/binsarjr/sveltego/issues/422).
 
 ## Goals
 
-- Go-level performance — target **20–40k rps** for SSG output (zero per-request work) and JSON-payload responses on SPA-mode dynamic routes
+- Go-level performance — target **20–40k rps** for SSG output (zero per-request work) and JSON-payload responses; **≥10k rps p50** for transpiled SSR routes (RFC #421 acceptance criterion)
 - Goroutine-native concurrency, no JS worker pool
 - DX identical to SvelteKit at the template layer — copy `.svelte` files between projects unchanged
-- Single Go binary deploy, no Node or Bun runtime at request time (Node runs only during `sveltego build` for SSG)
+- Single Go binary deploy, no Node or Bun runtime at request time (Node runs only during `sveltego build` for SSG + JS-to-Go transpile, and as a long-running build-time companion for routes that opt into the explicit `<!-- sveltego:ssr-fallback -->` escape hatch in `_page.svelte`)
 - Svelte 5 (runes) as the UI source of truth; Go AST → TypeScript declaration codegen for type-safe `data` props in templates
+- Hard-error build by default for unsupported emit shapes — coverage map stays honest, opt-out is explicit
 
 ## Non-Goals
 
@@ -24,7 +25,7 @@ Rewritten from scratch in Go. File layout and DX mirror SvelteKit (file-based ro
 - Svelte 4 legacy syntax
 - Backward compatibility with the previous Mustache-Go template dialect (pre-alpha; users rewrite)
 
-Full enumerated list with reasoning: [ADR 0005 — Non-goals](tasks/decisions/0005-non-goals.md) (mirrors [issue #94](https://github.com/binsarjr/sveltego/issues/94)). Template semantics: [ADR 0008 — Pure-Svelte pivot](tasks/decisions/0008-pure-svelte-pivot.md).
+Full enumerated list with reasoning: [ADR 0005 — Non-goals](tasks/decisions/0005-non-goals.md) (mirrors [issue #94](https://github.com/binsarjr/sveltego/issues/94)). Template semantics: [ADR 0008 — Pure-Svelte pivot](tasks/decisions/0008-pure-svelte-pivot.md). SSR strategy: [ADR 0009 — SSR Option B](tasks/decisions/0009-ssr-option-b.md).
 
 ## Architecture
 
@@ -32,7 +33,13 @@ Pure-Svelte templates on the client, Go-only on the server, hybrid runtime.
 
 ```
 .svelte (UI, 100% Svelte/JS/TS)  ──→ Vite build → JS bundle   (client hydration)
-                                  └─→ svelte/server (build time only) → static HTML (SSG)
+                                  └─→ svelte/compiler generate:'server' (build time)
+                                       │
+                                       ├─→ static HTML (SSG, kit.PageOptions{Prerender})
+                                       │
+                                       └─→ acorn.parse → JSON AST
+                                            └─→ internal/codegen/svelte_js2go (Go)
+                                                 └─→ .gen/<route>_render.go  (Render(payload, data))
 server-side Go (route data)      ──→ Load(), Actions()        (//go:build sveltego)
                                   └─→ codegen → .svelte.d.ts  (Go AST → TypeScript types)
 hooks.server.go                  ──→ Handle, HandleError, HandleFetch
@@ -43,9 +50,12 @@ hooks.server.go                  ──→ Handle, HandleError, HandleFetch
                                           ↓
                                   single binary deploy
                                   + static/ (SSG output, optional)
+
+(opt-in) <!-- sveltego:ssr-fallback -->  → long-running Node sidecar at request time
+                                         (HTML cached LRU+TTL by route|hash(data))
 ```
 
-Routes opting into `kit.PageOptions{Prerender: true}` ship as static HTML rendered at build time via `svelte/server`. Everything else ships as a SPA shell + JSON payload at runtime; the client mounts and renders. **Node is required at build time only.** The deployed Go binary plus `static/` is the entire deployable.
+Routes opting into `kit.PageOptions{Prerender: true}` ship as static HTML rendered at build time via `svelte/server`. Routes without prerender are transpiled to Go `Render()` functions at build time and rendered server-side from the Go binary at request time — no JS engine on the request path. Routes whose JS the transpiler cannot lower opt out explicitly via the `<!-- sveltego:ssr-fallback -->` HTML comment in `_page.svelte`; those route through a long-running Node sidecar with HTML cached by `(route, hash(load_result))`. **Node runs only at build time, plus as a build-time companion for opted-in fallback routes.** The deployed Go binary plus `static/` is the entire deployable.
 
 ## Quickstart
 
@@ -122,7 +132,7 @@ Codegen reads the Go AST and emits a sibling `.svelte.d.ts` declaration so Svelt
 | **v0.4** | 19 | Svelte 5 runes, slots, snippets, special elements, `<svelte:options>`, scoped CSS, a11y warnings |
 | **v0.5** | 23 | SvelteKit-parity catch-up: upstream-tracked enhancements (`kit.After`, `HandleAction`, `RawParam`, `RouteID`, etc.) and the cookie-session auth core |
 | **v0.6** | 40 | Authentication: `sveltego-auth` master plan (#155), storage adapters, sessions, password / magic-link / OTP / OAuth flows |
-| **v1.0** | 28 | Benchmarks, docs, examples, streaming/SSG/CSP, sitemap, image opt, deploy adapters, CI/release/LSP, service worker, post-merge code-quality follow-ups |
+| **v1.0** | 41 | Benchmarks, docs, examples, streaming/SSG/CSP, sitemap, image opt, deploy adapters, CI/release/LSP, service worker, post-merge code-quality follow-ups, SSR Option B track (RFC #421 + 9 phases #423–#431) |
 | **v1.1** | 6 | LLM tooling: `llms.txt`, MCP server, copy-for-LLM, AI templates, provenance |
 
 ## Repository layout

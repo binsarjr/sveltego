@@ -1,6 +1,7 @@
 # SSR JSON-AST schema (Phase 2 of SSR Option B)
 
 - **Status:** Locked for v1 (re-evaluate when Svelte minor pin moves).
+- **Last reality-checked:** 2026-05-02 (Phase 9 doc sync, post-implementation).
 - **Owner:** `packages/sveltego/internal/codegen/svelterender/sidecar/`.
 - **Consumers:** Phase 3 emitter (`internal/codegen/svelte_js2go/`, [#425](https://github.com/binsarjr/sveltego/issues/425)).
 - **Related:** [ADR 0009](../decisions/0009-ssr-option-b.md), [issue #424](https://github.com/binsarjr/sveltego/issues/424).
@@ -95,12 +96,15 @@ shapes surface as `unknown shape: <name>` build failures (Sub-decision
 | `VariableDeclaration` (`let`/`const`) | `let { data } = $$props`, scratch counters. |
 | `ObjectPattern` / `Property` / `Identifier` | Destructuring of `$$props`.                |
 | `ExpressionStatement`        | Wraps every emit call.                        |
-| `AssignmentExpression` with `+=` | `$$payload.out += '<h1>'`. The dominant emit shape. |
-| `MemberExpression`           | Property access: `data.name`, `$$payload.out`, namespaced helpers (`$.escape_html`). |
+| `CallExpression` to `$$renderer.push(...)` | **Dominant emit shape (Svelte 5.55.5 reality).** Replaces the spec-original `$$payload.out += '...'` form. The argument is typically a `TemplateLiteral` carrying the static + interpolated HTML chunks. |
+| `CallExpression` to `$$renderer.component(arrowFn)` | Component / fragment emission. The arrow body issues nested `$$renderer.push(...)` calls. |
+| `AssignmentExpression` with `+=` | `$$payload.out += '<h1>'`. Spec-original shape; the v1 emitter still dispatches on it for forward compatibility, but real fixtures only exercise the renderer-method form above. |
+| `MemberExpression`           | Property access: `data.name`, `$$renderer.push`, namespaced helpers (`$.escape`). |
 | `Identifier`                 | Local references (the namespace import, function names). |
 | `Literal` (string / number / boolean) | Static template chunks, attribute names, numeric counters. |
-| `TemplateLiteral` / `TemplateElement` | Multi-segment HTML strings with interpolated runtime calls. |
-| `CallExpression`             | Helper calls: `$.escape_html(x)`, `$.attr(...)`, `$.clsx(...)`, `$.stringify(...)`, `$.spread_attributes(...)`, `$.merge_styles(...)`, `$.head(...)`, `$.html(...)`, `$.each(...)`, control-flow helpers. |
+| `TemplateLiteral` / `TemplateElement` | Multi-segment HTML strings with interpolated runtime calls. The dominant container for interpolated render output. |
+| `CallExpression`             | Helper calls: `$.escape(x)`, `$.attr(...)`, `$.clsx(...)`, `$.stringify(...)`, `$.spread_attributes(...)`, `$.merge_styles(...)`, `$.head(...)`, `$.html(...)`, `$.ensure_array_like(...)`, control-flow helpers. |
+| `ForStatement`               | `{#each}` lowering. **Reality: hand-rolled C-style `for (let $$index = 0, $$length = arr.length; ...; ...)` loop with `$.ensure_array_like` assigning the each_array — NOT a `$.each(...)` helper call as the original spec described. Svelte 5.55.5 does not emit `$.each` in real fixtures.** Multi-declarator for-init (`let a = 0, b = arr.length`) is hoisted by the emitter to preceding lines because Go's `for` only accepts a single init statement; semantically the hoisted decls remain for-loop-scoped. |
 | `IfStatement` / `ConditionalExpression` | Lowered `{#if}` and ternaries in expressions. |
 | `ReturnStatement`            | Inside helper closures (mostly slot fragments). |
 | `LogicalExpression` / `BinaryExpression` | Coercion guards (`x ?? ''`), index math.    |
@@ -115,15 +119,23 @@ them by namespace + member name. The Phase-4 helpers package
 each as a Go function with the same semantics.
 
 ```
-$.escape_html        $.attr               $.clsx
+$.escape             $.attr               $.clsx
 $.stringify          $.spread_attributes  $.merge_styles
-$.head               $.html               $.each
+$.head               $.html               $.ensure_array_like
 $.if                 $.element            $.bind_props
 ```
 
 A helper not in this list inside a `CallExpression.callee` of shape
 `$.<name>` is treated by the Phase-3 emitter as `unknown shape:
 helper:<name>` and fails the build.
+
+**Reality delta:** the spec originally listed `$.escape_html`. Real
+Svelte 5.55.5 output emits `$.escape` instead. Both names map to
+`runtime/svelte/server.EscapeHTML` in the Phase-4 helpers package and
+are recognised by the Phase-3 emitter, but only `$.escape` shows up in
+fixtures. Likewise `$.each` is never emitted — the each-loop lowering
+goes through `$.ensure_array_like` plus a hand-rolled `for` (see the
+`ForStatement` row above).
 
 ## Determinism rules
 

@@ -47,9 +47,9 @@ Vite integration for the Svelte client bundle, `window.__sveltego__` hydration p
 
 Runes: `$props`, `$state`, `$derived`, `$effect`, `$bindable`. Snippets and `{@render}`. Legacy slots (default + named, with slot props). Special elements: `<svelte:head>`, `<svelte:body>` / `<svelte:window>` / `<svelte:document>`, `<svelte:component>`, `<svelte:options>`. CSS scope hash matching upstream. `{@html}`, `{@const}`, `{#await}`, `{#key}`. Nested component import and rendering. Compile-time a11y warnings.
 
-### v1.0 (28 issues) — Production Ready
+### v1.0 (41 issues) — Production Ready
 
-Benchmark suite vs adapter-bun with nightly regression gate. Docs site (Vitepress). Blog and dashboard examples. Streaming responses. Prerender / SSG mode. CSP nonce injection. CI (GitHub Actions). Release pipeline (release-please + GoReleaser). LSP for `.svelte` with Go expressions. Sitemap/robots helpers, image optimization (`<Image>`), service worker convention, deploy adapters (server, docker, static, lambda, cloudflare).
+Benchmark suite vs adapter-bun with nightly regression gate. Docs site (Vitepress). Blog and dashboard examples. Streaming responses. Prerender / SSG mode. CSP nonce injection. CI (GitHub Actions). Release pipeline (release-please + GoReleaser). LSP for `.svelte` with Go expressions. Sitemap/robots helpers, image optimization (`<Image>`), service worker convention, deploy adapters (server, docker, static, lambda, cloudflare). SSR Option B track ([RFC #421](https://github.com/binsarjr/sveltego/issues/421) + tracking [#422](https://github.com/binsarjr/sveltego/issues/422) + 9 phase issues #423–#431) shipped 2026-05-02; carryovers [#435](https://github.com/binsarjr/sveltego/issues/435) (streaming flake), [#440](https://github.com/binsarjr/sveltego/issues/440) (layout-chain children-callback ABI), [#443](https://github.com/binsarjr/sveltego/issues/443) (snippet hoisting + `{@const}` non-bool lowering) tracked under this milestone.
 
 ### v1.1 (6 issues) — LLM & AI Tooling
 
@@ -110,6 +110,7 @@ Full `sveltego-auth` package modeled on the better-auth feature set: master plan
 - [x] v0.5 wave (partial, ongoing) — SvelteKit-parity catch-up: `kit.After()`, `HandleAction`, `Init()` error fallback, `HandleError` short-circuit, `LoadCtx.Speculative()`, `kit.HTTPError`, headers/cookies on error responses, `kit.RedirectReload`, `LoadCtx.RawParam()`, codegen `RouteID` constants, dev-only code stripping, `kit.Header` Set vs Add, MIME type registration, `kit.Error` default message, `static asset precompression`. Auth core (`packages/auth`) scaffold + storage + mailer + SMS adapters (#216, #217, #226, #227). ADR 0006 (auth master plan), ADR 0007 (Svelte semantics revisit). STABILITY.md per package. 23 issues tracked; in flight.
 - [ ] v0.5 remaining — `kit.After`, `HandleAction` wire-up, `iter.Seq` streamed, kit.Cron, child-component pkg gen, cookiesession (#160, #161, #166, #167, #173, etc.) — 4 open issues.
 - [ ] v0.6 in-flight — auth: session strategy (#220), password hashing (#222), email verification (#224), magic-link (#229), OTP (#230), TOTP (#231), OAuth core (#236), RBAC (#245), and many more. 30 open issues.
+- [x] SSR Option B track — RFC [#421](https://github.com/binsarjr/sveltego/issues/421) + tracking [#422](https://github.com/binsarjr/sveltego/issues/422) + 9 phases [#423](https://github.com/binsarjr/sveltego/issues/423)–[#431](https://github.com/binsarjr/sveltego/issues/431). Shipped 2026-05-02. SSR live end-to-end via build-time JS-to-Go transpile of `svelte/server` compiled output (vendored Acorn JSON-AST in the existing build-time sidecar; per-route `Render()` Go functions emitted to `.gen/`); opt-in `<!-- sveltego:ssr-fallback -->` annotation routes through long-running Node sidecar at request time only when explicitly declared. ADR [0009](decisions/0009-ssr-option-b.md) supersedes the SSR-at-runtime portion of ADR 0008. Open carryovers under v1.0: [#435](https://github.com/binsarjr/sveltego/issues/435) flaky streaming test, [#440](https://github.com/binsarjr/sveltego/issues/440) layout-chain children-callback ABI, [#443](https://github.com/binsarjr/sveltego/issues/443) snippet hoisting + `{@const}` non-bool lowering. Lessons: [2026-05-02 decision](lessons/2026-05-02-ssr-option-b-decision.md), [2026-05-01 execution journey](lessons/2026-05-01-ssr-option-b-execution.md).
 
 ## Open questions
 
@@ -119,7 +120,7 @@ Full `sveltego-auth` package modeled on the better-auth feature set: master plan
 
 ## Out of scope (for now)
 
-Canonical list: [ADR 0005 — Non-goals](decisions/0005-non-goals.md). [ADR 0007 — Svelte Semantics Revisit](decisions/0007-svelte-semantics-revisit.md) covers the Full-Svelte vs Go-mustache question (Status: Proposed). Quick reference:
+Canonical list: [ADR 0005 — Non-goals](decisions/0005-non-goals.md). Template semantics: [ADR 0008 — Pure-Svelte pivot](decisions/0008-pure-svelte-pivot.md) (supersedes ADR 0007). SSR strategy: [ADR 0009 — SSR Option B](decisions/0009-ssr-option-b.md) (supersedes the SSR-at-runtime portion of ADR 0008). Quick reference:
 
 - Universal `+page.ts` / `+layout.ts` loads.
 - `<script context="module">` (Svelte 5 deprecated upstream too).
