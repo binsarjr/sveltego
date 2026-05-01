@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	aitemplates "github.com/binsarjr/sveltego/templates/ai"
+	"github.com/binsarjr/sveltego/packages/init/internal/aitemplates"
 )
 
 func TestRun_BaseScaffold(t *testing.T) {

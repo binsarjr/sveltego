@@ -12,7 +12,6 @@ use (
 	./packages/adapter-static
 	./packages/auth
 	./packages/cookiesession
-	./packages/create-sveltego
 	./packages/enhanced-img
 	./packages/init
 	./packages/lsp

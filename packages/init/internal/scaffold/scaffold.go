@@ -1,7 +1,7 @@
 // Package scaffold writes a fresh sveltego project tree into a target
 // directory. It owns both the baseline project files (src/routes, src/lib,
 // hooks, config, go.mod, README) and the optional AI-assistant templates
-// sourced from github.com/binsarjr/sveltego/templates/ai.
+// embedded under packages/init/internal/aitemplates.
 package scaffold
 
 import (
@@ -13,7 +13,7 @@ import (
 	"sort"
 	"strings"
 
-	aitemplates "github.com/binsarjr/sveltego/templates/ai"
+	"github.com/binsarjr/sveltego/packages/init/internal/aitemplates"
 )
 
 const fileMode = 0o600
@@ -25,7 +25,7 @@ type Options struct {
 	// Module is the Go module path written into the generated go.mod.
 	// Empty falls back to the directory base name.
 	Module string
-	// AI copies the templates/ai/embed.FS contents into Dir.
+	// AI copies the embedded AI-template FS contents into Dir.
 	AI bool
 	// Force overwrites existing files. Default skips them and reports
 	// the list via the returned Result.

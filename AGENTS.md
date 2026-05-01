@@ -15,7 +15,7 @@ If a per-package `CLAUDE.md` exists (e.g. `packages/sveltego/internal/codegen/CL
 
 ## 1. Project shape
 
-`sveltego` is a **rewrite of SvelteKit's shape in pure Go**, not an embedding of SvelteKit-the-JS-server. Pre-alpha. The Go workspace already hosts the core (`packages/sveltego`), auth (`packages/auth`), tooling (`packages/lsp`, `packages/mcp`, `packages/init`, `packages/create-sveltego`, `packages/enhanced-img`), five deploy adapters plus `adapter-auto`, the bench harness (`bench/`, `benchmarks/`), AI templates, and end-to-end playgrounds. MVP, v0.2, v0.4, and v1.1 milestones have shipped; v0.3, v0.5, v0.6, and v1.0 are in flight on `binsarjr/sveltego`.
+`sveltego` is a **rewrite of SvelteKit's shape in pure Go**, not an embedding of SvelteKit-the-JS-server. Pre-alpha. The Go workspace already hosts the core (`packages/sveltego`), auth (`packages/auth`), tooling (`packages/lsp`, `packages/mcp`, `packages/init`, `packages/enhanced-img`), five deploy adapters plus `adapter-auto`, the bench harness (`bench/`, `benchmarks/`), AI templates, and end-to-end playgrounds. MVP, v0.2, v0.4, and v1.1 milestones have shipped; v0.3, v0.5, v0.6, and v1.0 are in flight on `binsarjr/sveltego`.
 
 Hard invariants (do not reopen without new evidence — see [`tasks/lessons/2026-04-29-pivot-to-go-native-rewrite.md`](tasks/lessons/2026-04-29-pivot-to-go-native-rewrite.md)):
 

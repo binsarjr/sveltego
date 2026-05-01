@@ -38,7 +38,7 @@ When in doubt about a convention: open the relevant issue with `gh issue view <N
 
 ## Repository state
 
-Pre-alpha. MVP closed; v0.2, v0.4, and v1.1 shipped; v0.3, v0.5, v0.6, and v1.0 in flight. The Go workspace already hosts the core (`packages/sveltego`), auth (`packages/auth`), tooling (`packages/lsp`, `packages/mcp`, `packages/init`, `packages/create-sveltego`, `packages/enhanced-img`), five deploy adapters plus `adapter-auto`, the bench harness (`bench/`, `benchmarks/`), AI templates (`templates/ai/`), and end-to-end playgrounds. New work continues to flow through:
+Pre-alpha. MVP closed; v0.2, v0.4, and v1.1 shipped; v0.3, v0.5, v0.6, and v1.0 in flight. The Go workspace already hosts the core (`packages/sveltego`), auth (`packages/auth`), tooling (`packages/lsp`, `packages/mcp`, `packages/init`, `packages/enhanced-img`), five deploy adapters plus `adapter-auto`, the bench harness (`bench/`, `benchmarks/`), AI templates (`templates/ai/`), and end-to-end playgrounds. New work continues to flow through:
 
 - `tasks/todo.md` — current execution plan, milestone scope, phase tracking
 - `tasks/lessons.md` — design decisions and self-rules captured per session (append-only journal)

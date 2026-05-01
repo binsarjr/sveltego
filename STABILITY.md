@@ -1,6 +1,6 @@
 # Stability — sveltego
 
-Last updated: 2026-04-29
+Last updated: 2026-05-01
 
 This is the index of per-package stability promises. Tier definitions and the breaking-change procedure live in [`CONTRIBUTING.md`](./CONTRIBUTING.md#stability-tiers) and the source RFC [#97](https://github.com/binsarjr/sveltego/issues/97).
 
@@ -16,7 +16,7 @@ This is the index of per-package stability promises. Tier definitions and the br
 | `adapter-server` | `packages/adapter-server` | [STABILITY.md](./packages/adapter-server/STABILITY.md) |
 | `adapter-static` | `packages/adapter-static` | [STABILITY.md](./packages/adapter-static/STABILITY.md) |
 | `enhanced-img` | `packages/enhanced-img` | [STABILITY.md](./packages/enhanced-img/STABILITY.md) |
-| `create-sveltego` | `packages/create-sveltego` | [STABILITY.md](./packages/create-sveltego/STABILITY.md) |
+| `init` | `packages/init` | [STABILITY.md](./packages/init/STABILITY.md) |
 | `mcp` | `packages/mcp` | [STABILITY.md](./packages/mcp/STABILITY.md) |
 | `lsp` | `packages/lsp` | [STABILITY.md](./packages/lsp/STABILITY.md) |
 | `playgrounds/basic` | `playgrounds/basic` | [STABILITY.md](./playgrounds/basic/STABILITY.md) |

@@ -1,0 +1,162 @@
+# GitHub Copilot instructions for sveltego
+
+This is a sveltego project. SSR is generated from `.svelte` to Go via `sveltego compile`. The server runtime is pure Go; the client uses Svelte 5 runes (`$props`, `$state`, `$derived`, `$effect`, `$bindable`) via Vite for hydration only. Read this file before suggesting code.
+
+For the master ruleset, see `AGENTS.md` in the project root. This file is the GitHub Copilot-specific shim and stays in sync with `AGENTS.md` and `CLAUDE.md`.
+
+## Template expressions are Go, not JavaScript
+
+Inside `{...}` mustaches, write **Go**. Field access is **PascalCase** (Go exported fields).
+
+| Wrong (JS) | Right (Go) |
+|---|---|
+| `{user.name}` | `{Data.User.Name}` |
+| `{posts.length}` | `{len(Data.Posts)}` |
+| `{count + 1}` | `{Count + 1}` |
+| `{n.toString()}` | `{strconv.Itoa(N)}` |
+| `{user?.name ?? "guest"}` | resolve in `Load()`, expose via `Data` |
+| `{users.filter(u => u.active)}` | filter in `Load()`, expose pre-filtered slice |
+| `null` | `nil` |
+
+Expressions are validated at codegen via `go/parser.ParseExpr`. Anything that does not parse as a Go expression is a build error.
+
+Imports for any package referenced inside `{...}` (e.g. `strconv`) go in the `<script lang="go">` block of the same component.
+
+## File conventions
+
+```
+src/routes/
+  +page.svelte           SSR template, Go expressions inside {...}
+  page.server.go         Load(), Actions      — needs //go:build sveltego
+  +layout.svelte         layout chain
+  layout.server.go       layout-level Load    — needs //go:build sveltego
+  server.go              REST endpoints       — needs //go:build sveltego
+  +error.svelte          error boundary
+  (group)/               route group
+  +page@.svelte          layout reset
+  [param]/               route param
+  [[optional]]/          optional segment
+  [...rest]/             catch-all
+src/params/<name>.go     param matchers       — needs //go:build sveltego
+src/lib/                 shared modules ($lib alias)
+hooks.server.go          Handle, HandleError, HandleFetch, Reroute, Init
+```
+
+`+` prefix rules:
+
+- `.svelte` files **keep** the `+`: `+page.svelte`, `+layout.svelte`, `+error.svelte`.
+- User `.go` files **drop** the `+`: `page.server.go`, `layout.server.go`, `server.go`. The scanner rejects `+page.server.go`.
+
+Every user `.go` file under `src/` (and `hooks.server.go` at the project root) **must** start with `//go:build sveltego` so the standard Go toolchain skips it. Codegen reads these files via `go/parser` directly.
+
+## Common patterns
+
+### Load
+
+```go
+//go:build sveltego
+
+package routes
+
+import "github.com/binsarjr/sveltego/exports/kit"
+
+func Load(ctx *kit.LoadCtx) (PageData, error) {
+    return PageData{User: currentUser(ctx), Posts: fetchPosts(ctx)}, nil
+}
+
+type PageData struct {
+    User  User
+    Posts []Post
+}
+```
+
+`PageData` is inferred from the `Load` return type; reference fields as `{Data.User.Name}`, `{len(Data.Posts)}`.
+
+### Actions
+
+```go
+var Actions = kit.ActionMap{
+    "default": func(ev *kit.RequestEvent) kit.ActionResult {
+        var form CreatePostForm
+        if err := ev.BindForm(&form); err != nil {
+            return kit.ActionFail(400, map[string]string{"error": err.Error()})
+        }
+        return kit.ActionRedirect(303, "/posts")
+    },
+}
+```
+
+The three sealed `ActionResult` constructors are `kit.ActionDataResult`, `kit.ActionFail`, `kit.ActionRedirect`. Do not invent new variants.
+
+### Redirect / Fail from Load
+
+`kit.Redirect(code, location)` and `kit.Fail(code, data)` return `error` values. Return them from `Load` to short-circuit. The pipeline detects them via `errors.As`.
+
+```go
+if user == nil {
+    return PageData{}, kit.Redirect(303, "/login")
+}
+```
+
+### Cookies
+
+```go
+ev.Cookies.Set("session", token, kit.CookieOpts{HTTPOnly: true, Secure: true})
+v, ok := ev.Cookies.Get("session")
+ev.Cookies.Delete("session")
+```
+
+### Layout parent data
+
+```go
+parent, _ := ctx.Parent().(LayoutData)
+```
+
+`LoadCtx.Parent()` returns `any`. Type-assert to the immediate parent's data type.
+
+### REST endpoints (`server.go`)
+
+```go
+//go:build sveltego
+
+package api
+
+func GET(ev *kit.RequestEvent) (*kit.Response, error) { ... }
+func POST(ev *kit.RequestEvent) (*kit.Response, error) { ... }
+```
+
+One verb per Go function; the dispatcher routes by HTTP method.
+
+### Hooks (`hooks.server.go`)
+
+```go
+//go:build sveltego
+
+package hooks
+
+import "github.com/binsarjr/sveltego/exports/kit"
+
+var Handle kit.HandleFn = func(ev *kit.RequestEvent, resolve kit.ResolveFn) (*kit.Response, error) { ... }
+var HandleError kit.HandleErrorFn = func(ev *kit.RequestEvent, err error) kit.SafeError { ... }
+```
+
+`HandleError` returns a sanitized `kit.SafeError` (Code, Message, ID). `+error.svelte` binds `data` to this type directly: `{data.Code}`, `{data.Message}`.
+
+## Don't
+
+- JS expressions in mustaches (`?.`, `??`, template literals, `.map`/`.filter`/`.length`). Compute in `Load()` and expose via `Data`.
+- Svelte 4 reactivity (`export let`, `$:` blocks, store autoload). Use Svelte 5 runes.
+- `null` — write `nil`.
+- camelCase field access in templates.
+- A JS server runtime. No Node / Bun / Deno on the server.
+- Editing `.gen/*.go` directly.
+- Universal `Load` (`+page.ts`). sveltego is server-only.
+- `+` prefix on user `.go` files.
+- Omitting `//go:build sveltego` on user `.go` files.
+
+## Where to find more
+
+- Docs: <https://sveltego.dev> (see `llms.txt` for an LLM-optimized index).
+- Source and issue tracker: <https://github.com/binsarjr/sveltego>.
+- MCP server (when available): `sveltego mcp` exposes `search_docs`, `lookup_api`, `validate_template`.
+- See `AGENTS.md` for the master ruleset and `CLAUDE.md` for the Claude Code-specific entry point.

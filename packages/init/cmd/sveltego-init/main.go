@@ -17,7 +17,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/binsarjr/sveltego/init/internal/scaffold"
+	"github.com/binsarjr/sveltego/packages/init/internal/scaffold"
 )
 
 func main() {
