@@ -1,6 +1,9 @@
 package server
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestEscapeHTMLContent(t *testing.T) {
 	cases := []struct {
@@ -85,10 +88,11 @@ func BenchmarkEscapeHTMLEscaping(b *testing.B) {
 }
 
 func BenchmarkEscapeHTMLLong(b *testing.B) {
-	var s string
+	var sb strings.Builder
 	for i := 0; i < 100; i++ {
-		s += "lorem ipsum dolor sit amet & friends < everyone > "
+		sb.WriteString("lorem ipsum dolor sit amet & friends < everyone > ")
 	}
+	s := sb.String()
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		_ = EscapeHTMLString(s)

@@ -30,8 +30,7 @@ func Attr(name string, value any, isBoolean bool) string {
 
 	normalized := value
 	if name == "translate" {
-		switch v := value.(type) {
-		case bool:
+		if v, ok := value.(bool); ok {
 			if v {
 				normalized = "yes"
 			} else {
