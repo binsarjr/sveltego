@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/binsarjr/sveltego/internal/ast"
-	"github.com/binsarjr/sveltego/internal/parser"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/ast"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/parser"
 )
 
 // fixedTS is a deterministic timestamp used in all provenance tests.

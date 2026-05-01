@@ -3,8 +3,8 @@ package router_test
 import (
 	"testing"
 
-	"github.com/binsarjr/sveltego/exports/kit/params"
-	"github.com/binsarjr/sveltego/runtime/router"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit/params"
+	"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
 )
 
 func TestMatcherIntegration_IntAccepts(t *testing.T) {

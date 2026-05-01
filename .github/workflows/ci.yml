@@ -46,7 +46,6 @@ jobs:
       lsp: ${{ steps.filter.outputs.lsp }}
       playground: ${{ steps.filter.outputs.playground }}
       benchmarks: ${{ steps.filter.outputs.benchmarks }}
-      test-utils: ${{ steps.filter.outputs.test-utils }}
     steps:
       - uses: actions/checkout@v4
 
@@ -67,12 +66,10 @@ jobs:
             lsp: 'packages/lsp/**'
             playground: ['playgrounds/basic/**', 'playgrounds/blog/**', 'playgrounds/dashboard/**']
             benchmarks: 'benchmarks/**'
-            test-utils: 'test-utils/**'
             shared:
               - 'go.work'
               - '.golangci.yml'
               - '.github/workflows/**'
-              - 'test-utils/**'
 
   # Lite matrix on PRs and merge_group: ubuntu-latest, go1.23.x. ~1 job.
   lint-and-test-pr:
@@ -157,7 +154,6 @@ jobs:
           LSP: ${{ needs.changes.outputs.lsp }}
           PLAYGROUND: ${{ needs.changes.outputs.playground }}
           BENCHMARKS: ${{ needs.changes.outputs.benchmarks }}
-          TEST_UTILS: ${{ needs.changes.outputs.test-utils }}
         run: |
           set -euo pipefail
           PATH="$(go env GOPATH)/bin:$PATH"
@@ -179,7 +175,6 @@ jobs:
                 */packages/mcp)                  [[ "$MCP" == "true" ]]                 || continue ;;
                 */packages/lsp)                  [[ "$LSP" == "true" ]]                 || continue ;;
                 */benchmarks)                    [[ "$BENCHMARKS" == "true" ]]          || continue ;;
-                */test-utils)                    [[ "$TEST_UTILS" == "true" ]]          || continue ;;
               esac
             fi
             echo "::group::golangci-lint $d"
@@ -204,7 +199,6 @@ jobs:
           LSP: ${{ needs.changes.outputs.lsp }}
           PLAYGROUND: ${{ needs.changes.outputs.playground }}
           BENCHMARKS: ${{ needs.changes.outputs.benchmarks }}
-          TEST_UTILS: ${{ needs.changes.outputs.test-utils }}
         run: |
           set -euo pipefail
           . scripts/ci/skip-playgrounds.sh
@@ -225,7 +219,6 @@ jobs:
                 */packages/mcp)                  [[ "$MCP" == "true" ]]                 || continue ;;
                 */packages/lsp)                  [[ "$LSP" == "true" ]]                 || continue ;;
                 */benchmarks)                    [[ "$BENCHMARKS" == "true" ]]          || continue ;;
-                */test-utils)                    [[ "$TEST_UTILS" == "true" ]]          || continue ;;
               esac
             fi
             echo "::group::go vet $d"
@@ -250,7 +243,6 @@ jobs:
           LSP: ${{ needs.changes.outputs.lsp }}
           PLAYGROUND: ${{ needs.changes.outputs.playground }}
           BENCHMARKS: ${{ needs.changes.outputs.benchmarks }}
-          TEST_UTILS: ${{ needs.changes.outputs.test-utils }}
         run: |
           set -euo pipefail
           mkdir -p coverage
@@ -272,7 +264,6 @@ jobs:
                 */packages/mcp)                  [[ "$MCP" == "true" ]]                 || continue ;;
                 */packages/lsp)                  [[ "$LSP" == "true" ]]                 || continue ;;
                 */benchmarks)                    [[ "$BENCHMARKS" == "true" ]]          || continue ;;
-                */test-utils)                    [[ "$TEST_UTILS" == "true" ]]          || continue ;;
               esac
             fi
             slug=$(basename "$d")
@@ -301,7 +292,6 @@ jobs:
           LSP: ${{ needs.changes.outputs.lsp }}
           PLAYGROUND: ${{ needs.changes.outputs.playground }}
           BENCHMARKS: ${{ needs.changes.outputs.benchmarks }}
-          TEST_UTILS: ${{ needs.changes.outputs.test-utils }}
         run: |
           set -euo pipefail
           . scripts/ci/skip-playgrounds.sh
@@ -322,7 +312,6 @@ jobs:
                 */packages/mcp)                  [[ "$MCP" == "true" ]]                 || continue ;;
                 */packages/lsp)                  [[ "$LSP" == "true" ]]                 || continue ;;
                 */benchmarks)                    [[ "$BENCHMARKS" == "true" ]]          || continue ;;
-                */test-utils)                    [[ "$TEST_UTILS" == "true" ]]          || continue ;;
               esac
             fi
             echo "::group::go build $d"
@@ -421,7 +410,6 @@ jobs:
           LSP: ${{ needs.changes.outputs.lsp }}
           PLAYGROUND: ${{ needs.changes.outputs.playground }}
           BENCHMARKS: ${{ needs.changes.outputs.benchmarks }}
-          TEST_UTILS: ${{ needs.changes.outputs.test-utils }}
         run: |
           set -euo pipefail
           PATH="$(go env GOPATH)/bin:$PATH"
@@ -443,7 +431,6 @@ jobs:
                 */packages/mcp)                  [[ "$MCP" == "true" ]]                 || continue ;;
                 */packages/lsp)                  [[ "$LSP" == "true" ]]                 || continue ;;
                 */benchmarks)                    [[ "$BENCHMARKS" == "true" ]]          || continue ;;
-                */test-utils)                    [[ "$TEST_UTILS" == "true" ]]          || continue ;;
               esac
             fi
             echo "::group::golangci-lint $d"
@@ -468,7 +455,6 @@ jobs:
           LSP: ${{ needs.changes.outputs.lsp }}
           PLAYGROUND: ${{ needs.changes.outputs.playground }}
           BENCHMARKS: ${{ needs.changes.outputs.benchmarks }}
-          TEST_UTILS: ${{ needs.changes.outputs.test-utils }}
         run: |
           set -euo pipefail
           . scripts/ci/skip-playgrounds.sh
@@ -489,7 +475,6 @@ jobs:
                 */packages/mcp)                  [[ "$MCP" == "true" ]]                 || continue ;;
                 */packages/lsp)                  [[ "$LSP" == "true" ]]                 || continue ;;
                 */benchmarks)                    [[ "$BENCHMARKS" == "true" ]]          || continue ;;
-                */test-utils)                    [[ "$TEST_UTILS" == "true" ]]          || continue ;;
               esac
             fi
             echo "::group::go vet $d"
@@ -514,7 +499,6 @@ jobs:
           LSP: ${{ needs.changes.outputs.lsp }}
           PLAYGROUND: ${{ needs.changes.outputs.playground }}
           BENCHMARKS: ${{ needs.changes.outputs.benchmarks }}
-          TEST_UTILS: ${{ needs.changes.outputs.test-utils }}
         run: |
           set -euo pipefail
           mkdir -p coverage
@@ -536,7 +520,6 @@ jobs:
                 */packages/mcp)                  [[ "$MCP" == "true" ]]                 || continue ;;
                 */packages/lsp)                  [[ "$LSP" == "true" ]]                 || continue ;;
                 */benchmarks)                    [[ "$BENCHMARKS" == "true" ]]          || continue ;;
-                */test-utils)                    [[ "$TEST_UTILS" == "true" ]]          || continue ;;
               esac
             fi
             slug=$(basename "$d")
@@ -565,7 +548,6 @@ jobs:
           LSP: ${{ needs.changes.outputs.lsp }}
           PLAYGROUND: ${{ needs.changes.outputs.playground }}
           BENCHMARKS: ${{ needs.changes.outputs.benchmarks }}
-          TEST_UTILS: ${{ needs.changes.outputs.test-utils }}
         run: |
           set -euo pipefail
           . scripts/ci/skip-playgrounds.sh
@@ -586,7 +568,6 @@ jobs:
                 */packages/mcp)                  [[ "$MCP" == "true" ]]                 || continue ;;
                 */packages/lsp)                  [[ "$LSP" == "true" ]]                 || continue ;;
                 */benchmarks)                    [[ "$BENCHMARKS" == "true" ]]          || continue ;;
-                */test-utils)                    [[ "$TEST_UTILS" == "true" ]]          || continue ;;
               esac
             fi
             echo "::group::go build $d"
@@ -633,9 +614,9 @@ jobs:
         run: |
           set -euo pipefail
           . scripts/ci/skip-playgrounds.sh
-          mods=$(find packages playgrounds benchmarks test-utils -maxdepth 2 -name go.mod 2>/dev/null || true)
+          mods=$(find packages playgrounds benchmarks -maxdepth 2 -name go.mod 2>/dev/null || true)
           if [ -z "$mods" ]; then
-            echo "no go.mod files found under packages/playgrounds/benchmarks/test-utils"
+            echo "no go.mod files found under packages/playgrounds/benchmarks"
             exit 1
           fi
           for m in $mods; do
@@ -760,6 +741,57 @@ jobs:
           out_direct="$RUNNER_TEMP/out-direct"
           diff -r "$out_direct" "$out_run"
 
+  # Smoke test for `go install github.com/binsarjr/sveltego/packages/sveltego/cmd/sveltego@main`
+  # (the path users take from a fresh GOPATH per #377). The proxy refuses
+  # `go install` when the module declares any `replace` directives, so the
+  # first assertion guards against re-introducing one. The second assertion
+  # mirrors init-smoke: a temporary driver module pins the local checkout
+  # via `replace`, then proves the deep-import-path resolves and produces a
+  # runnable binary. Closes #377.
+  sveltego-build-smoke:
+    name: sveltego-build-smoke (go install @main)
+    needs: changes
+    if: |
+      (needs.changes.outputs.shared == 'true' ||
+       needs.changes.outputs.sveltego == 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Assert no replace in packages/sveltego/go.mod
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -E '^[[:space:]]*replace[[:space:]]' packages/sveltego/go.mod; then
+            echo "packages/sveltego/go.mod must not declare a replace directive."
+            echo "go install @version cannot resolve a module that has replaces from the proxy."
+            exit 1
+          fi
+
+      - name: go run via deep import path produces a working CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          driver="$RUNNER_TEMP/driver-sveltego"
+          rm -rf "$driver"
+          mkdir -p "$driver"
+          cat > "$driver/go.mod" <<MODEOF
+          module example.com/sveltego-smoke
+
+          go 1.23
+
+          require github.com/binsarjr/sveltego/packages/sveltego v0.0.0-00010101000000-000000000000
+
+          replace github.com/binsarjr/sveltego/packages/sveltego => $GITHUB_WORKSPACE/packages/sveltego
+          MODEOF
+          (cd "$driver" && GOWORK=off GOFLAGS=-mod=mod go run \
+            github.com/binsarjr/sveltego/packages/sveltego/cmd/sveltego version)
+
   # End-to-end check (compile + build + curl) for each playground binary.
   # Runs on PRs and the merge queue when sveltego core, playgrounds, or
   # shared infra changes. Asserts SSR HTML, the hydration payload script,
@@ -803,8 +835,8 @@ jobs:
       - name: Compile + Build
         working-directory: playgrounds/${{ matrix.playground }}
         run: |
-          go run github.com/binsarjr/sveltego/cmd/sveltego compile
-          go run github.com/binsarjr/sveltego/cmd/sveltego build --out ./build/app --no-client
+          go run github.com/binsarjr/sveltego/packages/sveltego/cmd/sveltego compile
+          go run github.com/binsarjr/sveltego/packages/sveltego/cmd/sveltego build --out ./build/app --no-client
 
       - name: Idempotency check
         working-directory: playgrounds/${{ matrix.playground }}
@@ -812,16 +844,16 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf .gen
-          go run github.com/binsarjr/sveltego/cmd/sveltego compile
+          go run github.com/binsarjr/sveltego/packages/sveltego/cmd/sveltego compile
           find .gen -type f -exec sha256sum {} + | sort > /tmp/gen-1.sum
           rm -rf .gen
-          go run github.com/binsarjr/sveltego/cmd/sveltego compile
+          go run github.com/binsarjr/sveltego/packages/sveltego/cmd/sveltego compile
           find .gen -type f -exec sha256sum {} + | sort > /tmp/gen-2.sum
           diff /tmp/gen-1.sum /tmp/gen-2.sum
 
       - name: Rebuild binary after re-compile
         working-directory: playgrounds/${{ matrix.playground }}
-        run: go run github.com/binsarjr/sveltego/cmd/sveltego build --out ./build/app --no-client
+        run: go run github.com/binsarjr/sveltego/packages/sveltego/cmd/sveltego build --out ./build/app --no-client
 
       - name: Start server
         working-directory: playgrounds/${{ matrix.playground }}

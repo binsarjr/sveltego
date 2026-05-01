@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/binsarjr/sveltego/exports/kit"
-	"github.com/binsarjr/sveltego/runtime/router"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
+	"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
 )
 
 // csrfTokenMaxAge bounds the lifetime of the issued cookie. One day is a

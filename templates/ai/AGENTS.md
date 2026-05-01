@@ -88,7 +88,7 @@ Without that line, `go build` / `go vet` / `golangci-lint` would try to compile 
 
 package routes
 
-import "github.com/binsarjr/sveltego/exports/kit"
+import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
 func Load(ctx *kit.LoadCtx) (PageData, error) {
     return PageData{
@@ -175,7 +175,7 @@ One verb per Go function; the dispatcher routes by HTTP method.
 
 package hooks
 
-import "github.com/binsarjr/sveltego/exports/kit"
+import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
 var Handle kit.HandleFn = func(ev *kit.RequestEvent, resolve kit.ResolveFn) (*kit.Response, error) { ... }
 var HandleError kit.HandleErrorFn = func(ev *kit.RequestEvent, err error) kit.SafeError { ... }

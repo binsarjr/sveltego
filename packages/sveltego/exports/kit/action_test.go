@@ -3,7 +3,7 @@ package kit_test
 import (
 	"testing"
 
-	"github.com/binsarjr/sveltego/exports/kit"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 )
 
 func TestActionDataResult(t *testing.T) {

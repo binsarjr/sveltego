@@ -7,7 +7,7 @@ import (
 	"go/token"
 	"strings"
 
-	"github.com/binsarjr/sveltego/internal/ast"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/ast"
 )
 
 // runeKind tags a top-level rune-bearing statement so the lowering pass

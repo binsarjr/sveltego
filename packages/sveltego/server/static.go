@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/binsarjr/sveltego/exports/kit"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 )
 
 // StaticHandler returns an http.Handler that serves static files from

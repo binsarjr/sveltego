@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/binsarjr/sveltego/internal/ast"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/ast"
 )
 
 func TestSnippetSignature(t *testing.T) {

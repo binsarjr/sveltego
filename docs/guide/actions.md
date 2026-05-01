@@ -15,7 +15,7 @@ Form actions are POST handlers attached to a page. They live in `page.server.go`
 
 package routes
 
-import "github.com/binsarjr/sveltego/exports/kit"
+import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
 var Actions = kit.ActionMap{
   "default": func(ev *kit.RequestEvent) kit.ActionResult {

@@ -6,7 +6,7 @@ import (
 	"go/token"
 	"strings"
 
-	"github.com/binsarjr/sveltego/internal/ast"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/ast"
 )
 
 // emitSnippetBlock lowers {#snippet name(params)} ... {/snippet} to a local

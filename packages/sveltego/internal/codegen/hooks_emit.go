@@ -61,7 +61,7 @@ func generateHooksAdapter(genPackage, modulePath, outDir string, set HookSet) ([
 	b.Line("")
 	b.Line("import (")
 	b.Indent()
-	b.Line(`"github.com/binsarjr/sveltego/exports/kit"`)
+	b.Line(`"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"`)
 	if useUsersrc {
 		b.Line("")
 		b.Linef(`hookssrc %q`, modulePath+"/"+outDir+"/hookssrc")

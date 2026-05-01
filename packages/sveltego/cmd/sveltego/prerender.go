@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/binsarjr/sveltego/internal/codegen"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/codegen"
 )
 
 // prerenderTriggerEnv is the env var the user binary looks for to

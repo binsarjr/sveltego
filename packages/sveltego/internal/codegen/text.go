@@ -1,6 +1,6 @@
 package codegen
 
-import "github.com/binsarjr/sveltego/internal/ast"
+import "github.com/binsarjr/sveltego/packages/sveltego/internal/ast"
 
 // emitText emits a single Text node as one WriteString call. Adjacent text
 // merging is the caller's responsibility; see mergeAdjacentText.

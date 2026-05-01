@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/binsarjr/sveltego/runtime/router"
+	"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
 )
 
 func mustBuild(t *testing.T, routes []router.Route) *router.Tree {

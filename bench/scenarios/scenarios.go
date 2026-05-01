@@ -17,10 +17,10 @@ import (
 	"net/http/httptest"
 	"strconv"
 
-	"github.com/binsarjr/sveltego/exports/kit"
-	"github.com/binsarjr/sveltego/render"
-	"github.com/binsarjr/sveltego/runtime/router"
-	"github.com/binsarjr/sveltego/server"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
+	"github.com/binsarjr/sveltego/packages/sveltego/render"
+	"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
+	"github.com/binsarjr/sveltego/packages/sveltego/server"
 )
 
 // shell is the minimal app.html used by every scenario. The server

@@ -16,7 +16,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/binsarjr/sveltego/exports/kit"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 )
 
 // HashLength is the number of hex characters of SHA-256 used in the

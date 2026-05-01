@@ -185,7 +185,7 @@ func renderGoMod(module string) string {
 	var b strings.Builder
 	b.WriteString("module ")
 	b.WriteString(module)
-	b.WriteString("\n\ngo 1.23\n\nrequire github.com/binsarjr/sveltego v0.0.0\n")
+	b.WriteString("\n\ngo 1.23\n\nrequire github.com/binsarjr/sveltego/packages/sveltego v0.0.0\n")
 	return b.String()
 }
 
@@ -219,8 +219,8 @@ func renderMainGo(module string) string {
 	b.WriteString("\tgen \"")
 	b.WriteString(module)
 	b.WriteString("/.gen\"\n\n")
-	b.WriteString("\t\"github.com/binsarjr/sveltego/exports/kit/params\"\n")
-	b.WriteString("\t\"github.com/binsarjr/sveltego/server\"\n")
+	b.WriteString("\t\"github.com/binsarjr/sveltego/packages/sveltego/exports/kit/params\"\n")
+	b.WriteString("\t\"github.com/binsarjr/sveltego/packages/sveltego/server\"\n")
 	b.WriteString(")\n\n")
 	b.WriteString("func main() {\n")
 	b.WriteString("\tshell, err := os.ReadFile(\"app.html\")\n")
@@ -320,7 +320,7 @@ const hooksBody = `//go:build sveltego
 
 package hooks
 
-import "github.com/binsarjr/sveltego/exports/kit"
+import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
 var Handle kit.HandleFn = func(ev *kit.RequestEvent, resolve kit.ResolveFn) (*kit.Response, error) {
 	return resolve(ev)
@@ -336,7 +336,7 @@ const pageServerBody = `//go:build sveltego
 
 package routes
 
-import "github.com/binsarjr/sveltego/exports/kit"
+import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
 type PageData struct {
 	Greeting string

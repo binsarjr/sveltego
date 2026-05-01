@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/binsarjr/sveltego/internal/ast"
-	"github.com/binsarjr/sveltego/internal/images"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/ast"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/images"
 )
 
 // Options configures Generate.
@@ -418,8 +418,8 @@ func emitLayoutDataAlias(b *Builder, fields []pageDataField) {
 // emit between `import (` and `)`.
 func mergeImports(scriptImports, pageDataImports []string) []string {
 	set := map[string]struct{}{
-		`"github.com/binsarjr/sveltego/exports/kit"`: {},
-		`"github.com/binsarjr/sveltego/render"`:      {},
+		`"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"`: {},
+		`"github.com/binsarjr/sveltego/packages/sveltego/render"`:      {},
 	}
 	for _, imp := range scriptImports {
 		set[imp] = struct{}{}

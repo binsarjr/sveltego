@@ -4,9 +4,9 @@ package gen
 import (
 	"fmt"
 
-	"github.com/binsarjr/sveltego/exports/kit"
-	"github.com/binsarjr/sveltego/render"
-	"github.com/binsarjr/sveltego/runtime/router"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
+	"github.com/binsarjr/sveltego/packages/sveltego/render"
+	"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
 
 	page_routes__g_marketing_about "myapp/.gen/routes/_g_marketing/about"
 )

@@ -49,10 +49,10 @@ Examples in scope:
 ## API
 
 The shared helper lives in
-[`github.com/binsarjr/sveltego/test-utils/golden`](https://github.com/binsarjr/sveltego/tree/main/test-utils/golden).
+[`github.com/binsarjr/sveltego/packages/sveltego/internal/testutils/golden`](https://github.com/binsarjr/sveltego/tree/main/packages/sveltego/internal/testutils/golden).
 
 ```go
-import "github.com/binsarjr/sveltego/test-utils/golden"
+import "github.com/binsarjr/sveltego/packages/sveltego/internal/testutils/golden"
 
 func TestCompile(t *testing.T) {
     got, err := codegen.Compile(input)
@@ -191,7 +191,7 @@ asserts byte-identical output. Treat a flake there as a P0.
 
 - Spec: [#104 Codegen golden testing](https://github.com/binsarjr/sveltego/issues/104)
 - Helper godoc:
-  [`test-utils/golden/doc.go`](https://github.com/binsarjr/sveltego/blob/main/test-utils/golden/doc.go)
+  [`test-utils/golden/doc.go`](https://github.com/binsarjr/sveltego/blob/main/packages/sveltego/internal/testutils/golden/doc.go)
 - [Go testing with subtests](https://go.dev/blog/subtests)
 - [`gofumpt`](https://github.com/mvdan/gofumpt) — pinned by codegen for
   cross-version stability

@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/binsarjr/sveltego/internal/routescan"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/routescan"
 )
 
 // manifestFixtures lists the routescan testdata trees re-used as inputs for

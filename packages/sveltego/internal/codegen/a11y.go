@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/binsarjr/sveltego/internal/ast"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/ast"
 )
 
 // A11y rule codes. Stable identifiers prefixed onto Diagnostic.Message so

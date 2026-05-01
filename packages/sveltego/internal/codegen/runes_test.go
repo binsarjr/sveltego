@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/binsarjr/sveltego/internal/ast"
-	"github.com/binsarjr/sveltego/internal/parser"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/ast"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/parser"
 )
 
 func TestAnalyzeRunes_Props(t *testing.T) {

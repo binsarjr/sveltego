@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/binsarjr/sveltego/internal/routescan"
-	"github.com/binsarjr/sveltego/runtime/router"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/routescan"
+	"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
 )
 
 var linkFixtures = []string{

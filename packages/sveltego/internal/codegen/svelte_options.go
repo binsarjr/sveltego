@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/binsarjr/sveltego/internal/ast"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/ast"
 )
 
 // svelteOptions captures the validated `<svelte:options>` attributes.

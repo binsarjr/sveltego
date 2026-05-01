@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/binsarjr/sveltego/internal/vite"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/vite"
 )
 
 func TestDetectAddons(t *testing.T) {

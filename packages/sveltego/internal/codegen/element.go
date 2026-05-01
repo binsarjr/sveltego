@@ -3,7 +3,7 @@ package codegen
 import (
 	"strings"
 
-	"github.com/binsarjr/sveltego/internal/ast"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/ast"
 )
 
 // emitElement lowers a single Element to its open-tag, child, and

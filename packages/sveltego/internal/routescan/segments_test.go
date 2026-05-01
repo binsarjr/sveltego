@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/binsarjr/sveltego/runtime/router"
+	"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
 )
 
 func TestParseSegment(t *testing.T) {

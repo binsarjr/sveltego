@@ -41,7 +41,7 @@ import "$lib/db"
 
 package _id_
 
-import "github.com/binsarjr/sveltego/exports/kit"
+import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
 func Load(ctx *kit.LoadCtx) (PageData, error) {
 	return struct{ ID string }{ID: "x"}, nil
@@ -320,7 +320,7 @@ func TestBuild_EmitsLayoutServer(t *testing.T) {
 
 package routes
 
-import "github.com/binsarjr/sveltego/exports/kit"
+import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
 func Load(ctx *kit.LoadCtx) (LayoutData, error) {
 	return struct{ User string }{User: "alice"}, nil

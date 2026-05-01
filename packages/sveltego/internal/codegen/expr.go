@@ -6,7 +6,7 @@ import (
 	"go/token"
 	"strings"
 
-	"github.com/binsarjr/sveltego/internal/ast"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/ast"
 )
 
 // validateExpr parses src as a Go expression and runs the env codegen

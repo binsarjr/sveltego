@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/binsarjr/sveltego/internal/ast"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/ast"
 )
 
 // Dump renders frag as a deterministic, indented S-expression-like string.

@@ -6,7 +6,7 @@ summary: Public runtime API — RequestEvent, Hooks, Cookies, Action, CSP, senti
 
 # kit
 
-`github.com/binsarjr/sveltego/exports/kit` is the public runtime API. Generated code and user route handlers depend on it.
+`github.com/binsarjr/sveltego/packages/sveltego/exports/kit` is the public runtime API. Generated code and user route handlers depend on it.
 
 This page summarises the surface. Source is the canonical spec; godoc is generated from it. See `packages/sveltego/exports/kit/` in the repo.
 

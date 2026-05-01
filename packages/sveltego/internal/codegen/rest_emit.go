@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/binsarjr/sveltego/internal/routescan"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/routescan"
 )
 
 // emitRESTRoute writes the user-source mirror for one server.go and
@@ -75,7 +75,7 @@ func generateRESTDispatcher(packageName, importPath string, verbs []string) ([]b
 	b.Indent()
 	b.Line(`"net/http"`)
 	b.Line("")
-	b.Line(`"github.com/binsarjr/sveltego/exports/kit"`)
+	b.Line(`"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"`)
 	b.Line("")
 	b.Linef(`usersrc %q`, importPath)
 	b.Dedent()

@@ -9,8 +9,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/binsarjr/sveltego/exports/kit"
-	"github.com/binsarjr/sveltego/internal/routescan"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/routescan"
 )
 
 // optionConstNames is the set of exported constant names the scanner

@@ -2,7 +2,7 @@
 
 package routes
 
-import "github.com/binsarjr/sveltego/exports/kit"
+import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
 func Load(ctx *kit.LoadCtx) (struct {
 	Greeting string

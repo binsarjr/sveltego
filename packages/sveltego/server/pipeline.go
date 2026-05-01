@@ -19,9 +19,9 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/binsarjr/sveltego/exports/kit"
-	"github.com/binsarjr/sveltego/render"
-	"github.com/binsarjr/sveltego/runtime/router"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
+	"github.com/binsarjr/sveltego/packages/sveltego/render"
+	"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
 )
 
 // bytesAsString aliases p as a string without copying. Safe only when

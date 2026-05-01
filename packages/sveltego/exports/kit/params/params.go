@@ -1,6 +1,6 @@
 package params
 
-import "github.com/binsarjr/sveltego/runtime/router"
+import "github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
 
 // DefaultMatchers returns a fresh [router.Matchers] map seeded with the
 // built-in matchers (int, uuid, slug). The returned map is owned by the

@@ -24,7 +24,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/binsarjr/sveltego/runtime/router"
+	"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
 )
 
 const benchRouteCount = 1000

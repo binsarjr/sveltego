@@ -23,7 +23,7 @@ func TestScanRESTHandlers_allVerbs(t *testing.T) {
 
 package api
 
-import "github.com/binsarjr/sveltego/exports/kit"
+import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
 func GET(ev *kit.RequestEvent) *kit.Response     { return nil }
 func POST(ev *kit.RequestEvent) *kit.Response    { return nil }
@@ -55,7 +55,7 @@ func TestScanRESTHandlers_unknownExportedFunc(t *testing.T) {
 
 package api
 
-import "github.com/binsarjr/sveltego/exports/kit"
+import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
 func GET(ev *kit.RequestEvent) *kit.Response { return nil }
 func Get(ev *kit.RequestEvent) *kit.Response { return nil }
@@ -90,7 +90,7 @@ func TestScanRESTHandlers_unexportedIgnored(t *testing.T) {
 
 package api
 
-import "github.com/binsarjr/sveltego/exports/kit"
+import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
 func GET(ev *kit.RequestEvent) *kit.Response { return helper(ev) }
 func helper(ev *kit.RequestEvent) *kit.Response { return nil }

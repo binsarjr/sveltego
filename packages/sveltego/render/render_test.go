@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/binsarjr/sveltego/render"
+	"github.com/binsarjr/sveltego/packages/sveltego/render"
 )
 
 type stringerFn func() string

@@ -138,7 +138,7 @@ import (
 
 	gen "{{ModulePath}}/.gen"
 	"{{ModulePath}}/exports/kit/params"
-	sveltegoserver "github.com/binsarjr/sveltego/server"
+	sveltegoserver "github.com/binsarjr/sveltego/packages/sveltego/server"
 )
 
 var adapter *httpadapter.HandlerAdapter

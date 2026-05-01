@@ -33,10 +33,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/binsarjr/sveltego/exports/kit/params"
-	"github.com/binsarjr/sveltego/internal/codegen"
-	"github.com/binsarjr/sveltego/internal/routescan"
-	"github.com/binsarjr/sveltego/runtime/router"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit/params"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/codegen"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/routescan"
+	"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
 )
 
 func TestRouterSmoke(t *testing.T) {
@@ -183,9 +183,9 @@ func writeSandboxModule(t *testing.T, sandbox, sveltegoModuleDir string) {
 		"",
 		"go 1.22",
 		"",
-		"require github.com/binsarjr/sveltego v0.0.0-00010101000000-000000000000",
+		"require github.com/binsarjr/sveltego/packages/sveltego v0.0.0-00010101000000-000000000000",
 		"",
-		"replace github.com/binsarjr/sveltego => " + sveltegoModuleDir,
+		"replace github.com/binsarjr/sveltego/packages/sveltego => " + sveltegoModuleDir,
 		"",
 	}, "\n")
 	if err := os.WriteFile(filepath.Join(sandbox, "go.mod"), []byte(goMod), 0o644); err != nil {
@@ -231,8 +231,8 @@ var Handlers = map[string]http.HandlerFunc{}
 			src = `package ` + r.PackageName + `
 
 import (
-	"github.com/binsarjr/sveltego/exports/kit"
-	"github.com/binsarjr/sveltego/render"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
+	"github.com/binsarjr/sveltego/packages/sveltego/render"
 )
 
 type Page struct{}

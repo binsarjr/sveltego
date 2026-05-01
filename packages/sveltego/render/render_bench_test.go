@@ -3,7 +3,7 @@ package render_test
 import (
 	"testing"
 
-	"github.com/binsarjr/sveltego/render"
+	"github.com/binsarjr/sveltego/packages/sveltego/render"
 )
 
 const (

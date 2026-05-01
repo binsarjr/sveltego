@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/binsarjr/sveltego/render"
+	"github.com/binsarjr/sveltego/packages/sveltego/render"
 )
 
 func TestFlushToCopiesAndResets(t *testing.T) {

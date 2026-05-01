@@ -6,7 +6,7 @@ package routescan
 import (
 	"strings"
 
-	"github.com/binsarjr/sveltego/internal/ast"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/ast"
 )
 
 // Diagnostic is one recoverable problem surfaced by Scan. Diagnostics

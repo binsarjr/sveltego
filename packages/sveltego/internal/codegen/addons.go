@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/binsarjr/sveltego/internal/vite"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/vite"
 )
 
 // detectAddons reads <projectRoot>/package.json and returns the list of

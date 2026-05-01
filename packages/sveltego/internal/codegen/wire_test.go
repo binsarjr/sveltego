@@ -75,7 +75,7 @@ func TestMirrorUserSource_StripsBuildTagAndRewritesPackage(t *testing.T) {
 
 package origpkg
 
-import "github.com/binsarjr/sveltego/exports/kit"
+import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
 var Actions = kit.ActionMap{}
 
@@ -119,7 +119,7 @@ func TestMirrorUserSource_NoActions(t *testing.T) {
 
 package whatever
 
-import "github.com/binsarjr/sveltego/exports/kit"
+import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
 func Load(ctx *kit.LoadCtx) (any, error) { return nil, nil }
 `)

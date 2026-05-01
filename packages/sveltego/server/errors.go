@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/binsarjr/sveltego/exports/kit"
-	"github.com/binsarjr/sveltego/render"
-	"github.com/binsarjr/sveltego/runtime/router"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
+	"github.com/binsarjr/sveltego/packages/sveltego/render"
+	"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
 )
 
 // Log keys are named constants so sloglint's no-raw-keys rule passes

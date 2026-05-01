@@ -2,7 +2,7 @@
 
 package billing
 
-import "github.com/binsarjr/sveltego/exports/kit"
+import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
 const (
 	Prerender     = true

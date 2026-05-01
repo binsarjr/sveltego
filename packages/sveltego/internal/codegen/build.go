@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/binsarjr/sveltego/internal/images"
-	"github.com/binsarjr/sveltego/internal/parser"
-	"github.com/binsarjr/sveltego/internal/routescan"
-	"github.com/binsarjr/sveltego/internal/vite"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/images"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/parser"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/routescan"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/vite"
 )
 
 // log attribute keys for sloglint compliance.

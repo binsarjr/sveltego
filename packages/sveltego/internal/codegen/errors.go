@@ -3,7 +3,7 @@ package codegen
 import (
 	"fmt"
 
-	"github.com/binsarjr/sveltego/internal/ast"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/ast"
 )
 
 // CodegenError is a positioned codegen-time failure. Pos points back to the

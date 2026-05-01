@@ -22,7 +22,7 @@ func TestScanActions_LiteralKeys(t *testing.T) {
 
 package login
 
-import "github.com/binsarjr/sveltego/exports/kit"
+import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
 var Actions = kit.ActionMap{
 	"default": func(ev *kit.RequestEvent) kit.ActionResult { return nil },
@@ -48,7 +48,7 @@ func TestScanActions_NoVar(t *testing.T) {
 
 package x
 
-import "github.com/binsarjr/sveltego/exports/kit"
+import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
 func Load(ctx *kit.LoadCtx) (any, error) { return nil, nil }
 `
@@ -68,7 +68,7 @@ func TestScanActions_DynamicKeysOmitted(t *testing.T) {
 
 package x
 
-import "github.com/binsarjr/sveltego/exports/kit"
+import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
 var Actions kit.ActionMap
 `

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/binsarjr/sveltego/internal/parser"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/parser"
 )
 
 func TestRunA11yChecks_NilFragment(t *testing.T) {

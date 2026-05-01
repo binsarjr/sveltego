@@ -1,6 +1,6 @@
 package params
 
-import "github.com/binsarjr/sveltego/runtime/router"
+import "github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
 
 // UUID matches the canonical 8-4-4-4-12 UUID textual form. Hex digits are
 // case-insensitive; hyphen positions are fixed at 8, 13, 18, 23. Total

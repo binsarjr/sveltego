@@ -21,5 +21,4 @@ use (
 	./playgrounds/blog
 	./playgrounds/dashboard
 	./templates/ai
-	./test-utils
 )

@@ -27,3 +27,7 @@
 All notable changes to this package will be documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+
+### Breaking changes
+
+- **Module path renamed from `github.com/binsarjr/sveltego` to `github.com/binsarjr/sveltego/packages/sveltego`** (#377). The on-disk layout always lived at `packages/sveltego/`, but the declared module path didn't reflect that, breaking `go install github.com/binsarjr/sveltego/cmd/sveltego@latest` from a fresh GOPATH. External imports under `github.com/binsarjr/sveltego/{cmd,exports,internal,render,runtime,server}/...` must update to `github.com/binsarjr/sveltego/packages/sveltego/{cmd,exports,internal,render,runtime,server}/...`. The pre-alpha API tier (per `STABILITY.md`) makes this acceptable, but external consumers must migrate. The dropped `replace github.com/binsarjr/sveltego/test-utils => ../../test-utils` directive (the helper moved to `packages/sveltego/internal/testutils/`) is what unblocks `go install @main` from the proxy.

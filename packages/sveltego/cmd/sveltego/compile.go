@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/binsarjr/sveltego/internal/codegen"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/codegen"
 )
 
 func newCompileCmd() *cobra.Command {

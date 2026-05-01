@@ -7,7 +7,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/binsarjr/sveltego/internal/assets"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/assets"
 )
 
 func TestBuild_EmptyProjectIsNotAnError(t *testing.T) {

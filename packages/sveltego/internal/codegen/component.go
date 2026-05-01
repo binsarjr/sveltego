@@ -3,7 +3,7 @@ package codegen
 import (
 	"strings"
 
-	"github.com/binsarjr/sveltego/internal/ast"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/ast"
 )
 
 // emitSvelteComponent lowers <svelte:component this={Expr} ... /> to a

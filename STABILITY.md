@@ -21,7 +21,6 @@ This is the index of per-package stability promises. Tier definitions and the br
 | `lsp` | `packages/lsp` | [STABILITY.md](./packages/lsp/STABILITY.md) |
 | `playgrounds/basic` | `playgrounds/basic` | [STABILITY.md](./playgrounds/basic/STABILITY.md) |
 | `benchmarks` | `benchmarks` | [STABILITY.md](./benchmarks/STABILITY.md) |
-| `test-utils` | `test-utils` | [STABILITY.md](./test-utils/STABILITY.md) |
 
 ## Repo-wide phase
 

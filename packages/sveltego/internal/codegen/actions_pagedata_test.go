@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/binsarjr/sveltego/internal/parser"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/parser"
 )
 
 // TestGenerate_HasActions_AddsFormField pins the codegen behavior

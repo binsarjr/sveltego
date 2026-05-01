@@ -82,8 +82,8 @@ func TestRun_MainGoCompiles(t *testing.T) {
 	}
 	wantImports := []string{
 		`"example.com/hello/.gen"`,
-		`"github.com/binsarjr/sveltego/exports/kit/params"`,
-		`"github.com/binsarjr/sveltego/server"`,
+		`"github.com/binsarjr/sveltego/packages/sveltego/exports/kit/params"`,
+		`"github.com/binsarjr/sveltego/packages/sveltego/server"`,
 	}
 	got := make(map[string]bool, len(f.Imports))
 	for _, imp := range f.Imports {
