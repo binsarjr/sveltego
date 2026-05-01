@@ -1,6 +1,7 @@
 package codegen
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,7 +23,7 @@ func TestBuild_ServiceWorker_DetectedAndWired(t *testing.T) {
 self.addEventListener('install', () => {});
 `)
 
-	res, err := Build(BuildOptions{ProjectRoot: root})
+	res, err := Build(context.Background(), BuildOptions{ProjectRoot: root})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -64,7 +65,7 @@ func TestBuild_ServiceWorker_AbsentLeavesConfigUnchanged(t *testing.T) {
 	root := t.TempDir()
 	scaffoldProject(t, root, "example.com/app")
 
-	res, err := Build(BuildOptions{ProjectRoot: root})
+	res, err := Build(context.Background(), BuildOptions{ProjectRoot: root})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}

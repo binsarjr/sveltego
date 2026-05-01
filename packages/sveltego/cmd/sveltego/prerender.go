@@ -50,7 +50,7 @@ func newPrerenderCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			result, err := codegen.Build(codegen.BuildOptions{
+			result, err := codegen.Build(cmd.Context(), codegen.BuildOptions{
 				ProjectRoot: root,
 				Verbose:     verbose,
 				Release:     os.Getenv("SVELTEGO_RELEASE") == "1",

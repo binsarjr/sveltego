@@ -1,6 +1,7 @@
 package codegen
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -172,7 +173,7 @@ func TestBuildSubstitutesPublicEnv(t *testing.T) {
 		return "", false
 	}
 
-	result, err := Build(BuildOptions{ProjectRoot: root, EnvLookup: lookup})
+	result, err := Build(context.Background(), BuildOptions{ProjectRoot: root, EnvLookup: lookup})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -194,7 +195,7 @@ func TestBuildRejectsUnsetKey(t *testing.T) {
 	root := envSubstRoot(t)
 	writePlainPage(t, root, `<p>{env.StaticPublic("PUBLIC_MISSING")}</p>`)
 
-	_, err := Build(BuildOptions{
+	_, err := Build(context.Background(), BuildOptions{
 		ProjectRoot: root,
 		EnvLookup:   func(string) (string, bool) { return "", false },
 	})
@@ -214,7 +215,7 @@ func TestBuildRejectsPrivateEnvInTemplate(t *testing.T) {
 	root := envSubstRoot(t)
 	writePlainPage(t, root, `<p>{env.StaticPrivate("DATABASE_URL")}</p>`)
 
-	_, err := Build(BuildOptions{
+	_, err := Build(context.Background(), BuildOptions{
 		ProjectRoot: root,
 		EnvLookup:   func(_ string) (string, bool) { return "postgres://x", true },
 	})
@@ -235,7 +236,7 @@ func TestBuildDefaultEnvLookupUsesOsEnv(t *testing.T) {
 
 	t.Setenv("PUBLIC_SVELTEGO_TEST_SUBST", "hello-from-os")
 
-	result, err := Build(BuildOptions{ProjectRoot: root}) // no EnvLookup → os.LookupEnv
+	result, err := Build(context.Background(), BuildOptions{ProjectRoot: root}) // no EnvLookup → os.LookupEnv
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -265,7 +266,7 @@ func TestBuildSubstitutesPublicEnvInLayout(t *testing.T) {
 		return "", false
 	}
 
-	_, err := Build(BuildOptions{ProjectRoot: root, EnvLookup: lookup})
+	_, err := Build(context.Background(), BuildOptions{ProjectRoot: root, EnvLookup: lookup})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}

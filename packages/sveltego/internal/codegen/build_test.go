@@ -2,6 +2,7 @@ package codegen
 
 import (
 	"bytes"
+	"context"
 	"go/parser"
 	"go/token"
 	"os"
@@ -29,7 +30,10 @@ func scaffoldProject(t *testing.T, root, module string) {
 
 	writeFile(t, filepath.Join(root, "src", "routes", "_page.svelte"),
 		`<script lang="go">
-import "$lib/db"
+import (
+	"context"
+	"$lib/db"
+)
 </script>
 <h1>{db.Title()}</h1>
 `)
@@ -41,7 +45,10 @@ import "$lib/db"
 
 package _id_
 
-import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
+import (
+	"context"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
+)
 
 func Load(ctx *kit.LoadCtx) (PageData, error) {
 	return struct{ ID string }{ID: "x"}, nil
@@ -58,7 +65,7 @@ func TestBuild_HappyPath(t *testing.T) {
 	root := t.TempDir()
 	scaffoldProject(t, root, "example.com/app")
 
-	res, err := Build(BuildOptions{ProjectRoot: root})
+	res, err := Build(context.Background(), BuildOptions{ProjectRoot: root})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -154,7 +161,7 @@ func TestBuild_MissingGoMod(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "src", "routes", "_page.svelte"), "<h1>x</h1>\n")
-	if _, err := Build(BuildOptions{ProjectRoot: root}); err == nil {
+	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: root}); err == nil {
 		t.Fatal("expected error on missing go.mod")
 	}
 }
@@ -163,14 +170,14 @@ func TestBuild_MissingRoutesDir(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "go.mod"), "module example\n\ngo 1.22\n")
-	if _, err := Build(BuildOptions{ProjectRoot: root}); err == nil {
+	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: root}); err == nil {
 		t.Fatal("expected error on missing src/routes/")
 	}
 }
 
 func TestBuild_RelativeProjectRoot(t *testing.T) {
 	t.Parallel()
-	if _, err := Build(BuildOptions{ProjectRoot: "relative/path"}); err == nil {
+	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: "relative/path"}); err == nil {
 		t.Fatal("expected error on relative ProjectRoot")
 	}
 }
@@ -182,7 +189,7 @@ func TestBuild_ConflictAborts(t *testing.T) {
 	writeFile(t, filepath.Join(root, "src", "routes", "api", "_page.svelte"), "<h1>p</h1>\n")
 	writeFile(t, filepath.Join(root, "src", "routes", "api", "_server.go"),
 		"//go:build sveltego\n\npackage api\n\nimport \"net/http\"\n\nvar Handlers = map[string]http.HandlerFunc{}\n")
-	_, err := Build(BuildOptions{ProjectRoot: root})
+	_, err := Build(context.Background(), BuildOptions{ProjectRoot: root})
 	if err == nil {
 		t.Fatal("expected fatal diagnostic on conflicting page+server")
 	}
@@ -196,12 +203,12 @@ func TestBuild_Determinism(t *testing.T) {
 	root := t.TempDir()
 	scaffoldProject(t, root, "example.com/app")
 
-	if _, err := Build(BuildOptions{ProjectRoot: root}); err != nil {
+	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: root}); err != nil {
 		t.Fatalf("first Build: %v", err)
 	}
 	first := snapshotGen(t, root)
 
-	if _, err := Build(BuildOptions{ProjectRoot: root}); err != nil {
+	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: root}); err != nil {
 		t.Fatalf("second Build: %v", err)
 	}
 	second := snapshotGen(t, root)
@@ -233,7 +240,7 @@ func TestBuild_EmitsLayoutChain(t *testing.T) {
 	writeFile(t, filepath.Join(root, "src", "routes", "dash", "_page.svelte"),
 		`<h1>Dash</h1>`+"\n")
 
-	if _, err := Build(BuildOptions{ProjectRoot: root}); err != nil {
+	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: root}); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 
@@ -296,7 +303,10 @@ func TestBuild_EmitsLayoutServer(t *testing.T) {
 
 package routes
 
-import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
+import (
+	"context"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
+)
 
 func Load(ctx *kit.LoadCtx) (LayoutData, error) {
 	return struct{ User string }{User: "alice"}, nil
@@ -307,7 +317,7 @@ func Load(ctx *kit.LoadCtx) (LayoutData, error) {
 	writeFile(t, filepath.Join(root, "src", "routes", "dash", "_page.svelte"),
 		`<h1>Dash</h1>`+"\n")
 
-	if _, err := Build(BuildOptions{ProjectRoot: root}); err != nil {
+	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: root}); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 
@@ -391,7 +401,7 @@ func TestBuild_EmitsSvelteHead(t *testing.T) {
 		`<svelte:head><title>Home</title></svelte:head>
 <h1>Home</h1>`+"\n")
 
-	if _, err := Build(BuildOptions{ProjectRoot: root}); err != nil {
+	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: root}); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 
@@ -441,7 +451,7 @@ func TestBuild_EmitsSPARouterModule(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	scaffoldProject(t, root, "example.com/app")
-	if _, err := Build(BuildOptions{ProjectRoot: root}); err != nil {
+	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: root}); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 
@@ -515,7 +525,7 @@ export const snapshot = {
 	writeFile(t, filepath.Join(root, "src", "routes", "plain", "_page.svelte"),
 		"<p>plain</p>\n")
 
-	if _, err := Build(BuildOptions{ProjectRoot: root}); err != nil {
+	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: root}); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 
@@ -562,7 +572,7 @@ func TestBuild_EmbedSkippedWhenNoAssets(t *testing.T) {
 	scaffoldProject(t, root, "example.com/app")
 	// NoClient skips client entry emission so .gen/client/ is absent.
 	// Without a static/ dir either, embed.go must not be written.
-	if _, err := Build(BuildOptions{ProjectRoot: root, NoClient: true}); err != nil {
+	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: root, NoClient: true}); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(root, ".gen", "embed.go")); err == nil {
@@ -580,7 +590,10 @@ func TestBuild_ReleaseRejectsLibDevImport(t *testing.T) {
 	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/app\n\ngo 1.22\n")
 	writeFile(t, filepath.Join(root, "src", "routes", "_page.svelte"),
 		`<script lang="go">
-import "$lib/dev/panel"
+import (
+	"context"
+	"$lib/dev/panel"
+)
 </script>
 <h1>Hello</h1>
 `)
@@ -590,12 +603,12 @@ import "$lib/dev/panel"
 		"package lib\n")
 
 	// Dev mode: succeeds — $lib/dev imports are allowed.
-	if _, err := Build(BuildOptions{ProjectRoot: root}); err != nil {
+	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: root}); err != nil {
 		t.Fatalf("dev Build: unexpected error: %v", err)
 	}
 
 	// Release mode: must fail with a meaningful message.
-	_, err := Build(BuildOptions{ProjectRoot: root, Release: true})
+	_, err := Build(context.Background(), BuildOptions{ProjectRoot: root, Release: true})
 	if err == nil {
 		t.Fatal("release Build: expected error on $lib/dev import, got nil")
 	}
@@ -612,14 +625,17 @@ func TestBuild_ReleaseAllowsNonDevLibImport(t *testing.T) {
 	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/app\n\ngo 1.22\n")
 	writeFile(t, filepath.Join(root, "src", "routes", "_page.svelte"),
 		`<script lang="go">
-import "$lib/util"
+import (
+	"context"
+	"$lib/util"
+)
 </script>
 <h1>Hello</h1>
 `)
 	writeFile(t, filepath.Join(root, "src", "lib", "util", "util.go"),
 		"package util\n\nfunc Name() string { return \"lib\" }\n")
 
-	if _, err := Build(BuildOptions{ProjectRoot: root, Release: true}); err != nil {
+	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: root, Release: true}); err != nil {
 		t.Fatalf("release Build on non-dev $lib: unexpected error: %v", err)
 	}
 }
@@ -714,7 +730,10 @@ func TestBuild_PageDataNamedType(t *testing.T) {
 
 package routes
 
-import "github.com/binsarjr/sveltego/exports/kit"
+import (
+	"context"
+	"github.com/binsarjr/sveltego/exports/kit"
+)
 
 type PageData struct {
 	Greeting string
@@ -726,7 +745,7 @@ func Load(ctx *kit.LoadCtx) (PageData, error) {
 }
 `)
 
-	if _, err := Build(BuildOptions{ProjectRoot: root}); err != nil {
+	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: root}); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 
@@ -770,7 +789,10 @@ func TestBuild_LayoutDataNamedType(t *testing.T) {
 
 package routes
 
-import "github.com/binsarjr/sveltego/exports/kit"
+import (
+	"context"
+	"github.com/binsarjr/sveltego/exports/kit"
+)
 
 type LayoutData struct {
 	Title string
@@ -784,7 +806,7 @@ func Load(ctx *kit.LoadCtx) (LayoutData, error) {
 	writeFile(t, filepath.Join(root, "src", "routes", "_page.svelte"),
 		"<h1>page</h1>\n")
 
-	if _, err := Build(BuildOptions{ProjectRoot: root}); err != nil {
+	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: root}); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 

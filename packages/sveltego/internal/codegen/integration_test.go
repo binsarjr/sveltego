@@ -6,6 +6,7 @@
 package codegen
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -168,7 +169,10 @@ func TestIntegrationManifestComposes(t *testing.T) {
 
 package routes
 
-import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
+import (
+	"context"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
+)
 
 func Load(ctx *kit.LoadCtx) (any, error) {
 	return struct{ Greeting string }{Greeting: "hello"}, nil
@@ -180,7 +184,10 @@ func Load(ctx *kit.LoadCtx) (any, error) {
 
 package _id_
 
-import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
+import (
+	"context"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
+)
 
 func Load(ctx *kit.LoadCtx) (any, error) {
 	return struct{ ID string }{ID: ctx.Params["id"]}, nil
@@ -189,7 +196,7 @@ func Load(ctx *kit.LoadCtx) (any, error) {
 func Actions() any { return nil }
 `)
 
-	if _, err := Build(BuildOptions{ProjectRoot: sandbox}); err != nil {
+	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: sandbox}); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 

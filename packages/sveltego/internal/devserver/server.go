@@ -85,7 +85,7 @@ func Run(ctx context.Context, opts Options) error {
 	)
 
 	// Initial codegen so the Go server can build against `.gen/`.
-	result, err := runCodegen(opts, logger)
+	result, err := runCodegen(ctx, opts, logger)
 	if err != nil {
 		return err
 	}
@@ -160,7 +160,7 @@ func handleChange(ctx context.Context, ev Change, opts Options, logger *slog.Log
 		logKeyFiles, rel,
 	)
 
-	if _, err := runCodegen(opts, logger); err != nil {
+	if _, err := runCodegen(ctx, opts, logger); err != nil {
 		logger.Error("devserver: codegen failed",
 			logKeyError, err,
 			logKeyElapsed, time.Since(start),
@@ -195,8 +195,8 @@ func changeKindLabel(k ChangeKind) string {
 }
 
 // runCodegen invokes codegen.Build with the dev defaults.
-func runCodegen(opts Options, logger *slog.Logger) (*codegen.BuildResult, error) {
-	return codegen.Build(codegen.BuildOptions{
+func runCodegen(ctx context.Context, opts Options, logger *slog.Logger) (*codegen.BuildResult, error) {
+	return codegen.Build(ctx, codegen.BuildOptions{
 		ProjectRoot: opts.ProjectRoot,
 		Verbose:     false,
 		Release:     false,

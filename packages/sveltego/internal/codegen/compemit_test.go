@@ -2,6 +2,7 @@ package codegen
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,7 +28,7 @@ import button "./button"
 </script>
 <button.Button label="OK" />
 `)
-	if _, err := Build(BuildOptions{ProjectRoot: root}); err != nil {
+	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: root}); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 
@@ -78,7 +79,7 @@ import button "./button"
 <button.Button label="OK" />
 `)
 
-	if _, err := Build(BuildOptions{ProjectRoot: root}); err != nil {
+	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: root}); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 
@@ -116,7 +117,7 @@ import badge "../badge"
 <badge.Badge />
 `)
 
-	if _, err := Build(BuildOptions{ProjectRoot: root}); err != nil {
+	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: root}); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 
@@ -154,7 +155,7 @@ import a "./a"
 <a.A />
 `)
 
-	_, err := Build(BuildOptions{ProjectRoot: root})
+	_, err := Build(context.Background(), BuildOptions{ProjectRoot: root})
 	if err == nil {
 		t.Fatal("expected error for component cycle, got nil")
 	}
@@ -203,7 +204,7 @@ import card2 "./card"
 <card2.Card />
 `)
 
-	_, err := Build(BuildOptions{ProjectRoot: root})
+	_, err := Build(context.Background(), BuildOptions{ProjectRoot: root})
 	if err == nil {
 		t.Fatal("expected casing collision error, got nil")
 	}
@@ -228,7 +229,7 @@ import button "./button"
 <button.Button label="OK" />
 `)
 
-	if _, err := Build(BuildOptions{ProjectRoot: root}); err != nil {
+	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: root}); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 
@@ -246,7 +247,7 @@ func TestEmitComponentTree_NoComponents(t *testing.T) {
 	root := t.TempDir()
 	scaffoldProject(t, root, "example.com/app")
 
-	if _, err := Build(BuildOptions{ProjectRoot: root}); err != nil {
+	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: root}); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 	// No components directory should be created.
@@ -370,7 +371,10 @@ func TestSvelteImportsFromSource_NoScript(t *testing.T) {
 func TestSvelteImportsFromSource_NonRelativeIgnored(t *testing.T) {
 	t.Parallel()
 	src := []byte(`<script lang="go">
-import "fmt"
+import (
+	"context"
+	"fmt"
+)
 import db "example.com/app/lib/db"
 </script>
 <h1>Hi</h1>

@@ -2,6 +2,7 @@ package codegen
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"go/format"
@@ -92,7 +93,12 @@ type BuildResult struct {
 // cross-route manifest and an embed.go stub. The user's go.mod module
 // path is read once and used to resolve `$lib` import literals in
 // hoisted <script lang="go"> blocks.
-func Build(opts BuildOptions) (*BuildResult, error) {
+//
+// ctx is propagated into the Phase 6 (#428) SSR sidecar so a devserver
+// hot rebuild or a CLI shutdown signal can tear down the Node child
+// process promptly. Pass context.Background() when there is no
+// surrounding cancellation source.
+func Build(ctx context.Context, opts BuildOptions) (*BuildResult, error) {
 	start := time.Now()
 	logger := opts.Logger
 	if logger == nil {
@@ -296,6 +302,18 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 			return nil, fmt.Errorf("codegen: %w", nerr)
 		}
 	}
+
+	// RFC #379 / ADR 0009 phase 6: drive the SSR Option-B pipeline.
+	// Pure-Svelte routes that aren't prerendered get a Render(payload,
+	// data) Go file emitted under .gen/usersrc/<encoded-pkg>/ via the
+	// svelte_js2go transpiler. The set of patterns successfully emitted
+	// is threaded into the manifest emitter so the Svelte-mode Page
+	// adapter can bridge the typed Render into router.PageHandler.
+	ssrEmitted, err := runSSRTranspile(ctx, opts.ProjectRoot, outDir, modulePath, logger, scan, routeOptions)
+	if err != nil {
+		return nil, err
+	}
+
 	hasServiceWorker := serviceWorkerEntry(opts.ProjectRoot) != ""
 	manifestBytes, err := GenerateManifest(scan, ManifestOptions{
 		PackageName:      "gen",
@@ -306,6 +324,7 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 		LayoutHeads:      layoutHeads,
 		ClientKeys:       clientKeysByPkg,
 		HasServiceWorker: hasServiceWorker,
+		SSRRenderRoutes:  ssrEmitted,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("codegen: generate manifest: %w", err)
