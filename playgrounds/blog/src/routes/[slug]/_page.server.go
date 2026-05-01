@@ -24,94 +24,62 @@ import (
 	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 )
 
+const Templates = "svelte"
+
+type Comment struct {
+	Author string `json:"author"`
+	Body   string `json:"body"`
+	Posted string `json:"posted"`
+}
+
+type PageData struct {
+	Title    string    `json:"title"`
+	Date     string    `json:"date"`
+	HTML     string    `json:"html"`
+	Comments []Comment `json:"comments"`
+	Form     any       `json:"form"`
+}
+
 var (
 	commentsMu sync.RWMutex
-	// comments stores in-memory threads keyed by post slug. The shape
-	// matches the anonymous struct returned by Load so values pass
-	// straight through to the template without conversion.
-	comments = map[string][]struct {
-		Author string
-		Body   string
-		Posted string
-	}{}
+	comments   = map[string][]Comment{}
 )
 
-func Load(ctx *kit.LoadCtx) (struct {
-	Title    string
-	Date     string
-	HTML     string
-	Comments []struct {
-		Author string
-		Body   string
-		Posted string
-	}
-	Form any
-},
-	error,
-) {
-	// First return literal carries the struct shape codegen infers from.
-	// Subsequent returns reuse `zero` to avoid restating the type seven
-	// times.
+func Load(ctx *kit.LoadCtx) (PageData, error) {
 	if ctx == nil || ctx.Params["slug"] == "" {
-		return struct {
-			Title    string
-			Date     string
-			HTML     string
-			Comments []struct {
-				Author string
-				Body   string
-				Posted string
-			}
-			Form any
-		}{}, errors.New("missing slug param")
+		return PageData{}, errors.New("missing slug param")
 	}
 	slug := ctx.Params["slug"]
 
-	var zero struct {
-		Title    string
-		Date     string
-		HTML     string
-		Comments []struct {
-			Author string
-			Body   string
-			Posted string
-		}
-		Form any
-	}
-
 	if !isSafeSlug(slug) {
-		return zero, kit.Error(404, "post not found")
+		return PageData{}, kit.Error(404, "post not found")
 	}
 
 	path := filepath.Join("content", "posts", slug+".md")
 	body, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return zero, kit.Error(404, "post not found")
+			return PageData{}, kit.Error(404, "post not found")
 		}
-		return zero, kit.Error(500, "read post: "+err.Error())
+		return PageData{}, kit.Error(500, "read post: "+err.Error())
 	}
 
 	fm, content := splitFrontmatter(body)
 	html, err := renderMarkdown(content)
 	if err != nil {
-		return zero, kit.Error(500, "render markdown: "+err.Error())
+		return PageData{}, kit.Error(500, "render markdown: "+err.Error())
 	}
 
 	commentsMu.RLock()
-	existing := append([]struct {
-		Author string
-		Body   string
-		Posted string
-	}(nil), comments[slug]...)
+	existing := append([]Comment(nil), comments[slug]...)
 	commentsMu.RUnlock()
 
-	out := zero
-	out.Title = fm["title"]
-	out.Date = fm["date"]
-	out.HTML = html
-	out.Comments = existing
-	return out, nil
+	return PageData{
+		Title:    fm["title"],
+		Date:     fm["date"],
+		HTML:     html,
+		Comments: existing,
+	}, nil
 }
 
 // Actions exposes the comment submission entry. The default key fires
@@ -142,11 +110,7 @@ var Actions = kit.ActionMap{
 			return kit.ActionFail(404, map[string]string{"error": "post not found"})
 		}
 
-		c := struct {
-			Author string
-			Body   string
-			Posted string
-		}{
+		c := Comment{
 			Author: form.Author,
 			Body:   form.Body,
 			Posted: time.Now().UTC().Format(time.RFC3339),

@@ -1,4 +1,7 @@
-<script lang="go"></script>
+<script lang="ts">
+  import type { PageData } from './_page.svelte';
+  let { data }: { data: PageData } = $props();
+</script>
 
 <div class="max-w-4xl mx-auto px-4 py-8">
   <nav class="flex items-center gap-4 pb-3 mb-6 border-b border-gray-200">
@@ -6,16 +9,16 @@
     <a href="/dashboard" class="text-blue-600 hover:underline text-sm font-medium">Dashboard</a>
     <form method="post" action="/?/logout" class="inline m-0">
       <button type="submit" class="bg-white text-blue-600 border border-blue-600 rounded-md px-3 py-1 text-sm cursor-pointer hover:bg-blue-50">
-        Logout ({data.Username})
+        Logout ({data.username})
       </button>
     </form>
   </nav>
 
   <h1 class="text-2xl font-bold text-gray-900 mb-2">Dashboard</h1>
-  <p class="text-gray-600 mb-6">Signed in as <strong class="font-semibold text-gray-900">{data.Username}</strong>.</p>
+  <p class="text-gray-600 mb-6">Signed in as <strong class="font-semibold text-gray-900">{data.username}</strong>.</p>
 
-  {#if data.FlashMsg != ""}
-    <p class="text-red-600 text-sm mb-4">{data.FlashMsg}</p>
+  {#if data.flashMsg !== ''}
+    <p class="text-red-600 text-sm mb-4">{data.flashMsg}</p>
   {/if}
 
   <h2 class="text-lg font-semibold text-gray-800 mb-3">Items</h2>
@@ -42,7 +45,7 @@
     </button>
   </form>
 
-  {#if len(data.Items) > 0}
+  {#if data.items.length > 0}
     <div class="overflow-x-auto mb-8">
       <table class="w-full border-collapse text-sm">
         <thead>
@@ -55,15 +58,15 @@
           </tr>
         </thead>
         <tbody>
-          {#each data.Items as it}
+          {#each data.items as it}
             <tr class="border-b border-gray-100 hover:bg-gray-50">
-              <td class="py-2 px-3"><code class="text-xs bg-gray-100 px-1 py-0.5 rounded">{it.ID}</code></td>
-              <td class="py-2 px-3"><a href={"/dashboard/items/" + it.ID} class="text-blue-600 hover:underline">{it.Title}</a></td>
-              <td class="py-2 px-3 text-gray-600">{it.Note}</td>
-              <td class="py-2 px-3 text-gray-500 text-xs">{it.UpdatedAt}</td>
+              <td class="py-2 px-3"><code class="text-xs bg-gray-100 px-1 py-0.5 rounded">{it.id}</code></td>
+              <td class="py-2 px-3"><a href={'/dashboard/items/' + it.id} class="text-blue-600 hover:underline">{it.title}</a></td>
+              <td class="py-2 px-3 text-gray-600">{it.note}</td>
+              <td class="py-2 px-3 text-gray-500 text-xs">{it.updatedAt}</td>
               <td class="py-2 px-3">
-                <form method="post" action={"/dashboard?/delete"} class="inline m-0">
-                  <input type="hidden" name="id" value={it.ID}>
+                <form method="post" action={'/dashboard?/delete'} class="inline m-0">
+                  <input type="hidden" name="id" value={it.id}>
                   <button
                     type="submit"
                     class="rounded-md bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700 cursor-pointer"
@@ -86,12 +89,12 @@
   <meta http-equiv="refresh" content="5;url=/dashboard">
 
   <div class="border border-dashed border-gray-300 rounded-lg p-4 bg-gray-50 font-mono text-sm mb-4">
-    <p class="mb-3 text-gray-700">Latest sample: <strong class="text-gray-900">{data.MetricLatest}</strong> @ <code class="text-xs bg-gray-100 px-1 py-0.5 rounded">{data.MetricLatestTS}</code></p>
-    {#each data.MetricBars as b}
+    <p class="mb-3 text-gray-700">Latest sample: <strong class="text-gray-900">{data.metricLatest}</strong> @ <code class="text-xs bg-gray-100 px-1 py-0.5 rounded">{data.metricLatestTs}</code></p>
+    {#each data.metricBars as b}
       <div class="flex items-center gap-2 mb-1">
-        <span class="inline-block h-4 bg-blue-600 rounded-sm" style={b.Width}></span>
-        <code class="text-xs text-gray-600">{b.Label}</code>
-        <span class="text-xs text-gray-500">{b.Value}</span>
+        <span class="inline-block h-4 bg-blue-600 rounded-sm" style={b.width}></span>
+        <code class="text-xs text-gray-600">{b.label}</code>
+        <span class="text-xs text-gray-500">{b.value}</span>
       </div>
     {/each}
   </div>

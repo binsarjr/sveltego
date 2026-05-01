@@ -7,31 +7,25 @@ import (
 	"github.com/binsarjr/sveltego/playgrounds/dashboard/src/lib/store"
 )
 
+const Templates = "svelte"
+
+type PageData struct {
+	LoggedIn bool   `json:"loggedIn"`
+	Username string `json:"username"`
+	Form     any    `json:"form"`
+}
+
 // Load returns the auth state so the index template can render a
 // personalized welcome or a sign-in CTA. Locals["user"] is populated by
 // the Handle hook in src/hooks.server.go.
-// The Form field is required by codegen on every page that declares
-// `var Actions = kit.ActionMap{...}` — codegen widens PageData with
-// `Form any` so action results can re-render. The user Load returns
-// the same struct type so the manifest adapter's type assertion
-// matches; runtime injects the action's payload after Load runs.
-func Load(ctx *kit.LoadCtx) (struct {
-	LoggedIn bool
-	Username string
-	Form     any
-}, error,
-) {
+func Load(ctx *kit.LoadCtx) (PageData, error) {
 	loggedIn := false
 	username := ""
 	if u, ok := ctx.Locals["user"].(*store.User); ok && u != nil {
 		loggedIn = true
 		username = u.Username
 	}
-	return struct {
-		LoggedIn bool
-		Username string
-		Form     any
-	}{
+	return PageData{
 		LoggedIn: loggedIn,
 		Username: username,
 	}, nil

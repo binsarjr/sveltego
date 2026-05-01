@@ -1,4 +1,7 @@
-<script lang="go"></script>
+<script lang="ts">
+  import type { PageData } from './_page.svelte';
+  let { data }: { data: PageData } = $props();
+</script>
 
 <div class="max-w-3xl mx-auto px-4 py-8">
   <nav class="flex items-center gap-4 pb-3 mb-6 border-b border-gray-200">
@@ -8,8 +11,8 @@
 
   <h1 class="text-2xl font-bold text-gray-900 mb-6">Sign in</h1>
 
-  {#if data.LastError != ""}
-    <p class="text-red-600 text-sm mb-4">{data.LastError}</p>
+  {#if data.lastError !== ''}
+    <p class="text-red-600 text-sm mb-4">{data.lastError}</p>
   {/if}
 
   <form method="post" action="/login?/default" class="space-y-4 max-w-sm">
@@ -18,7 +21,7 @@
         <input
           type="text"
           name="username"
-          value={data.LastUsername}
+          value={data.lastUsername}
           required
           class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
         >

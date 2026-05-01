@@ -9,68 +9,44 @@ import (
 	"github.com/binsarjr/sveltego/playgrounds/dashboard/src/lib/store"
 )
 
+const Templates = "svelte"
+
 const detailFlashCookie = "item_flash"
 
-// Load fetches the item by [id], scoped to the signed-in user. Missing
-// items 303 to /dashboard. Inline struct literals only (ADR 0004
-// amendment): PageData inference walks the return statement's literal
-// type and skips named aliases.
-func Load(ctx *kit.LoadCtx) (struct {
-	Username string
-	Item     struct {
-		ID        string
-		Title     string
-		Note      string
-		UpdatedAt string
-	}
-	FlashMsg string
-	Form     any
-}, error,
-) {
-	zero := struct {
-		Username string
-		Item     struct {
-			ID        string
-			Title     string
-			Note      string
-			UpdatedAt string
-		}
-		FlashMsg string
-		Form     any
-	}{}
+type Item struct {
+	ID        string `json:"id"`
+	Title     string `json:"title"`
+	Note      string `json:"note"`
+	UpdatedAt string `json:"updatedAt"`
+}
 
+type PageData struct {
+	Username string `json:"username"`
+	Item     Item   `json:"item"`
+	FlashMsg string `json:"flashMsg"`
+	Form     any    `json:"form"`
+}
+
+// Load fetches the item by [id], scoped to the signed-in user. Missing
+// items 303 to /dashboard.
+func Load(ctx *kit.LoadCtx) (PageData, error) {
 	u, _ := ctx.Locals["user"].(*store.User)
 	if u == nil {
-		return zero, kit.Redirect(303, "/login")
+		return PageData{}, kit.Redirect(303, "/login")
 	}
 	id := ctx.Params["id"]
 	it := store.Default.Get(u.ID, id)
 	if it == nil {
-		return zero, kit.Redirect(303, "/dashboard")
+		return PageData{}, kit.Redirect(303, "/dashboard")
 	}
 	flash := ""
 	if v, ok := ctx.Cookies.Get(detailFlashCookie); ok {
 		flash = v
 		ctx.Cookies.Delete(detailFlashCookie, kit.CookieOpts{Path: "/"})
 	}
-	return struct {
-		Username string
-		Item     struct {
-			ID        string
-			Title     string
-			Note      string
-			UpdatedAt string
-		}
-		FlashMsg string
-		Form     any
-	}{
+	return PageData{
 		Username: u.Username,
-		Item: struct {
-			ID        string
-			Title     string
-			Note      string
-			UpdatedAt string
-		}{
+		Item: Item{
 			ID:        it.ID,
 			Title:     it.Title,
 			Note:      it.Note,

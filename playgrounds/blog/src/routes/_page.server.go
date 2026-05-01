@@ -15,39 +15,31 @@ import (
 	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 )
 
+const Templates = "svelte"
+
 const pageSize = 3
 
-func Load(ctx *kit.LoadCtx) (struct {
-	Posts []struct {
-		Slug    string
-		Title   string
-		Summary string
-		Date    string
-	}
-	Page       int
-	TotalPages int
-	HasPrev    bool
-	HasNext    bool
-	PrevHref   string
-	NextHref   string
-}, error,
-) {
+type Post struct {
+	Slug    string `json:"slug"`
+	Title   string `json:"title"`
+	Summary string `json:"summary"`
+	Date    string `json:"date"`
+}
+
+type PageData struct {
+	Posts      []Post `json:"posts"`
+	Page       int    `json:"page"`
+	TotalPages int    `json:"totalPages"`
+	HasPrev    bool   `json:"hasPrev"`
+	HasNext    bool   `json:"hasNext"`
+	PrevHref   string `json:"prevHref"`
+	NextHref   string `json:"nextHref"`
+}
+
+func Load(ctx *kit.LoadCtx) (PageData, error) {
 	all, err := readAllPosts()
 	if err != nil {
-		return struct {
-			Posts []struct {
-				Slug    string
-				Title   string
-				Summary string
-				Date    string
-			}
-			Page       int
-			TotalPages int
-			HasPrev    bool
-			HasNext    bool
-			PrevHref   string
-			NextHref   string
-		}{}, kit.Error(500, "failed to load posts: "+err.Error())
+		return PageData{}, kit.Error(500, "failed to load posts: "+err.Error())
 	}
 
 	sort.Slice(all, func(i, j int) bool { return all[i].Date > all[j].Date })
@@ -84,20 +76,7 @@ func Load(ctx *kit.LoadCtx) (struct {
 		nextHref = "/?page=" + strconv.Itoa(pageNum+1)
 	}
 
-	return struct {
-		Posts []struct {
-			Slug    string
-			Title   string
-			Summary string
-			Date    string
-		}
-		Page       int
-		TotalPages int
-		HasPrev    bool
-		HasNext    bool
-		PrevHref   string
-		NextHref   string
-	}{
+	return PageData{
 		Posts:      all[start:end],
 		Page:       pageNum,
 		TotalPages: total,
@@ -109,27 +88,13 @@ func Load(ctx *kit.LoadCtx) (struct {
 }
 
 // readAllPosts walks content/posts for *.md files and parses the
-// frontmatter into the same anonymous struct shape Load returns. Using
-// the inline struct keeps PageData inference happy: codegen reads the
-// first return composite literal and copies its fields verbatim.
-func readAllPosts() ([]struct {
-	Slug    string
-	Title   string
-	Summary string
-	Date    string
-},
-	error,
-) {
+// frontmatter into Post values.
+func readAllPosts() ([]Post, error) {
 	entries, err := os.ReadDir("content/posts")
 	if err != nil {
 		return nil, err
 	}
-	out := make([]struct {
-		Slug    string
-		Title   string
-		Summary string
-		Date    string
-	}, 0, len(entries))
+	out := make([]Post, 0, len(entries))
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
 			continue
@@ -141,12 +106,7 @@ func readAllPosts() ([]struct {
 		}
 		fm, _ := splitFrontmatter(body)
 		slug := strings.TrimSuffix(e.Name(), ".md")
-		out = append(out, struct {
-			Slug    string
-			Title   string
-			Summary string
-			Date    string
-		}{
+		out = append(out, Post{
 			Slug:    slug,
 			Title:   fm["title"],
 			Summary: fm["summary"],
