@@ -1,4 +1,4 @@
-// Package svelte_js2go transpiles the ESTree JSON AST emitted by the
+// Package sveltejs2go transpiles the ESTree JSON AST emitted by the
 // Phase 2 sidecar (svelterender, ADR 0009) into Go render functions
 // that mirror Svelte's compiled server output.
 //
