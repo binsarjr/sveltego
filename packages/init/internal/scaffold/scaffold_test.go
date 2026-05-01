@@ -51,8 +51,8 @@ func TestRun_BaseScaffold(t *testing.T) {
 	if !bytes.Contains(gomod, []byte("module example.com/hello")) {
 		t.Errorf("go.mod missing module line, got: %s", gomod)
 	}
-	if !bytes.Contains(gomod, []byte("go 1.23")) {
-		t.Errorf("go.mod missing go 1.23 directive, got: %s", gomod)
+	if !bytes.Contains(gomod, []byte("go 1.25")) {
+		t.Errorf("go.mod missing go 1.25 directive, got: %s", gomod)
 	}
 }
 

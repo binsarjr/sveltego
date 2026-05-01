@@ -1,3 +1,3 @@
 module github.com/binsarjr/sveltego/adapter-cloudflare
 
-go 1.22
+go 1.25

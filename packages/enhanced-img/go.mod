@@ -1,3 +1,3 @@
 module github.com/binsarjr/sveltego/enhanced-img
 
-go 1.22
+go 1.25

@@ -52,7 +52,7 @@ func main() {
 func run(cfg config) int {
 	all, err := scenarios.All()
 	if err != nil {
-		fmt.Fprintf(cfg.stderr, "sveltego-bench: build scenarios: %v\n", err)
+		_, _ = fmt.Fprintf(cfg.stderr, "sveltego-bench: build scenarios: %v\n", err)
 		return exitErr
 	}
 
@@ -65,16 +65,16 @@ func run(cfg config) int {
 			}
 		}
 		if len(filtered) == 0 {
-			fmt.Fprintf(cfg.stderr, "sveltego-bench: unknown scenario %q\n", cfg.scenario)
+			_, _ = fmt.Fprintf(cfg.stderr, "sveltego-bench: unknown scenario %q\n", cfg.scenario)
 			return exitErr
 		}
 		selected = filtered
 	}
 
-	fmt.Fprintf(cfg.stdout, "scenario\tn\trps\tp50\tp99\n")
+	_, _ = fmt.Fprintf(cfg.stdout, "scenario\tn\trps\tp50\tp99\n")
 	for _, sc := range selected {
 		r := measure(sc, cfg.duration)
-		fmt.Fprintf(cfg.stdout, "%s\t%d\t%.0f\t%s\t%s\n",
+		_, _ = fmt.Fprintf(cfg.stdout, "%s\t%d\t%.0f\t%s\t%s\n",
 			sc.Name, r.n, r.rps, r.p50, r.p99)
 	}
 	return exitOK

@@ -1,80 +1,128 @@
+version: "2"
+
 run:
   timeout: 5m
-  go: '1.22'
   tests: true
 
 linters:
-  disable-all: true
+  default: none
   enable:
+    - bodyclose
+    - contextcheck        # ctx propagation
+    - depguard            # forbidden imports
     - errcheck
     - errorlint           # error wrapping correctness
-    - gofumpt             # stricter gofmt
-    - goimports
+    - gocritic
     - gosec               # security
     - govet
     - ineffassign
     - misspell
+    - perfsprint
     - revive              # replaces golint
-    - staticcheck         # incl. SA1019 deprecation
+    - sloglint            # slog usage
+    - staticcheck         # incl. SA1019 deprecation; merges stylecheck + gosimple in v2
+    - testifylint
+    - tparallel
     - unconvert
     - unused
-    - depguard            # forbidden imports
-    - bodyclose
-    - contextcheck        # ctx propagation
-    - sloglint            # slog usage
-    - tparallel
-    - testifylint
-    - gocritic
-    - perfsprint
 
-linters-settings:
-  goimports:
-    local-prefixes: github.com/binsarjr/sveltego
+  settings:
+    errcheck:
+      exclude-functions:
+        - (*os.File).Close
+        - (io.Closer).Close
+        - (*database/sql.Rows).Close
+        - (*github.com/fsnotify/fsnotify.Watcher).Close
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - os.Remove
+        - os.RemoveAll
 
-  errorlint:
-    errorf: true
-    asserts: true
-    comparison: true
+    errorlint:
+      errorf: true
+      asserts: true
+      comparison: true
 
-  gosec:
-    excludes:
-      - G104  # err checking is errcheck's job
-      - G115  # int/uint→uint32 via len(); len never negative, safe conversion
-      - G201  # SQL string formatting via internal placeholder helpers; not user input
-      - G202  # SQL string concatenation via internal placeholder helpers; not user input
+    gosec:
+      excludes:
+        - G103  # unsafe.* audited at server fast-path; intentional
+        - G104  # err checking is errcheck's job
+        - G115  # int/uint→uint32 via len(); len never negative, safe conversion
+        - G201  # SQL string formatting via internal placeholder helpers; not user input
+        - G202  # SQL string concatenation via internal placeholder helpers; not user input
+        - G204  # subprocess args flagged by taint; bench-compare invokes benchstat by design
+        - G301  # build output dirs intentionally world-readable (0o755)
+        - G304  # static asset path resolution audited at boundary
+        - G703  # path-traversal taint flags audited at boundary
+        - G704  # SSRF taint flags on kit.Fetch / hooks.Fetch by design
+        - G705  # XSS taint flags on streaming render path; SafeHTML at boundary
 
-  revive:
+    revive:
+      rules:
+        - name: package-comments
+        - name: exported
+          arguments:
+            - disableStutteringCheck
+            - checkPrivateReceivers
+            - sayRepetitiveInsteadOfStutters
+            - disableChecksOnConstants
+            - disableChecksOnMethods
+        - name: unused-parameter
+
+    staticcheck:
+      checks:
+        - all
+        - -ST1003   # HttpOnly etc kept as-is for HTTP cookie API mirror
+        - -ST1005   # capitalized error strings appear in user-facing diagnostics
+        - -QF1001   # De Morgan rewrite is style preference, not a bug
+        - -S1008    # if/else return collapse is style preference
+        - -S1011    # for-append-loop rewrite is style preference
+
+    sloglint:
+      no-mixed-args: true
+      kv-only: true
+      static-msg: true
+      no-raw-keys: true
+      key-naming-case: snake
+
+    depguard:
+      rules:
+        forbid-fmt-println-in-runtime:
+          files:
+            - '**/runtime/**'
+            - '**/exports/**'
+          deny:
+            - pkg: fmt
+              desc: use log/slog in runtime, not fmt.Println
+
+  exclusions:
     rules:
-      - name: package-comments
-      - name: exported
-      - name: unused-parameter
+      - path: _test\.go
+        linters:
+          - gosec
+          - errcheck
+          - sloglint
+      - path: cmd/
+        linters:
+          - depguard            # CLI may use fmt.Println
+          - errcheck            # CLI Fprint to stdout/stderr is fire-and-forget
+      - path: packages/sveltego/internal/codegen/provenance\.go
+        text: '(package-comments|ST1000)'
+        linters:
+          - revive
+          - staticcheck
 
-  sloglint:
-    no-mixed-args: true
-    kv-only: true
-    static-msg: true
-    no-raw-keys: true
-    key-naming-case: snake
-
-  depguard:
-    rules:
-      forbid-fmt-println-in-runtime:
-        files:
-          - '**/runtime/**'
-          - '**/exports/**'
-        deny:
-          - pkg: fmt
-            desc: use log/slog in runtime, not fmt.Println
+formatters:
+  enable:
+    - gofumpt             # stricter gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/binsarjr/sveltego
 
 issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - gosec
-        - errcheck
-    - path: cmd/
-      linters:
-        - depguard            # CLI may use fmt.Println
   max-issues-per-linter: 0
   max-same-issues: 0
   new-from-rev: ''            # lint full repo always; pre-commit uses --new-from-rev
