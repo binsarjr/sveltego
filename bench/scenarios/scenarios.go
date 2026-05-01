@@ -66,7 +66,11 @@ func All() ([]Scenario, error) {
 	if err != nil {
 		return nil, fmt.Errorf("action: %w", err)
 	}
-	return []Scenario{hello, list, detail, action}, nil
+	spa, err := SvelteSPA()
+	if err != nil {
+		return nil, fmt.Errorf("svelte-spa: %w", err)
+	}
+	return []Scenario{hello, list, detail, action, spa}, nil
 }
 
 // Hello renders a static greeting at "/".
@@ -172,6 +176,44 @@ func Action() (Scenario, error) {
 		Name:    "action",
 		Server:  srv,
 		Request: httptest.NewRequest(http.MethodPost, "/api/echo", nil),
+	}, nil
+}
+
+// SvelteSPA exercises the pure-Svelte hot path: the route declares no Go
+// Page handler, sets `Templates: "svelte"`, and returns the app shell
+// with a JSON hydration payload computed from a small Load. This is the
+// runtime-cost scenario for SPA-mode routes after the RFC #379 pivot.
+func SvelteSPA() (Scenario, error) {
+	type spaData struct {
+		Title string `json:"title"`
+		Items []int  `json:"items"`
+	}
+	routes := []router.Route{{
+		Pattern: "/spa",
+		Segments: []router.Segment{
+			{Kind: router.SegmentStatic, Value: "spa"},
+		},
+		Load: func(_ *kit.LoadCtx) (any, error) {
+			return spaData{
+				Title: "spa hot path",
+				Items: []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+			}, nil
+		},
+		Options: kit.PageOptions{
+			SSR:       true,
+			CSR:       true,
+			CSRF:      true,
+			Templates: kit.TemplatesSvelte,
+		},
+	}}
+	srv, err := newServer(routes)
+	if err != nil {
+		return Scenario{}, err
+	}
+	return Scenario{
+		Name:    "svelte-spa",
+		Server:  srv,
+		Request: httptest.NewRequest(http.MethodGet, "/spa", nil),
 	}, nil
 }
 

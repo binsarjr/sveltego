@@ -1,0 +1,43 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/binsarjr/sveltego/bench
+cpu: Apple M1 Pro
+                       │ /tmp/bench-pre-pivot.txt │      /tmp/bench-post-pivot.txt       │
+                       │          sec/op          │    sec/op      vs base               │
+ServeHTTP_Hello-10                    1.691µ ± 2%    1.965µ ± 13%  +16.24% (p=0.004 n=6)
+ServeHTTP_List-10                     2.092µ ± 3%    2.068µ ±  1%        ~ (p=0.065 n=6)
+ServeHTTP_Detail-10                   2.377µ ± 3%    2.376µ ±  2%        ~ (p=1.000 n=6)
+ServeHTTP_Action-10                   997.7n ± 4%   1035.0n ±  3%   +3.73% (p=0.028 n=6)
+RouteResolution-10                    124.4n ± 8%    134.2n ± 24%   +7.88% (p=0.015 n=6)
+RenderWriter-10                       16.52n ± 1%    16.60n ±  1%        ~ (p=0.071 n=6)
+ManifestColdStart-10                  2.291µ ± 2%    2.520µ ± 10%  +10.00% (p=0.004 n=6)
+ServeHTTP_SvelteSPA-10                               2.061µ ±  0%
+geomean                               630.1n         763.5n         +5.15%
+
+                       │ /tmp/bench-pre-pivot.txt │      /tmp/bench-post-pivot.txt       │
+                       │           B/op           │     B/op      vs base                │
+ServeHTTP_Hello-10                 2.662Ki ± 0%     2.662Ki ± 0%       ~ (p=1.000 n=6) ¹
+ServeHTTP_List-10                  3.124Ki ± 0%     3.124Ki ± 0%       ~ (p=1.000 n=6) ¹
+ServeHTTP_Detail-10                3.876Ki ± 0%     3.876Ki ± 0%       ~ (p=1.000 n=6) ¹
+ServeHTTP_Action-10                1.688Ki ± 0%     1.688Ki ± 0%       ~ (p=1.000 n=6) ¹
+RouteResolution-10                   336.0 ± 0%       336.0 ± 0%       ~ (p=1.000 n=6) ¹
+RenderWriter-10                      0.000 ± 0%       0.000 ± 0%       ~ (p=1.000 n=6) ¹
+ManifestColdStart-10               7.550Ki ± 0%     7.550Ki ± 0%       ~ (p=1.000 n=6) ¹
+ServeHTTP_SvelteSPA-10                              3.180Ki ± 0%
+geomean                                         ²                 +0.00%               ²
+¹ all samples are equal
+² summaries must be >0 to compute geomean
+
+                       │ /tmp/bench-pre-pivot.txt │     /tmp/bench-post-pivot.txt      │
+                       │        allocs/op         │ allocs/op   vs base                │
+ServeHTTP_Hello-10                   31.00 ± 0%     31.00 ± 0%       ~ (p=1.000 n=6) ¹
+ServeHTTP_List-10                    32.00 ± 0%     32.00 ± 0%       ~ (p=1.000 n=6) ¹
+ServeHTTP_Detail-10                  38.00 ± 0%     38.00 ± 0%       ~ (p=1.000 n=6) ¹
+ServeHTTP_Action-10                  23.00 ± 0%     23.00 ± 0%       ~ (p=1.000 n=6) ¹
+RouteResolution-10                   2.000 ± 0%     2.000 ± 0%       ~ (p=1.000 n=6) ¹
+RenderWriter-10                      0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=6) ¹
+ManifestColdStart-10                 43.00 ± 0%     43.00 ± 0%       ~ (p=1.000 n=6) ¹
+ServeHTTP_SvelteSPA-10                              37.00 ± 0%
+geomean                                         ²               +0.00%               ²
+¹ all samples are equal
+² summaries must be >0 to compute geomean
