@@ -1,0 +1,13 @@
+{
+  "helper": "Clsx",
+  "svelte_version": "5.x",
+  "cases": [
+    { "name": "single-string", "args": ["foo"], "want": "foo" },
+    { "name": "two-strings", "args": ["foo", "bar"], "want": "foo bar" },
+    { "name": "null-skipped", "args": [null, "foo", null], "want": "foo" },
+    { "name": "empty-skipped", "args": ["", "foo"], "want": "foo" },
+    { "name": "map-truthy", "args": [{"a": true, "b": false, "c": true}], "want": "a c" },
+    { "name": "nested-array", "args": [["x", ["y", "z"]]], "want": "x y z" },
+    { "name": "mixed", "args": ["base", {"on": true}, "trail"], "want": "base on trail" }
+  ]
+}
