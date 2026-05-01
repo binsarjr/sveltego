@@ -1,4 +1,4 @@
-package svelte_js2go
+package sveltejs2go
 
 import (
 	"bytes"
@@ -198,7 +198,7 @@ func assertGolden(t *testing.T, name string, got []byte) {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatalf("mkdir: %v", err)
 		}
-		if err := os.WriteFile(path, got, 0o644); err != nil {
+		if err := os.WriteFile(path, got, 0o600); err != nil {
 			t.Fatalf("write golden: %v", err)
 		}
 		return

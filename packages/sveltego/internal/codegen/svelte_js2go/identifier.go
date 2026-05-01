@@ -1,4 +1,4 @@
-package svelte_js2go
+package sveltejs2go
 
 import "strings"
 

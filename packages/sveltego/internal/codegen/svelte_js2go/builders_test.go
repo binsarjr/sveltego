@@ -1,4 +1,4 @@
-package svelte_js2go
+package sveltejs2go
 
 // AST builders used by the programmatic test cases. These mirror the
 // shapes Acorn would produce for the Svelte 5 server-compiled output;
@@ -171,11 +171,6 @@ func logical(op string, left, right *Node) *Node {
 	return &Node{Type: "LogicalExpression", Operator: op, Left: left, Right: right}
 }
 
-// unary builds a UnaryExpression.
-func unary(op string, arg *Node) *Node {
-	return &Node{Type: "UnaryExpression", Operator: op, Argument: arg, Prefix: true}
-}
-
 // update builds an UpdateExpression.
 func update(op string, arg *Node) *Node {
 	return &Node{Type: "UpdateExpression", Operator: op, Argument: arg}
@@ -220,9 +215,4 @@ func objExpr(pairs ...[2]*Node) *Node {
 		props = append(props, &Node{Type: "Property", Key: p[0], Value: p[1], Kind: "init"})
 	}
 	return &Node{Type: "ObjectExpression", Properties: props}
-}
-
-// arrExpr builds an ArrayExpression.
-func arrExpr(items ...*Node) *Node {
-	return &Node{Type: "ArrayExpression", Properties: items}
 }

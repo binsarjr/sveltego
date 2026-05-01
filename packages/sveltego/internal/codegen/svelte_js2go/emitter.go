@@ -1,7 +1,8 @@
-package svelte_js2go
+package sveltejs2go
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"go/format"
 	"strconv"
@@ -48,33 +49,43 @@ type ExprRewriter interface {
 // alone).
 type Scope struct {
 	parent  *Scope
-	locals  map[string]localKind
+	locals  map[string]LocalKind
 	dataVar string
 }
 
-type localKind uint8
+// LocalKind classifies how a name was bound in scope. Phase 5 uses
+// this to decide whether to apply property-access lowering — only
+// LocalProp identifiers root user-data trees that get JSON-tag
+// translation.
+type LocalKind uint8
 
 const (
-	localUnknown localKind = iota
-	localProp              // destructured prop (data, params, etc.)
-	localEach              // {#each} item alias
-	localScratch           // emitter-introduced ($$index, each_array)
-	localSnippet
+	LocalUnknown LocalKind = iota
+	// LocalProp marks a destructured prop (data, params, etc.) —
+	// the root of a user-data subtree subject to Phase 5 lowering.
+	LocalProp
+	// LocalEach marks an {#each} item alias inside a loop body.
+	LocalEach
+	// LocalScratch marks emitter-introduced bookkeeping names
+	// (ssvar_index, each_array). Phase 5 leaves these alone.
+	LocalScratch
+	// LocalSnippet marks a {#snippet}-bound closure.
+	LocalSnippet
 )
 
 func newScope(parent *Scope) *Scope {
-	return &Scope{parent: parent, locals: map[string]localKind{}}
+	return &Scope{parent: parent, locals: map[string]LocalKind{}}
 }
 
 // Lookup returns the kind of a local, walking parent scopes. Returns
-// localUnknown when the name isn't bound.
-func (s *Scope) Lookup(name string) localKind {
+// LocalUnknown when the name isn't bound.
+func (s *Scope) Lookup(name string) LocalKind {
 	for cur := s; cur != nil; cur = cur.parent {
 		if k, ok := cur.locals[name]; ok {
 			return k
 		}
 	}
-	return localUnknown
+	return LocalUnknown
 }
 
 // IsDataRoot reports whether name refers to the destructured props
@@ -89,7 +100,7 @@ func (s *Scope) IsDataRoot(name string) bool {
 	return false
 }
 
-func (s *Scope) declare(name string, kind localKind) {
+func (s *Scope) declare(name string, kind LocalKind) {
 	if name == "" {
 		return
 	}
@@ -294,7 +305,7 @@ func (e *emitter) recordImport(decl *Node) error {
 
 func (e *emitter) emitRenderFunction(b *Buf, fn *Node) error {
 	if fn == nil {
-		return fmt.Errorf("svelte_js2go: render function missing")
+		return errors.New("svelte_js2go: render function missing")
 	}
 	if fn.Type != "FunctionDeclaration" && fn.Type != "ArrowFunctionExpression" && fn.Type != "FunctionExpression" {
 		return unknownShape(fn, "render-fn:"+fn.Type)
@@ -519,7 +530,7 @@ func (e *emitter) emitDeclarator(b *Buf, kind string, d *Node) error {
 		if err != nil {
 			return err
 		}
-		e.scope.declare(name, localScratch)
+		e.scope.declare(name, LocalScratch)
 		b.Line("%s := %s.EnsureArrayLike(%s)", name, e.opts.HelperAlias, inner)
 		return nil
 	}
@@ -535,14 +546,14 @@ func (e *emitter) emitDeclarator(b *Buf, kind string, d *Node) error {
 		if err != nil {
 			return err
 		}
-		e.scope.declare(name, localEach)
+		e.scope.declare(name, LocalEach)
 		b.Line("%s := %s[%s]", name, obj, idx)
 		return nil
 	}
 
 	// Pattern 4: counter init `let $$index = 0`
 	if d.Init != nil && d.Init.Type == "Literal" && d.Init.LitKind == litNumber {
-		e.scope.declare(name, localScratch)
+		e.scope.declare(name, LocalScratch)
 		b.Line("%s := %s", name, strconv.FormatInt(int64(d.Init.LitNum), 10))
 		return nil
 	}
@@ -553,7 +564,7 @@ func (e *emitter) emitDeclarator(b *Buf, kind string, d *Node) error {
 		if err != nil {
 			return err
 		}
-		e.scope.declare(name, localScratch)
+		e.scope.declare(name, LocalScratch)
 		b.Line("%s := len(%s)", name, e.lengthExpr(d.Init, expr))
 		return nil
 	}
@@ -564,14 +575,14 @@ func (e *emitter) emitDeclarator(b *Buf, kind string, d *Node) error {
 		if err != nil {
 			return err
 		}
-		e.scope.declare(name, localUnknown)
+		e.scope.declare(name, LocalUnknown)
 		b.Line("%s := %s", name, expr)
 		_ = kind
 		return nil
 	}
 
 	// var without init — rare; emit a zero-valued any.
-	e.scope.declare(name, localUnknown)
+	e.scope.declare(name, LocalUnknown)
 	b.Line("var %s any", name)
 	return nil
 }
@@ -608,7 +619,7 @@ func (e *emitter) emitPropsDestructure(b *Buf, pat *Node) error {
 		// The destructured root variable is what Svelte wraps with
 		// $props(); typically "data". Phase 5 hooks this slot via
 		// scope.dataVar.
-		e.scope.declare(goName, localProp)
+		e.scope.declare(goName, LocalProp)
 		if e.scope.dataVar == "" {
 			e.scope.dataVar = goName
 		}
@@ -719,7 +730,7 @@ func (e *emitter) formatForInitDecl(d *Node) (string, error) {
 		return "", unknownShape(d, "for-init-id")
 	}
 	name := mangleIdent(d.ID.Name)
-	e.scope.declare(name, localScratch)
+	e.scope.declare(name, LocalScratch)
 	if d.Init == nil {
 		return fmt.Sprintf("var %s int", name), nil
 	}
@@ -754,7 +765,7 @@ func (e *emitter) emitForOf(b *Buf, stmt *Node) error {
 	if err != nil {
 		return err
 	}
-	e.scope.declare(name, localEach)
+	e.scope.declare(name, LocalEach)
 	b.Line("for _, %s := range %s {", name, rhs)
 	b.In(func() {
 		_ = e.emitStatement(b, stmt.FuncBody)

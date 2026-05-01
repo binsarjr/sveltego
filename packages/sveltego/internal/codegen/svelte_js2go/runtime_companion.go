@@ -1,4 +1,4 @@
-package svelte_js2go
+package sveltejs2go
 
 // CompanionFile returns a small runtime companion the generated render
 // files depend on. It is written once per package alongside the

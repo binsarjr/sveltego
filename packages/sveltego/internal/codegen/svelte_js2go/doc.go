@@ -16,4 +16,4 @@
 // Property-access lowering (data.name -> data.Name via JSON tags) is
 // out of scope here; Phase 5 (#427) layers it on top of the expression
 // walker via the rewriter hook exposed in emitter.go.
-package svelte_js2go
+package sveltejs2go

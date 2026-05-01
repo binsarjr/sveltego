@@ -1,4 +1,4 @@
-package svelte_js2go
+package sveltejs2go
 
 import (
 	"fmt"
@@ -224,9 +224,9 @@ func (e *emitter) formatUpdate(n *Node) (string, error) {
 	}
 	switch n.Operator {
 	case "++":
-		return fmt.Sprintf("%s++", arg), nil
+		return arg + "++", nil
 	case "--":
-		return fmt.Sprintf("%s--", arg), nil
+		return arg + "--", nil
 	}
 	return "", unknownShape(n, "update:"+n.Operator)
 }
@@ -259,7 +259,7 @@ func (e *emitter) formatObject(n *Node) (string, error) {
 			if err != nil {
 				return "", err
 			}
-			parts = append(parts, fmt.Sprintf("/* spread */ %s", inner))
+			parts = append(parts, "/* spread */ "+inner)
 			continue
 		}
 		if p.Type != "Property" {
@@ -324,14 +324,14 @@ func (e *emitter) formatFunctionExpr(n *Node) (string, error) {
 		switch p.Type {
 		case "Identifier":
 			name := mangleIdent(p.Name)
-			e.scope.declare(name, localUnknown)
-			params = append(params, fmt.Sprintf("%s any", name))
+			e.scope.declare(name, LocalUnknown)
+			params = append(params, name+" any")
 		case "ObjectPattern":
 			// Snippet parameters often arrive as object patterns.
 			// Bind them to a synthetic name; the body's destructuring
 			// usually unpacks via member access. Phase 5 expands.
 			synthetic := fmt.Sprintf("ssvar_arg%d", len(params))
-			params = append(params, fmt.Sprintf("%s any", synthetic))
+			params = append(params, synthetic+" any")
 		default:
 			return "", unknownShape(p, "fn-param:"+p.Type)
 		}

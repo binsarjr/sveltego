@@ -1,4 +1,4 @@
-package svelte_js2go
+package sveltejs2go
 
 // allProgrammaticCases enumerates the 30 priority emit shapes from
 // issue #425. The hello-world and each-list shapes come from the
