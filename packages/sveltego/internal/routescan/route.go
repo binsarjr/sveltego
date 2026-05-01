@@ -54,6 +54,11 @@ type ScannedRoute struct {
 	// boundary's directory wrap the error template; layouts strictly
 	// below the boundary abort. Zero when no boundary applies.
 	ErrorBoundaryLayoutDepth int
+	// SSRFallback is true when the route's `_page.svelte` declares
+	// `<!-- sveltego:ssr-fallback -->`. Annotated routes opt out of the
+	// build-time JS→Go transpiler (ADR 0009) and route through the
+	// long-running Node sidecar at request time (Phase 8, #430).
+	SSRFallback bool
 }
 
 // DiscoveredMatcher names a Go file under src/params/ that exports

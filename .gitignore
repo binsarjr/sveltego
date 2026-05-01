@@ -9,6 +9,9 @@ vite.config.gen.js
 **/_page.svelte.d.ts
 **/_layout.svelte.d.ts
 
+# Phase 8 (#430) sidecar fallback runtime cache (compiled SSR modules)
+**/.sveltego-fallback-*/
+
 # Go
 /sveltego
 /sveltego.exe

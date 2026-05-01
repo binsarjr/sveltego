@@ -1,3 +1,4 @@
+<!-- sveltego:ssr-fallback -->
 <script lang="ts">
   import type { PageData } from './_page.svelte';
   let { data }: { data: PageData } = $props();
