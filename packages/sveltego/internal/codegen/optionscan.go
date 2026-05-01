@@ -8,6 +8,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 	"github.com/binsarjr/sveltego/packages/sveltego/internal/routescan"
@@ -25,6 +26,7 @@ var optionConstNames = map[string]struct{}{
 	"SSROnly":            {},
 	"CSRF":               {},
 	"TrailingSlash":      {},
+	"Templates":          {},
 }
 
 // scanPageOptions reads path (when present) and returns the page
@@ -139,8 +141,37 @@ func assignOption(out *kit.PageOptionsOverride, name string, expr goast.Expr, pa
 		}
 		out.TrailingSlash = v
 		out.HasTrailingSlash = true
+	case "Templates":
+		v, err := evalTemplates(expr)
+		if err != nil {
+			return fmt.Errorf("codegen: %s: Templates: %w", path, err)
+		}
+		out.Templates = v
+		out.HasTemplates = true
 	}
 	return nil
+}
+
+// evalTemplates accepts a string literal and validates it against the
+// known template pipeline values. Anything else is a fatal codegen
+// error so a typo (e.g. "svetle") never silently falls back to the
+// default.
+func evalTemplates(expr goast.Expr) (string, error) {
+	bl, ok := expr.(*goast.BasicLit)
+	if !ok || bl.Kind != token.STRING {
+		return "", errors.New(`must be a string literal ("go-mustache" or "svelte")`)
+	}
+	val, err := strconv.Unquote(bl.Value)
+	if err != nil {
+		return "", fmt.Errorf("invalid string literal %s: %w", bl.Value, err)
+	}
+	switch val {
+	case kit.TemplatesGoMustache, kit.TemplatesSvelte:
+		return val, nil
+	case "":
+		return kit.TemplatesGoMustache, nil
+	}
+	return "", fmt.Errorf(`unknown Templates value %q (want "go-mustache" or "svelte")`, val)
 }
 
 func evalBool(expr goast.Expr) (bool, error) {

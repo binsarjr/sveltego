@@ -1,11 +1,14 @@
-<script lang="go"></script>
+<script lang="ts">
+  import type { PageData } from './_page.svelte';
+  let { data }: { data: PageData } = $props();
+</script>
 
-<h1>{data.Greeting}</h1>
+<h1>{data.greeting}</h1>
 
-{#if len(data.Posts) > 0}
+{#if data.posts && data.posts.length > 0}
   <ul>
-    {#each data.Posts as p}
-      <li><a href={"/post/" + p.ID}>{p.Title}</a></li>
+    {#each data.posts as post}
+      <li><a href={'/post/' + post.id}>{post.title}</a></li>
     {/each}
   </ul>
 {:else}

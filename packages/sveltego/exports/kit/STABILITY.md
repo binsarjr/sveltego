@@ -69,9 +69,11 @@ Tiers per [RFC #97](https://github.com/binsarjr/sveltego/issues/97).
 - `kit.BuildCSPHeader` — builds a CSP header value string
 - `kit.CSPHeaderName` — returns the header name for the given CSP mode
 - `kit.TrailingSlash` — enumeration of trailing-slash policies
-- `kit.PageOptions` — per-route rendering options
+- `kit.PageOptions` — per-route rendering options (now includes `Templates`: "go-mustache" default, "svelte" opt-in for RFC #379 phase 3)
 - `kit.PageOptionsOverride` — partial options for merging into PageOptions
 - `kit.DefaultPageOptions` — returns sensible defaults
+- `kit.TemplatesGoMustache` — string constant for the Mustache-Go template pipeline
+- `kit.TemplatesSvelte` — string constant for the pure-Svelte template pipeline
 - `kit.M` — type alias for `map[string]any`
 - `kit.JSON` — builds a JSON response
 - `kit.Text` — builds a plain-text response
