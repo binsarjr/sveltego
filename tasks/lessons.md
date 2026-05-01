@@ -6,6 +6,7 @@ To add a new entry, create a new `YYYY-MM-DD-<topic>.md` file there — **do not
 
 Entries newest-first:
 
+- [2026-05-02: SSR Option B decision (RFC #421 → ADR 0009; vendored Acorn, hard-error fallback, lock-one-minor)](lessons/2026-05-02-ssr-option-b-decision.md)
 - [2026-04-30: defer #158 (collectStreams reflection) to v1.0 perf hardening — closes #215](lessons/2026-04-30-v0.1-master-review-defer-158.md)
 - [2026-04-30: CI playground skip lists are pre-existing footguns](lessons/2026-04-30-ci-playground-skip-lists-are-pre-existing-footguns.md)
 - [2026-04-30: Phase 0kk: blog playground (#62) + Form/PageData gap (#143)](lessons/2026-04-30-phase-0kk-blog-playground-62-formpagedata-gap-143-3.md)
