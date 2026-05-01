@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/binsarjr/sveltego/exports/kit"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 )
 
 func newEvent(t *testing.T) *kit.RequestEvent {

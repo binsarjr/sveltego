@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/binsarjr/sveltego/exports/kit/params"
-	"github.com/binsarjr/sveltego/runtime/router"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit/params"
+	"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
 )
 
 // TestServer_ServiceWorker_RegistersWhenEnabled covers issue #89: SSR

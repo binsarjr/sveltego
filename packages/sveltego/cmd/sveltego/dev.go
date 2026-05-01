@@ -10,7 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/binsarjr/sveltego/internal/devserver"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/devserver"
 )
 
 func newDevCmd() *cobra.Command {

@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/binsarjr/sveltego/exports/kit"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 )
 
 // Log keys used exclusively by cron task logging.

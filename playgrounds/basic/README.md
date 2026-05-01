@@ -63,8 +63,8 @@ playgrounds/basic/
 
 ```bash
 cd playgrounds/basic
-go run github.com/binsarjr/sveltego/cmd/sveltego compile
-go run github.com/binsarjr/sveltego/cmd/sveltego build --out ./build/app
+go run github.com/binsarjr/sveltego/packages/sveltego/cmd/sveltego compile
+go run github.com/binsarjr/sveltego/packages/sveltego/cmd/sveltego build --out ./build/app
 ./build/app           # listens on :3000
 curl http://localhost:3000/
 curl http://localhost:3000/post/123

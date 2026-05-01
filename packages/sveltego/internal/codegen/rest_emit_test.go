@@ -16,7 +16,7 @@ func TestBuild_EmitsRESTDispatcher(t *testing.T) {
 
 package users
 
-import "github.com/binsarjr/sveltego/exports/kit"
+import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
 func GET(ev *kit.RequestEvent) *kit.Response {
 	_ = ev
@@ -88,7 +88,7 @@ func TestBuild_RESTUnknownVerbErrors(t *testing.T) {
 
 package api
 
-import "github.com/binsarjr/sveltego/exports/kit"
+import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
 func Get(ev *kit.RequestEvent) *kit.Response { return kit.NoContent() }
 `)

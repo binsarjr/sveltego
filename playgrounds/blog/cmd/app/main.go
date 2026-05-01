@@ -12,8 +12,8 @@ import (
 
 	gen "github.com/binsarjr/sveltego/playgrounds/blog/.gen"
 
-	"github.com/binsarjr/sveltego/exports/kit/params"
-	"github.com/binsarjr/sveltego/server"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit/params"
+	"github.com/binsarjr/sveltego/packages/sveltego/server"
 )
 
 func main() {

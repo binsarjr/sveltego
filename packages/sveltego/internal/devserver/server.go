@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/binsarjr/sveltego/internal/codegen"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/codegen"
 )
 
 // Options configures Run.

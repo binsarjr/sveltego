@@ -1,6 +1,6 @@
 package params
 
-import "github.com/binsarjr/sveltego/runtime/router"
+import "github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
 
 // Slug matches lowercase a-z, digits, and hyphens, with no leading or
 // trailing hyphen and no consecutive hyphens. Equivalent to the regular

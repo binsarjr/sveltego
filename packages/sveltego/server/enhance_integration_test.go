@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/binsarjr/sveltego/exports/kit"
-	"github.com/binsarjr/sveltego/runtime/router"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
+	"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
 )
 
 // enhanceRoute returns a /login route with CSRF disabled so individual

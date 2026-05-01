@@ -2,7 +2,7 @@
 package gen
 
 import (
-	"github.com/binsarjr/sveltego/exports/kit"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 )
 
 // Hooks returns the user-authored hook bundle, with identity

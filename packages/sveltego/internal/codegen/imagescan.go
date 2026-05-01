@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/binsarjr/sveltego/internal/images"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/images"
 )
 
 // imageSrcPattern captures the literal src= value on an <Image> opening

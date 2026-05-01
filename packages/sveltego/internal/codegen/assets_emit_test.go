@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/binsarjr/sveltego/internal/assets"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/assets"
 )
 
 func TestGenerateAssetsManifest_Empty(t *testing.T) {

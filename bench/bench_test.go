@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	"github.com/binsarjr/sveltego/bench/scenarios"
-	"github.com/binsarjr/sveltego/render"
-	"github.com/binsarjr/sveltego/runtime/router"
+	"github.com/binsarjr/sveltego/packages/sveltego/render"
+	"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
 )
 
 func BenchmarkServeHTTP_Hello(b *testing.B)  { runScenario(b, mustHello) }

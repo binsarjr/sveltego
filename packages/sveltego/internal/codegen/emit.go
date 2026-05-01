@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/binsarjr/sveltego/internal/images"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/images"
 )
 
 // Builder accumulates generated Go source with line and indentation

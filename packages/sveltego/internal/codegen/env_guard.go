@@ -3,7 +3,7 @@ package codegen
 import (
 	goast "go/ast"
 
-	"github.com/binsarjr/sveltego/internal/ast"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/ast"
 )
 
 // checkPrivateEnv inspects expr for calls to env.StaticPrivate or

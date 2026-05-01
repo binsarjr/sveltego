@@ -3,8 +3,8 @@ package router
 import (
 	"net/http"
 
-	"github.com/binsarjr/sveltego/exports/kit"
-	"github.com/binsarjr/sveltego/render"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
+	"github.com/binsarjr/sveltego/packages/sveltego/render"
 )
 
 // PageHandler renders a +page.svelte for the given context and load data.

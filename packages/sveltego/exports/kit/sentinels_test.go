@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/binsarjr/sveltego/exports/kit"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 )
 
 // wrapErr is a minimal error wrapper used by tests to avoid the fmt import.

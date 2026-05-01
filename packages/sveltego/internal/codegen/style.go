@@ -3,8 +3,8 @@ package codegen
 import (
 	"strings"
 
-	"github.com/binsarjr/sveltego/internal/ast"
-	"github.com/binsarjr/sveltego/internal/codegen/css"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/ast"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/codegen/css"
 )
 
 // styleInfo captures the at-most-one <style> block extracted from a

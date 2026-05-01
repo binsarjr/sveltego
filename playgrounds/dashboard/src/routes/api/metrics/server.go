@@ -3,7 +3,7 @@
 package metrics
 
 import (
-	"github.com/binsarjr/sveltego/exports/kit"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 	"github.com/binsarjr/sveltego/playgrounds/dashboard/src/lib/store"
 )
 

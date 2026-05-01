@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/binsarjr/sveltego/exports/kit"
-	"github.com/binsarjr/sveltego/runtime/router"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
+	"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
 )
 
 // afterRoute builds a route that queues n After callbacks via the Handle

@@ -7,9 +7,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/binsarjr/sveltego/exports/kit"
-	"github.com/binsarjr/sveltego/internal/routescan"
-	"github.com/binsarjr/sveltego/runtime/router"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/routescan"
+	"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
 )
 
 // entry pairs one ScannedRoute with the import alias the manifest will
@@ -262,15 +262,15 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 	case hasPage || hasLayout:
 		b.Line(`"fmt"`)
 		b.Line("")
-		b.Line(`"github.com/binsarjr/sveltego/exports/kit"`)
-		b.Line(`"github.com/binsarjr/sveltego/render"`)
+		b.Line(`"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"`)
+		b.Line(`"github.com/binsarjr/sveltego/packages/sveltego/render"`)
 	case hasError:
-		b.Line(`"github.com/binsarjr/sveltego/exports/kit"`)
-		b.Line(`"github.com/binsarjr/sveltego/render"`)
+		b.Line(`"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"`)
+		b.Line(`"github.com/binsarjr/sveltego/packages/sveltego/render"`)
 	case hasNonDefaultOptions:
-		b.Line(`"github.com/binsarjr/sveltego/exports/kit"`)
+		b.Line(`"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"`)
 	}
-	b.Line(`"github.com/binsarjr/sveltego/runtime/router"`)
+	b.Line(`"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"`)
 	if len(imports) > 0 {
 		b.Line("")
 		for _, ip := range imports {

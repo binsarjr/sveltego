@@ -26,7 +26,7 @@ func TestScanLocalsAccess_DetectsCtxLocals(t *testing.T) {
 
 package routes
 
-import "github.com/binsarjr/sveltego/exports/kit"
+import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
 func Load(ctx *kit.LoadCtx) (any, error) {
 	user := ctx.Locals["user"]
@@ -54,7 +54,7 @@ func TestScanLocalsAccess_DirectiveSuppresses(t *testing.T) {
 
 package routes
 
-import "github.com/binsarjr/sveltego/exports/kit"
+import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
 //sveltego:allow-locals-prerender
 func Load(ctx *kit.LoadCtx) (any, error) {
@@ -98,7 +98,7 @@ func TestScanLocalsAccess_LayoutLoad(t *testing.T) {
 
 package routes
 
-import "github.com/binsarjr/sveltego/exports/kit"
+import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
 func LayoutLoad(ctx *kit.LoadCtx) (any, error) {
 	if v, ok := ctx.Locals["nonce"]; ok {

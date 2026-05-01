@@ -1,6 +1,6 @@
 package routescan
 
-import "github.com/binsarjr/sveltego/runtime/router"
+import "github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
 
 // ScannedRoute is the scanner's view of a single route directory before
 // the manifest emitter consumes it. It carries the parsed router segments

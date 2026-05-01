@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/binsarjr/sveltego/internal/ast"
-	"github.com/binsarjr/sveltego/test-utils/golden"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/ast"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/testutils/golden"
 )
 
 func parseOK(t *testing.T, src string) *ast.Fragment {

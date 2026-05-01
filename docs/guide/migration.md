@@ -70,7 +70,7 @@ export async function load({ locals, params }) {
 
 package routes
 
-import "github.com/binsarjr/sveltego/exports/kit"
+import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
 type PageData struct {
   Post Post

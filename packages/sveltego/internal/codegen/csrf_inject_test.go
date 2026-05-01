@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/binsarjr/sveltego/internal/parser"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/parser"
 )
 
 // TestCSRFInjection_PostFormGetsHiddenInput verifies the codegen-time

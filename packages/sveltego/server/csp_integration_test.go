@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/binsarjr/sveltego/exports/kit"
-	"github.com/binsarjr/sveltego/runtime/router"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
+	"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
 )
 
 func newCSPServer(t *testing.T, csp kit.CSPConfig, routes []router.Route, hooks kit.Hooks) *Server {

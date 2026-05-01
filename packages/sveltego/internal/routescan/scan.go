@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/binsarjr/sveltego/runtime/router"
+	"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
 )
 
 // specialFiles names the file conventions a route directory may

@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/binsarjr/sveltego/exports/kit"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 )
 
 const pageSize = 3

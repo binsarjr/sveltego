@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/binsarjr/sveltego/internal/parser"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/parser"
 )
 
 // TestIntegrationSmoke writes generated `.gen.go` files for a handful of
@@ -39,9 +39,9 @@ func TestIntegrationSmoke(t *testing.T) {
 		"",
 		"go 1.22",
 		"",
-		"require github.com/binsarjr/sveltego v0.0.0-00010101000000-000000000000",
+		"require github.com/binsarjr/sveltego/packages/sveltego v0.0.0-00010101000000-000000000000",
 		"",
-		"replace github.com/binsarjr/sveltego => " + sveltegoModuleDir,
+		"replace github.com/binsarjr/sveltego/packages/sveltego => " + sveltegoModuleDir,
 		"",
 	}, "\n")
 	if err := os.WriteFile(filepath.Join(sandbox, "go.mod"), []byte(goMod), 0o644); err != nil {
@@ -143,9 +143,9 @@ func TestIntegrationManifestComposes(t *testing.T) {
 		"",
 		"go 1.22",
 		"",
-		"require github.com/binsarjr/sveltego v0.0.0-00010101000000-000000000000",
+		"require github.com/binsarjr/sveltego/packages/sveltego v0.0.0-00010101000000-000000000000",
 		"",
-		"replace github.com/binsarjr/sveltego => " + sveltegoModuleDir,
+		"replace github.com/binsarjr/sveltego/packages/sveltego => " + sveltegoModuleDir,
 		"",
 	}, "\n")
 	if err := os.WriteFile(filepath.Join(sandbox, "go.mod"), []byte(goMod), 0o644); err != nil {
@@ -168,7 +168,7 @@ func TestIntegrationManifestComposes(t *testing.T) {
 
 package routes
 
-import "github.com/binsarjr/sveltego/exports/kit"
+import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
 func Load(ctx *kit.LoadCtx) (any, error) {
 	return struct{ Greeting string }{Greeting: "hello"}, nil
@@ -180,7 +180,7 @@ func Load(ctx *kit.LoadCtx) (any, error) {
 
 package _id_
 
-import "github.com/binsarjr/sveltego/exports/kit"
+import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
 func Load(ctx *kit.LoadCtx) (any, error) {
 	return struct{ ID string }{ID: ctx.Params["id"]}, nil
@@ -208,7 +208,7 @@ func Actions() any { return nil }
 import (
 	"manifestsmoke/.gen"
 
-	"github.com/binsarjr/sveltego/runtime/router"
+	"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
 )
 
 func main() {

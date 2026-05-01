@@ -3,7 +3,7 @@ package vite
 import (
 	"testing"
 
-	"github.com/binsarjr/sveltego/test-utils/golden"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/testutils/golden"
 )
 
 func TestGenerateConfig_Fixtures(t *testing.T) {

@@ -3,8 +3,8 @@ package parser
 import (
 	"strings"
 
-	"github.com/binsarjr/sveltego/internal/ast"
-	"github.com/binsarjr/sveltego/internal/lexer"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/ast"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/lexer"
 )
 
 func tokPos(t lexer.Token) ast.Pos {

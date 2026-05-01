@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/binsarjr/sveltego/internal/version"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/version"
 )
 
 func newVersionCmd() *cobra.Command {

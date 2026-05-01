@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/binsarjr/sveltego/internal/images"
-	"github.com/binsarjr/sveltego/internal/parser"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/images"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/parser"
 )
 
 func TestEmitImage_BasicMarkup(t *testing.T) {

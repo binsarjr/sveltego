@@ -3,7 +3,7 @@ package codegen
 import (
 	"fmt"
 
-	"github.com/binsarjr/sveltego/internal/ast"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/ast"
 )
 
 // emitIfBlock lowers {#if cond} ... {:else if c2} ... {:else} ... {/if} to

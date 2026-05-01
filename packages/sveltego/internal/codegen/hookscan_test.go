@@ -45,7 +45,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/binsarjr/sveltego/exports/kit"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 )
 
 func Handle(ev *kit.RequestEvent, resolve kit.ResolveFn) (*kit.Response, error) {
@@ -80,7 +80,7 @@ func TestScanHooksServer_partial(t *testing.T) {
 
 package src
 
-import "github.com/binsarjr/sveltego/exports/kit"
+import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
 func Handle(ev *kit.RequestEvent, resolve kit.ResolveFn) (*kit.Response, error) {
 	return resolve(ev)

@@ -5,7 +5,7 @@ package _id_
 import (
 	"errors"
 
-	"github.com/binsarjr/sveltego/exports/kit"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 )
 
 func Load(ctx *kit.LoadCtx) (struct {

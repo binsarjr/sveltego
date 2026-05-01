@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/binsarjr/sveltego/exports/kit"
-	"github.com/binsarjr/sveltego/internal/parser"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/parser"
 )
 
 // scanPrerenderFromSvelte parses a +page.svelte or +layout.svelte and

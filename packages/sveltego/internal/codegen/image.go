@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/binsarjr/sveltego/internal/ast"
-	"github.com/binsarjr/sveltego/internal/images"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/ast"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/images"
 )
 
 // imageElementName is the sveltego built-in component for build-time

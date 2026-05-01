@@ -3,8 +3,8 @@ package parser
 import (
 	"strings"
 
-	"github.com/binsarjr/sveltego/internal/ast"
-	"github.com/binsarjr/sveltego/internal/lexer"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/ast"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/lexer"
 )
 
 // Parse converts a Svelte 5 template into a Fragment AST. The returned

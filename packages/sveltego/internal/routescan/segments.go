@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/binsarjr/sveltego/runtime/router"
+	"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
 )
 
 // ErrGroup is returned by ParseSegment when the directory name encodes a

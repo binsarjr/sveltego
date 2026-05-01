@@ -7,7 +7,7 @@ package params
 import (
 	"strconv"
 
-	"github.com/binsarjr/sveltego/runtime/router"
+	"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
 )
 
 // Int matches segments parseable as a base-10 signed integer via

@@ -31,7 +31,7 @@ cd hello
 Until [#368](https://github.com/binsarjr/sveltego/issues/368) ships release binaries, install the build CLI from source:
 
 ```sh
-go install github.com/binsarjr/sveltego/cmd/sveltego@latest
+go install github.com/binsarjr/sveltego/packages/sveltego/cmd/sveltego@latest
 sveltego version
 ```
 
@@ -79,7 +79,7 @@ The scaffold writes `cmd/app/main.go`, `app.html`, `package.json`, and `vite.con
 
 package routes
 
-import "github.com/binsarjr/sveltego/exports/kit"
+import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
 func Load(ctx *kit.LoadCtx) (PageData, error) {
   return PageData{Greeting: "hello, sveltego"}, nil

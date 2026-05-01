@@ -35,7 +35,7 @@ func lookupKitSymbol(kitDir, symbol string) (string, error) {
 		return "", err
 	}
 
-	docPkg := doc.New(pkg, "github.com/binsarjr/sveltego/exports/kit", doc.AllDecls)
+	docPkg := doc.New(pkg, "github.com/binsarjr/sveltego/packages/sveltego/exports/kit", doc.AllDecls)
 
 	for _, f := range docPkg.Funcs {
 		if f.Name == symbol {

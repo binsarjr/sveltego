@@ -1,7 +1,7 @@
 package codegen
 
 import (
-	"github.com/binsarjr/sveltego/internal/ast"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/ast"
 )
 
 // isSvelteSpecialGlobal reports whether name is one of the global-target

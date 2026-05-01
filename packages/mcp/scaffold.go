@@ -52,7 +52,7 @@ type PageData = struct {
 
 package routes
 
-import "github.com/binsarjr/sveltego/exports/kit"
+import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
 func Load(ctx *kit.LoadCtx) (any, error) {
 	return struct {
@@ -89,7 +89,7 @@ type LayoutData = struct {
 
 package routes
 
-import "github.com/binsarjr/sveltego/exports/kit"
+import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
 func Load(ctx *kit.LoadCtx) (any, error) {
 	return struct {
@@ -113,7 +113,7 @@ package routes
 import (
 	"net/http"
 
-	"github.com/binsarjr/sveltego/exports/kit"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 )
 
 func GET(ev *kit.RequestEvent) (*kit.Response, error) {

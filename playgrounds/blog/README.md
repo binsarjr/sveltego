@@ -76,8 +76,8 @@ playgrounds/blog/
 
 ```bash
 cd playgrounds/blog
-go run github.com/binsarjr/sveltego/cmd/sveltego compile
-go run github.com/binsarjr/sveltego/cmd/sveltego build --out ./build/app
+go run github.com/binsarjr/sveltego/packages/sveltego/cmd/sveltego compile
+go run github.com/binsarjr/sveltego/packages/sveltego/cmd/sveltego build --out ./build/app
 ./build/app                                    # listens on :8080
 curl -fsS http://localhost:8080/ | head -40    # paginated index, 200 OK
 curl -fsS "http://localhost:8080/?page=2"      # second page, 200 OK

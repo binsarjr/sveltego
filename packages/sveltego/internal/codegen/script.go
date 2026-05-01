@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/binsarjr/sveltego/internal/ast"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/ast"
 )
 
 // runePrefix is the placeholder substituted in for `$name` rune references

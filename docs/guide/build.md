@@ -40,7 +40,7 @@ Declare per-page options as exported constants in `page.server.go` or `layout.se
 
 package routes
 
-import "github.com/binsarjr/sveltego/exports/kit"
+import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
 const (
   Prerender     = true

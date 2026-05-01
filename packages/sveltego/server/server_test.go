@@ -15,10 +15,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/binsarjr/sveltego/exports/kit"
-	"github.com/binsarjr/sveltego/exports/kit/params"
-	"github.com/binsarjr/sveltego/render"
-	"github.com/binsarjr/sveltego/runtime/router"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit/params"
+	"github.com/binsarjr/sveltego/packages/sveltego/render"
+	"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
 )
 
 const testShell = "<!doctype html><html><head>%sveltego.head%</head><body>%sveltego.body%</body></html>"

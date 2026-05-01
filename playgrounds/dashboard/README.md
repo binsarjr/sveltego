@@ -88,8 +88,8 @@ auto-refreshes the page every 5 seconds. True client-side polling (a
 
 ```bash
 cd playgrounds/dashboard
-go run github.com/binsarjr/sveltego/cmd/sveltego compile
-go run github.com/binsarjr/sveltego/cmd/sveltego build --out ./build/app
+go run github.com/binsarjr/sveltego/packages/sveltego/cmd/sveltego compile
+go run github.com/binsarjr/sveltego/packages/sveltego/cmd/sveltego build --out ./build/app
 ./build/app                               # listens on :3000
 ```
 

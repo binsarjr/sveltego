@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	sveltepkg "github.com/binsarjr/sveltego/internal/parser"
+	sveltepkg "github.com/binsarjr/sveltego/packages/sveltego/internal/parser"
 )
 
 // svelteImport records one relative import from a .svelte file's <script

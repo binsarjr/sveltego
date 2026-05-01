@@ -42,7 +42,6 @@ for the canonical layout.
 | `packages/` | Versioned, releasable Go modules (core, adapters, tooling). |
 | `playgrounds/` | Example apps consumed during development; not released. |
 | `benchmarks/` | Bench harness and regression gate (RFC #105). |
-| `test-utils/` | Shared test helpers, importable across packages. |
 
 Module path naming: `github.com/binsarjr/sveltego/<package>`. New packages
 land alongside an issue describing their scope and a fresh `STABILITY.md`
@@ -237,7 +236,7 @@ Prefer `kit.App`, `router.Mux`, `codegen.Emitter`.
 - **Golden tests** for deterministic output (codegen, transformers, manifest
   serialization): see
   [documentation/docs/contributing/golden-tests.md](documentation/docs/contributing/golden-tests.md).
-  Helper: `github.com/binsarjr/sveltego/test-utils/golden`. Update flow runs
+  Helper: `github.com/binsarjr/sveltego/packages/sveltego/internal/testutils/golden`. Update flow runs
   the suite with `-args -update`, then humans review the diff before commit.
 - **Bench regression gate** runs on every PR touching Go. Threshold rules,
   override format (`bench-regression:` in PR body), and local repro commands

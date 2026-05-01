@@ -9,8 +9,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/binsarjr/sveltego/internal/codegen"
-	"github.com/binsarjr/sveltego/internal/routescan"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/codegen"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/routescan"
 )
 
 func newRoutesCmd() *cobra.Command {
