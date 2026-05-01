@@ -28,9 +28,31 @@ func parseViteManifest(data string) (viteManifestMap, error) {
 	return m, nil
 }
 
+// globalCSSFile finds a manifest entry whose source is the conventional
+// `src/app.css` and whose output is a CSS asset, returning its hashed
+// file path or "". Tailwind (and any addon that pipes through src/app.css)
+// produces such an entry; pages need its tag in <head> regardless of
+// route, since the imports are global.
+func (m viteManifestMap) globalCSSFile() string {
+	if m == nil {
+		return ""
+	}
+	c, ok := m["src/app.css"]
+	if !ok {
+		return ""
+	}
+	if !strings.HasSuffix(c.File, ".css") {
+		return ""
+	}
+	return c.File
+}
+
 // assetTags returns the HTML fragment (script + modulepreload + stylesheet
 // tags) for routeKey. Returns an empty string when routeKey is not in the
-// manifest or when m is nil.
+// manifest or when m is nil. When the manifest has a `src/app.css` entry
+// (Tailwind / PostCSS / global stylesheet path), its hashed file is
+// prepended as a <link rel="stylesheet"> so the global stylesheet loads
+// alongside route-scoped CSS.
 func (m viteManifestMap) assetTags(routeKey, base string) string {
 	if m == nil {
 		return ""
@@ -42,6 +64,11 @@ func (m viteManifestMap) assetTags(routeKey, base string) string {
 	base = strings.TrimRight(base, "/")
 
 	var b strings.Builder
+
+	if globalCSS := m.globalCSSFile(); globalCSS != "" {
+		fmt.Fprintf(&b, `<link rel="stylesheet" href="%s/%s">`, base, globalCSS)
+		b.WriteByte('\n')
+	}
 
 	seen := make(map[string]struct{})
 	var collectImports func(key string)
