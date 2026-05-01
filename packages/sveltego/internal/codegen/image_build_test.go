@@ -2,6 +2,7 @@ package codegen
 
 import (
 	"bytes"
+	"context"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -26,7 +27,7 @@ func TestBuild_ImageVariantsEndToEnd(t *testing.T) {
 
 	writeJPEGFixture(t, filepath.Join(root, "static", "assets", "hero.jpg"), 1600, 1200)
 
-	res, err := Build(BuildOptions{
+	res, err := Build(context.Background(), BuildOptions{
 		ProjectRoot: root,
 		NoClient:    true,
 		ImageWidths: []int{320, 640, 1280},
@@ -116,7 +117,7 @@ func TestBuild_NoImagesShortCircuits(t *testing.T) {
 	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/app\n\ngo 1.23\n")
 	writeFile(t, filepath.Join(root, "src", "routes", "_page.svelte"),
 		"<h1>plain</h1>\n")
-	if _, err := Build(BuildOptions{ProjectRoot: root, NoClient: true}); err != nil {
+	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: root, NoClient: true}); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 }

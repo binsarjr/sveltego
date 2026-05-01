@@ -2,6 +2,7 @@ package codegen
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,7 +13,7 @@ func TestBuild_NoHooksFile_emitsDefaultStub(t *testing.T) {
 	root := t.TempDir()
 	scaffoldProject(t, root, "example.com/app")
 
-	if _, err := Build(BuildOptions{ProjectRoot: root}); err != nil {
+	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: root}); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 
@@ -63,7 +64,7 @@ func Reroute(u *url.URL) string { return "" }
 func Init(ctx context.Context) error { return nil }
 `)
 
-	if _, err := Build(BuildOptions{ProjectRoot: root}); err != nil {
+	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: root}); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 
@@ -116,7 +117,7 @@ package src
 func Handle() {}
 `)
 
-	if _, err := Build(BuildOptions{ProjectRoot: root}); err == nil {
+	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: root}); err == nil {
 		t.Fatal("expected error on bad Handle signature")
 	}
 }

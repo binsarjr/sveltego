@@ -2,6 +2,7 @@ package codegen
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -16,7 +17,10 @@ func TestBuild_EmitsRESTDispatcher(t *testing.T) {
 
 package users
 
-import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
+import (
+	"context"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
+)
 
 func GET(ev *kit.RequestEvent) *kit.Response {
 	_ = ev
@@ -29,7 +33,7 @@ func POST(ev *kit.RequestEvent) *kit.Response {
 }
 `)
 
-	if _, err := Build(BuildOptions{ProjectRoot: root}); err != nil {
+	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: root}); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 
@@ -88,11 +92,14 @@ func TestBuild_RESTUnknownVerbErrors(t *testing.T) {
 
 package api
 
-import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
+import (
+	"context"
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
+)
 
 func Get(ev *kit.RequestEvent) *kit.Response { return kit.NoContent() }
 `)
-	if _, err := Build(BuildOptions{ProjectRoot: root}); err == nil {
+	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: root}); err == nil {
 		t.Fatal("expected error on unknown exported function")
 	}
 }

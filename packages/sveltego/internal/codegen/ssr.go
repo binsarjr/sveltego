@@ -44,7 +44,7 @@ type ssrPlan struct {
 // auth track land. ADR 0009 mandates a hard error for unrecognised
 // emit shapes; that path runs inside Transpile/Lowerer once Node is
 // available.
-func runSSRTranspile(projectRoot, outDir, modulePath string, logger *slog.Logger, scan *routescan.ScanResult, routeOptions map[string]kit.PageOptions) (map[string]string, error) {
+func runSSRTranspile(ctx context.Context, projectRoot, outDir, modulePath string, logger *slog.Logger, scan *routescan.ScanResult, routeOptions map[string]kit.PageOptions) (map[string]string, error) {
 	plan := planSSR(scan, routeOptions)
 	if len(plan) == 0 {
 		return nil, nil
@@ -70,7 +70,7 @@ func runSSRTranspile(projectRoot, outDir, modulePath string, logger *slog.Logger
 	}
 
 	astOutDir := filepath.Join(projectRoot, outDir, "sveltejs2go")
-	results, err := svelterender.BuildSSRAST(context.Background(), svelterender.SSROptions{
+	results, err := svelterender.BuildSSRAST(ctx, svelterender.SSROptions{
 		Root:   projectRoot,
 		OutDir: astOutDir,
 		Jobs:   jobs,

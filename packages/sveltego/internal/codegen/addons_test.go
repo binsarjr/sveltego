@@ -2,6 +2,7 @@ package codegen
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -125,7 +126,7 @@ func TestBuild_TailwindV4_WiresViteConfig(t *testing.T) {
 		t.Fatalf("seed app.css: %v", err)
 	}
 
-	res, err := Build(BuildOptions{ProjectRoot: root})
+	res, err := Build(context.Background(), BuildOptions{ProjectRoot: root})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -160,7 +161,7 @@ func TestBuild_TailwindV3_WiresPostCSS(t *testing.T) {
 		t.Fatalf("seed app.css: %v", err)
 	}
 
-	res, err := Build(BuildOptions{ProjectRoot: root})
+	res, err := Build(context.Background(), BuildOptions{ProjectRoot: root})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
