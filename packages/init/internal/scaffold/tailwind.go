@@ -113,8 +113,8 @@ func renderLayoutSvelte(flavor TailwindFlavor) string {
 		return layoutSvelteBody
 	}
 	var b strings.Builder
-	b.WriteString("<script lang=\"go\">\n")
-	b.WriteString("  import \"./app.css\"\n")
+	b.WriteString("<script lang=\"ts\">\n")
+	b.WriteString("  import './app.css';\n")
 	b.WriteString("</script>\n\n")
 	b.WriteString("<slot />\n")
 	return b.String()
@@ -128,7 +128,9 @@ func renderPageSvelte(flavor TailwindFlavor) string {
 		return pageSvelteBody
 	}
 	var b strings.Builder
-	b.WriteString("<script lang=\"go\"></script>\n\n")
+	b.WriteString("<script lang=\"ts\">\n")
+	b.WriteString("  let { data } = $props();\n")
+	b.WriteString("</script>\n\n")
 	b.WriteString("<h1 class=\"text-3xl font-bold underline\">{data.Greeting}</h1>\n")
 	b.WriteString("<p class=\"note\">Tailwind utilities + scoped &lt;style&gt; coexist.</p>\n\n")
 	b.WriteString("<style>\n")

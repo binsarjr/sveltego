@@ -165,11 +165,19 @@ func runViteBuild(cmd *cobra.Command, root, viteConfig string, verbose bool) err
 // current. ensureSveltegoRequire bridges that gap on first build.
 const sveltegoModulePath = "github.com/binsarjr/sveltego/packages/sveltego"
 
+// sveltegoRequireRef is the version selector passed to `go get` when the
+// require line is missing. Pinned to `@main` until release-please cuts a
+// real tag: `@latest` resolves to the bootstrap pseudo-version whose
+// module path mismatches the post-#378 layout, so the proxy silently
+// drops the require directive (#413). `@main` always resolves the
+// current commit on the default branch.
+const sveltegoRequireRef = "@main"
+
 // ensureSveltegoRequire seeds the project's go.mod with a require line for
 // the framework runtime when one is missing. The fresh-scaffold (#110)
 // emits a bare `module ... / go 1.23` clause so we do not pin a literal
 // `v0.0.0` that the proxy cannot resolve. On the first `sveltego build`,
-// shell out to `go get <module>@latest` to let the proxy fill in the
+// shell out to `go get <module>@main` to let the proxy fill in the
 // current pseudo-version and seed go.sum at the same time.
 //
 // A go.mod that already requires the framework module is left untouched
@@ -184,14 +192,21 @@ func ensureSveltegoRequire(cmd *cobra.Command, root string, verbose bool) error 
 		return nil
 	}
 	if verbose {
-		fmt.Fprintf(cmd.OutOrStdout(), "go.mod: adding require %s@latest\n", sveltegoModulePath)
+		fmt.Fprintf(cmd.OutOrStdout(), "go.mod: adding require %s%s\n", sveltegoModulePath, sveltegoRequireRef)
 	}
-	getCmd := exec.Command("go", "get", sveltegoModulePath+"@latest") //nolint:gosec // module path is a fixed constant
+	getCmd := exec.Command("go", "get", sveltegoModulePath+sveltegoRequireRef) //nolint:gosec // module path and ref are fixed constants
 	getCmd.Dir = root
 	getCmd.Stdout = cmd.OutOrStdout()
 	getCmd.Stderr = cmd.ErrOrStderr()
 	if err := getCmd.Run(); err != nil {
-		return fmt.Errorf("go get %s@latest: %w", sveltegoModulePath, err)
+		return fmt.Errorf("go get %s%s: %w", sveltegoModulePath, sveltegoRequireRef, err)
+	}
+	body, err = os.ReadFile(goModPath) //nolint:gosec // root is resolved from cwd
+	if err != nil {
+		return fmt.Errorf("re-read go.mod after go get: %w", err)
+	}
+	if !hasRequire(body, sveltegoModulePath) {
+		return fmt.Errorf("go get %s%s succeeded but go.mod still missing require %s", sveltegoModulePath, sveltegoRequireRef, sveltegoModulePath)
 	}
 	return nil
 }

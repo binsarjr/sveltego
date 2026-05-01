@@ -153,7 +153,7 @@ func baseFiles(module string, flavor TailwindFlavor) []file {
 		{path: "vite.config.js", body: []byte(viteConfigBody)},
 		{path: "tsconfig.json", body: []byte(tsconfigBody)},
 		{path: "sveltego.config.go", body: []byte(configBody)},
-		{path: "hooks.server.go", body: []byte(hooksBody)},
+		{path: "src/hooks.server.go", body: []byte(hooksBody)},
 		{path: "cmd/app/main.go", body: []byte(renderMainGo(module))},
 		{path: "src/routes/_page.svelte", body: []byte(renderPageSvelte(flavor))},
 		{path: "src/routes/_page.server.go", body: []byte(pageServerBody)},
@@ -204,7 +204,7 @@ func renderReadme(module string) string {
 	b.WriteString("- `src/lib/` — shared modules (`$lib` alias).\n")
 	b.WriteString("- `cmd/app/main.go` — Go entrypoint that wires the generated routes to an HTTP server.\n")
 	b.WriteString("- `app.html` — root HTML shell with `%sveltego.head%` / `%sveltego.body%` placeholders.\n")
-	b.WriteString("- `hooks.server.go` — request lifecycle hooks.\n")
+	b.WriteString("- `src/hooks.server.go` — request lifecycle hooks.\n")
 	b.WriteString("- `sveltego.config.go` — project config.\n")
 	b.WriteString("- `package.json`, `vite.config.js` — Vite client bundle config (consumed by `sveltego build`).\n")
 	b.WriteString("- `.gen/` — generated Go from `.svelte` (gitignored).\n")
@@ -215,11 +215,15 @@ func renderMainGo(module string) string {
 	var b strings.Builder
 	b.WriteString("package main\n\n")
 	b.WriteString("import (\n")
+	b.WriteString("\t\"errors\"\n")
 	b.WriteString("\t\"log\"\n")
-	b.WriteString("\t\"os\"\n\n")
+	b.WriteString("\t\"net/http\"\n")
+	b.WriteString("\t\"os\"\n")
+	b.WriteString("\t\"time\"\n\n")
 	b.WriteString("\tgen \"")
 	b.WriteString(module)
 	b.WriteString("/.gen\"\n\n")
+	b.WriteString("\t\"github.com/binsarjr/sveltego/packages/sveltego/exports/kit\"\n")
 	b.WriteString("\t\"github.com/binsarjr/sveltego/packages/sveltego/exports/kit/params\"\n")
 	b.WriteString("\t\"github.com/binsarjr/sveltego/packages/sveltego/server\"\n")
 	b.WriteString(")\n\n")
@@ -228,19 +232,36 @@ func renderMainGo(module string) string {
 	b.WriteString("\tif err != nil {\n")
 	b.WriteString("\t\tlog.Fatalf(\"read app.html: %v\", err)\n")
 	b.WriteString("\t}\n")
+	b.WriteString("\tmanifest, err := os.ReadFile(\"static/_app/.vite/manifest.json\")\n")
+	b.WriteString("\tif err != nil && !errors.Is(err, os.ErrNotExist) {\n")
+	b.WriteString("\t\tlog.Fatalf(\"read vite manifest: %v\", err)\n")
+	b.WriteString("\t}\n")
 	b.WriteString("\ts, err := server.New(server.Config{\n")
 	b.WriteString("\t\tRoutes:        gen.Routes(),\n")
 	b.WriteString("\t\tMatchers:      params.DefaultMatchers(),\n")
 	b.WriteString("\t\tShell:         string(shell),\n")
 	b.WriteString("\t\tHooks:         gen.Hooks(),\n")
 	b.WriteString("\t\tServiceWorker: gen.HasServiceWorker,\n")
+	b.WriteString("\t\tViteManifest:  string(manifest),\n")
+	b.WriteString("\t\tViteBase:      \"/_app\",\n")
 	b.WriteString("\t})\n")
 	b.WriteString("\tif err != nil {\n")
 	b.WriteString("\t\tlog.Fatalf(\"server.New: %v\", err)\n")
 	b.WriteString("\t}\n")
+	b.WriteString("\tmux := http.NewServeMux()\n")
+	b.WriteString("\tmux.Handle(\"/_app/\", http.StripPrefix(\"/_app\", server.StaticHandler(kit.StaticConfig{\n")
+	b.WriteString("\t\tDir:  \"static/_app\",\n")
+	b.WriteString("\t\tETag: true,\n")
+	b.WriteString("\t})))\n")
+	b.WriteString("\tmux.Handle(\"/\", s)\n")
 	b.WriteString("\taddr := \":3000\"\n")
 	b.WriteString("\tlog.Printf(\"listening on %s\", addr)\n")
-	b.WriteString("\tlog.Fatal(s.ListenAndServe(addr))\n")
+	b.WriteString("\thttpSrv := &http.Server{\n")
+	b.WriteString("\t\tAddr:              addr,\n")
+	b.WriteString("\t\tHandler:           mux,\n")
+	b.WriteString("\t\tReadHeaderTimeout: 10 * time.Second,\n")
+	b.WriteString("\t}\n")
+	b.WriteString("\tlog.Fatal(httpSrv.ListenAndServe())\n")
 	b.WriteString("}\n")
 	return b.String()
 }
@@ -355,12 +376,14 @@ package hooks
 
 import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
-var Handle kit.HandleFn = func(ev *kit.RequestEvent, resolve kit.ResolveFn) (*kit.Response, error) {
+func Handle(ev *kit.RequestEvent, resolve kit.ResolveFn) (*kit.Response, error) {
 	return resolve(ev)
 }
 `
 
-const pageSvelteBody = `<script lang="go"></script>
+const pageSvelteBody = `<script lang="ts">
+  let { data } = $props();
+</script>
 
 <h1>{data.Greeting}</h1>
 `
@@ -379,9 +402,7 @@ func Load(ctx *kit.LoadCtx) (PageData, error) {
 }
 `
 
-const layoutSvelteBody = `<script lang="go"></script>
-
-<slot />
+const layoutSvelteBody = `<slot />
 `
 
 // serviceWorkerStarter is the opt-in Service Worker scaffold written when

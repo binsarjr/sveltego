@@ -118,6 +118,32 @@ func Handle() {}
 	}
 }
 
+// TestScanHooksServer_varForm covers the legacy var-declaration shape
+// older scaffolds emitted (`var Handle kit.HandleFn = func(...) ...`).
+// The scanner must still register the hook so a scaffold drift back to
+// this form does not silently drop wiring (#415 forward-compat).
+func TestScanHooksServer_varForm(t *testing.T) {
+	t.Parallel()
+	body := `//go:build sveltego
+
+package src
+
+import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
+
+var Handle kit.HandleFn = func(ev *kit.RequestEvent, resolve kit.ResolveFn) (*kit.Response, error) {
+	return resolve(ev)
+}
+`
+	root := writeTempHooks(t, body)
+	set, err := scanHooksServer(root)
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if !set.Handle {
+		t.Errorf("Handle = false on var-form, want true; set = %+v", set)
+	}
+}
+
 func TestScanHooksServer_ignoresMethods(t *testing.T) {
 	t.Parallel()
 	// A receiver-bearing method named Handle must not register as a hook.

@@ -84,7 +84,7 @@ func TestRun_TailwindV4_WritesPlugin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read layout: %v", err)
 	}
-	if !bytes.Contains(layout, []byte(`import "./app.css"`)) {
+	if !bytes.Contains(layout, []byte(`import './app.css'`)) {
 		t.Errorf("_layout.svelte missing app.css import, got: %s", layout)
 	}
 }

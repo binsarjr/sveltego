@@ -217,7 +217,11 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 					return nil, cerr
 				}
 				clientRouteKeys = append(clientRouteKeys, ck)
-				clientKeysByPkg[route.PackagePath] = ck
+				// Vite's manifest keys facade entries by the source-relative
+				// path of the input file, not the input alias. Match the
+				// key Vite actually emits so route-tag injection finds the
+				// chunk at runtime.
+				clientKeysByPkg[route.PackagePath] = filepath.ToSlash(filepath.Join(outDir, "client", filepath.FromSlash(ck), "entry.ts"))
 				clientRouterMap[route.Pattern] = relSvelteFromRouter
 				if hasSnapshot {
 					clientSnapshotRoutes[route.Pattern] = true

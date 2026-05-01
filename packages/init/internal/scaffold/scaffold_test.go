@@ -31,7 +31,7 @@ func TestRun_BaseScaffold(t *testing.T) {
 		"package.json",
 		"vite.config.js",
 		"sveltego.config.go",
-		"hooks.server.go",
+		"src/hooks.server.go",
 		"cmd/app/main.go",
 		"src/routes/_page.svelte",
 		"src/routes/_page.server.go",
@@ -110,6 +110,7 @@ func TestRun_MainGoCompiles(t *testing.T) {
 	}
 	wantImports := []string{
 		`"example.com/hello/.gen"`,
+		`"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"`,
 		`"github.com/binsarjr/sveltego/packages/sveltego/exports/kit/params"`,
 		`"github.com/binsarjr/sveltego/packages/sveltego/server"`,
 	}
@@ -192,7 +193,11 @@ func TestRun_AICopiesEmbedFSByteEqual(t *testing.T) {
 
 func TestRun_RefusesOverwriteWithoutForce(t *testing.T) {
 	dir := t.TempDir()
-	hooksPath := filepath.Join(dir, "hooks.server.go")
+	hooksDir := filepath.Join(dir, "src")
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		t.Fatalf("mkdir src: %v", err)
+	}
+	hooksPath := filepath.Join(hooksDir, "hooks.server.go")
 	if err := os.WriteFile(hooksPath, []byte("// pre-existing\n"), 0o644); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -201,21 +206,25 @@ func TestRun_RefusesOverwriteWithoutForce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if !contains(res.Skipped, "hooks.server.go") {
-		t.Errorf("expected hooks.server.go in skipped, got %v", res.Skipped)
+	if !contains(res.Skipped, "src/hooks.server.go") {
+		t.Errorf("expected src/hooks.server.go in skipped, got %v", res.Skipped)
 	}
 	body, err := os.ReadFile(hooksPath)
 	if err != nil {
 		t.Fatalf("read hooks: %v", err)
 	}
 	if string(body) != "// pre-existing\n" {
-		t.Errorf("hooks.server.go was overwritten without --force; got %q", body)
+		t.Errorf("src/hooks.server.go was overwritten without --force; got %q", body)
 	}
 }
 
 func TestRun_ForceOverwrites(t *testing.T) {
 	dir := t.TempDir()
-	hooksPath := filepath.Join(dir, "hooks.server.go")
+	hooksDir := filepath.Join(dir, "src")
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		t.Fatalf("mkdir src: %v", err)
+	}
+	hooksPath := filepath.Join(hooksDir, "hooks.server.go")
 	if err := os.WriteFile(hooksPath, []byte("// pre-existing\n"), 0o644); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -224,15 +233,15 @@ func TestRun_ForceOverwrites(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if contains(res.Skipped, "hooks.server.go") {
-		t.Errorf("hooks.server.go skipped despite --force: %v", res.Skipped)
+	if contains(res.Skipped, "src/hooks.server.go") {
+		t.Errorf("src/hooks.server.go skipped despite --force: %v", res.Skipped)
 	}
 	body, err := os.ReadFile(hooksPath)
 	if err != nil {
 		t.Fatalf("read hooks: %v", err)
 	}
-	if !bytes.Contains(body, []byte("kit.HandleFn")) {
-		t.Errorf("hooks.server.go not overwritten; got %q", body)
+	if !bytes.Contains(body, []byte("func Handle(")) {
+		t.Errorf("src/hooks.server.go not overwritten; got %q", body)
 	}
 }
 
@@ -298,6 +307,73 @@ func TestRun_ServiceWorkerOmittedByDefault(t *testing.T) {
 func TestRun_EmptyDirRejected(t *testing.T) {
 	if _, err := Run(Options{}); err == nil {
 		t.Errorf("expected error on empty Dir")
+	}
+}
+
+// TestRun_HooksUseFuncDecl pins the Handle hook to the canonical
+// `func Handle(...)` declaration so the codegen scanner (which prefers
+// FuncDecls) wires it. Drift back to `var Handle = ...` would silently
+// drop hook wiring (#415).
+func TestRun_HooksUseFuncDecl(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := Run(Options{Dir: dir, Module: "example.com/hello"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	body, err := os.ReadFile(filepath.Join(dir, "src", "hooks.server.go"))
+	if err != nil {
+		t.Fatalf("read hooks: %v", err)
+	}
+	if !bytes.Contains(body, []byte("func Handle(")) {
+		t.Errorf("hooks.server.go missing `func Handle(` form; body:\n%s", body)
+	}
+	if bytes.Contains(body, []byte("var Handle")) {
+		t.Errorf("hooks.server.go uses obsolete `var Handle` form; body:\n%s", body)
+	}
+}
+
+// TestRun_PageSvelteNoGoScript pins the scaffolded _page.svelte and
+// _layout.svelte to the pure-Svelte template. The obsolete
+// `<script lang="go">` block from the Mustache-Go era confuses Svelte's
+// parser when users add a normal `<script>` block (#416).
+func TestRun_PageSvelteNoGoScript(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := Run(Options{Dir: dir, Module: "example.com/hello"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	for _, rel := range []string{"src/routes/_page.svelte", "src/routes/_layout.svelte"} {
+		body, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel)))
+		if err != nil {
+			t.Fatalf("read %s: %v", rel, err)
+		}
+		if bytes.Contains(body, []byte(`<script lang="go"`)) {
+			t.Errorf("%s still contains obsolete <script lang=\"go\"> block:\n%s", rel, body)
+		}
+	}
+}
+
+// TestRun_MainGoWiresViteAndStatic asserts cmd/app/main.go reads the
+// Vite manifest and mounts a static handler at /_app/. Without this the
+// SSR shell omits asset tags and asset URLs 404 (#417).
+func TestRun_MainGoWiresViteAndStatic(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := Run(Options{Dir: dir, Module: "example.com/hello"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	body, err := os.ReadFile(filepath.Join(dir, "cmd", "app", "main.go"))
+	if err != nil {
+		t.Fatalf("read main.go: %v", err)
+	}
+	for _, want := range []string{
+		"static/_app/.vite/manifest.json",
+		"ViteManifest:",
+		"ViteBase:",
+		"server.StaticHandler(",
+		`"/_app/"`,
+		`http.StripPrefix("/_app"`,
+	} {
+		if !bytes.Contains(body, []byte(want)) {
+			t.Errorf("main.go missing %q; body:\n%s", want, body)
+		}
 	}
 }
 
