@@ -14,9 +14,9 @@ expected to coexist on the same elements. The codegen contract is:
 3. **`@apply` is opaque to codegen.** The codegen pass does not parse
    `@apply text-zinc-700`. The `<style>` body is emitted verbatim and
    PostCSS / Tailwind processes it at Vite-build time.
-4. **Class-token strings inside Go expressions are not rewritten.** A
-   `class:bg-blue-500={Active}` keeps `bg-blue-500` as the literal token
-   added when `Active` evaluates to true. The scope class is added as a
+4. **Class-token strings inside dynamic class directives are not rewritten.** A
+   `class:bg-blue-500={active}` keeps `bg-blue-500` as the literal token
+   added when `active` evaluates to true. The scope class is added as a
    sibling token, never injected into the directive name.
 
 Goldens covering each rule live under

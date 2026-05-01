@@ -41,19 +41,27 @@ Your `Directives` map merges over this baseline. Setting a directive to an empty
 
 ## Inline scripts
 
-Use the per-request nonce on every inline `<script>`:
+Use the per-request nonce on every inline `<script>`. The nonce arrives via the standard `data` prop (populate it from your layout's `Load`):
 
 ```svelte
-<script lang="go">
-  // SSR template
+<script lang="ts">
+  let { data } = $props();
 </script>
 
-<script{kit.NonceAttr(Ctx)}>
+<script nonce={data.nonce}>
   console.log("hello");
 </script>
 ```
 
-`kit.NonceAttr(ev)` returns ` nonce="<n>"` when CSP is on, or the empty string when off — so the same template compiles uniformly across opt-in and opt-out builds.
+In `_layout.server.go`:
+
+```go
+func Load(ctx *kit.LoadCtx) (LayoutData, error) {
+  return LayoutData{Nonce: kit.Nonce(ctx)}, nil
+}
+```
+
+`kit.Nonce(ctx)` returns the per-request nonce when CSP is on, or the empty string when off — so the same template compiles uniformly across opt-in and opt-out builds.
 
 ## Modes
 

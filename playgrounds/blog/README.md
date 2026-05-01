@@ -26,7 +26,7 @@ fix can be validated against this app.
 | File | Framework features |
 |---|---|
 | `src/routes/_layout.svelte` | Layout chain (#24): root layout wraps every page in shared chrome (header / footer / nav). |
-| `src/routes/_page.svelte` | Mustache Go expressions (`len(data.Posts)`, conditional `{#if}`/`{:else}`, `{#each}`). |
+| `src/routes/_page.svelte` | Pure Svelte template (`{data.posts.length}`, conditional `{#if}`/`{:else}`, `{#each}`). |
 | `src/routes/_page.server.go` | `kit.LoadCtx` + `ctx.URL.Query()` for `?page=N` pagination, anonymous-struct PageData inference (ADR 0004), `kit.Error` short-circuit. |
 | `src/routes/[slug]/_page.svelte` | Dynamic `[slug]` param, `{@html}` for sanitized markdown, conditional rendering of comments and form-error state. |
 | `src/routes/[slug]/_page.server.go` | `kit.LoadCtx.Params` for `[slug]`, `goldmark` + `bluemonday` for safe markdown, `kit.ActionMap` with default action, `ev.BindForm` for form binding, `kit.ActionFail` / `kit.ActionRedirect`, `kit.Cookies.Set` for the last-author cookie. |
@@ -52,20 +52,21 @@ playgrounds/blog/
 ├── src/routes/
 │   ├── _layout.svelte          # root chrome
 │   ├── _page.svelte            # paginated post list
-│   ├── page.server.go          # //go:build sveltego — list Load
+│   ├── _page.server.go         # `_` prefix — list Load
 │   └── [slug]/
 │       ├── _page.svelte        # post detail + comment form
-│       └── page.server.go      # //go:build sveltego — detail Load + comment Action
+│       └── _page.server.go     # `_` prefix — detail Load + comment Action
 ├── content/posts/*.md          # markdown sources with `---` frontmatter
 └── cmd/app/main.go             # boots server.New on :8080
 ```
 
 ## Conventions
 
-- User `.go` files under `src/routes/**` carry `//go:build sveltego` so the
-  default Go toolchain skips them; the codegen pipeline reads them
-  through `go/parser` and mirrors them into `.gen/usersrc/<encoded>/`.
-  See [ADR 0003 amendment](../../tasks/decisions/0003-file-convention.md).
+- User `.go` files under `src/routes/**` use the `_` prefix (`_page.server.go`,
+  `_layout.server.go`, `_server.go`) so the default Go toolchain skips them;
+  the codegen pipeline reads them through `go/parser` and mirrors them into
+  `.gen/usersrc/<encoded>/`. See [ADR 0003 amendment](../../tasks/decisions/0003-file-convention.md)
+  and RFC #379 phase 1b.
 - `Load()` returns an inline anonymous struct literal so PageData
   inference (ADR 0004) extracts its fields verbatim. Named-type returns
   are out of scope until a future RFC.

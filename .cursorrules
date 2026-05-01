@@ -204,7 +204,7 @@ When designing, codegen, or runtime work touches these names, treat them as **lo
 
 ```
 src/routes/
-  _page.svelte           // SSR template, Go expressions inside {...}
+  _page.svelte           // pure Svelte/JS/TS template
   _page.server.go        // Load(), Actions()           (Go skips _* automatically)
   _layout.svelte         // layout chain
   _layout.server.go      // parent data flow            (Go skips _* automatically)
