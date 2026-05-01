@@ -71,7 +71,7 @@ func Load(ctx *kit.LoadCtx) (PageData, error) {
 	}
 
 	commentsMu.RLock()
-	existing := append([]Comment(nil), comments[slug]...)
+	existing := append([]Comment{}, comments[slug]...)
 	commentsMu.RUnlock()
 
 	return PageData{

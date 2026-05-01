@@ -25,6 +25,7 @@ import (
 	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit/params"
 	"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
+	"github.com/binsarjr/sveltego/packages/sveltego/runtime/svelte/fallback"
 )
 
 // initStateVal values for Server.initState.
@@ -118,6 +119,13 @@ type Config struct {
 	// so non-supporting browsers no-op silently. Scope is rooted at "/"
 	// so SPA navigation under any sub-path is covered (#89).
 	ServiceWorker bool
+	// SSRFallback configures the long-running Node sidecar used for
+	// routes annotated with `<!-- sveltego:ssr-fallback -->` (Phase 8 /
+	// #430). When SSRFallback.SidecarDir is empty and at least one
+	// route opted in, server boot returns an error pointing at the
+	// configuration gap. When no route opted in, the entire field is
+	// ignored and Node is never spawned.
+	SSRFallback SSRFallbackConfig
 }
 
 // Server is the http.Handler implementation that drives a sveltego app.
@@ -176,6 +184,15 @@ type Server struct {
 	// entries (#187).
 	prerender     *prerenderTable
 	prerenderAuth kit.PrerenderAuthGate
+
+	// fallbackConfig captures the Phase 8 fallback sidecar settings.
+	// fallbackSupervisor holds the live Supervisor when the sidecar
+	// has been started via Init/ListenAndServe; nil otherwise. The
+	// field is read by Shutdown to stop the supervisor on graceful
+	// exit and is owned by the server (so users don't manage two
+	// Stop calls for it).
+	fallbackConfig     SSRFallbackConfig
+	fallbackSupervisor *fallback.Supervisor
 }
 
 // New validates cfg and returns a Server ready for use as an http.Handler.
@@ -261,6 +278,7 @@ func New(cfg Config) (*Server, error) {
 		initErrorHTML:   initErrorHTML,
 		prerender:       cfg.Prerender,
 		prerenderAuth:   cfg.PrerenderAuth,
+		fallbackConfig:  cfg.SSRFallback,
 	}
 	// Start as ready so that callers using httptest.NewServer directly
 	// (without ListenAndServe or Init) see normal pipeline behavior.
@@ -371,10 +389,17 @@ func (s *Server) runInitAsync(ctx context.Context, done chan struct{}) {
 	if err != nil {
 		s.Logger.Error("server: init hook failed", logKeyError, err.Error())
 		s.initState.Store(initFailed)
-	} else {
-		s.initState.Store(initReady)
-		s.startCron(ctx)
+		close(done)
+		return
 	}
+	if err := s.startFallbackSidecar(ctx); err != nil {
+		s.Logger.Error("server: ssr fallback sidecar boot failed", logKeyError, err.Error())
+		s.initState.Store(initFailed)
+		close(done)
+		return
+	}
+	s.initState.Store(initReady)
+	s.startCron(ctx)
 	close(done)
 }
 
@@ -390,9 +415,32 @@ func (s *Server) Init(ctx context.Context) error {
 		close(done)
 		return fmt.Errorf("server: init hook: %w", err)
 	}
+	if err := s.startFallbackSidecar(ctx); err != nil {
+		s.initState.Store(initFailed)
+		close(done)
+		return fmt.Errorf("server: ssr fallback sidecar: %w", err)
+	}
 	s.initState.Store(initReady)
 	close(done)
 	s.startCron(ctx)
+	return nil
+}
+
+// startFallbackSidecar boots the long-running Node sidecar exactly when
+// the codegen-emitted init() registered at least one annotated route on
+// fallback.Default(). The supervisor handle is stashed on the Server so
+// Shutdown can stop it.
+func (s *Server) startFallbackSidecar(ctx context.Context) error {
+	supervisor, err := StartFallbackSidecar(ctx, s.fallbackConfig)
+	if err != nil {
+		return err
+	}
+	if supervisor != nil {
+		s.mu.Lock()
+		s.fallbackSupervisor = supervisor
+		s.mu.Unlock()
+		s.Logger.Info("server: ssr fallback sidecar started", logKeyEndpoint, supervisor.CurrentEndpoint())
+	}
 	return nil
 }
 
@@ -422,13 +470,18 @@ func (s *Server) startCron(parent context.Context) {
 // Shutdown gracefully stops a server started via ListenAndServe.
 // In-flight requests complete; new connections are refused. Any running
 // cron goroutines are stopped via context cancellation before returning.
+// The fallback sidecar (Phase 8 / #430) is also stopped when running.
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.mu.Lock()
 	srv := s.httpSrv
 	cancel := s.cronCancel
+	supervisor := s.fallbackSupervisor
 	s.mu.Unlock()
 	if cancel != nil {
 		cancel()
+	}
+	if supervisor != nil {
+		supervisor.Stop()
 	}
 	if srv == nil {
 		return nil

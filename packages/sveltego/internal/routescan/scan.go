@@ -261,6 +261,15 @@ func buildRoute(routesDir, dir string, files map[string]struct{}, dirsWithLayout
 		}
 	}
 
+	hasPage := has(files, "_page.svelte")
+	ssrFallback := false
+	if hasPage {
+		fb, fbErr := detectSSRFallbackAnnotation(filepath.Join(dir, "_page.svelte"))
+		if fbErr != nil {
+			diagnostics = append(diagnostics, Diagnostic{Path: dir, Message: fbErr.Error()})
+		}
+		ssrFallback = fb
+	}
 	route := &ScannedRoute{
 		Pattern:            pattern,
 		Segments:           segments,
@@ -270,7 +279,7 @@ func buildRoute(routesDir, dir string, files map[string]struct{}, dirsWithLayout
 		LayoutChain:        chain,
 		LayoutPackagePaths: chainPkgs,
 		LayoutServerFiles:  chainServers,
-		HasPage:            has(files, "_page.svelte"),
+		HasPage:            hasPage,
 		HasLayout:          has(files, "_layout.svelte"),
 		HasError:           has(files, "_error.svelte"),
 		HasReset:           hasReset,
@@ -278,6 +287,7 @@ func buildRoute(routesDir, dir string, files map[string]struct{}, dirsWithLayout
 		HasPageServer:      has(files, "_page.server.go"),
 		HasLayoutServer:    has(files, "_layout.server.go"),
 		HasServer:          has(files, "_server.go"),
+		SSRFallback:        ssrFallback,
 	}
 	if boundaryDir := nearestErrorDir(routesDir, dir, dirsWithError); boundaryDir != "" {
 		pkgPath, encErr := encodeLayoutPackagePath(routesDir, boundaryDir)

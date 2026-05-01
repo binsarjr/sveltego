@@ -85,6 +85,12 @@ type ManifestOptions struct {
 	// emitter can route the Page adapter through it. Routes absent
 	// from this map fall back to the legacy SPA shell.
 	SSRRenderRoutes map[string]string
+	// SSRFallbackRoutes is the ordered list of Svelte-mode routes that
+	// declared `<!-- sveltego:ssr-fallback -->` in their _page.svelte
+	// (Phase 8 / #430). The manifest emits one Page handler per entry
+	// that proxies the request to the long-running Node sidecar via the
+	// runtime/svelte/fallback registry.
+	SSRFallbackRoutes []SSRFallbackRoute
 }
 
 // GenerateManifest emits a deterministic, gofmt-clean Go source file
@@ -214,10 +220,15 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 	// present. Svelte-mode pages with a Phase 6 SSR Render emit also
 	// emit an adapter (bridging RenderSSR → PageHandler) so they DO
 	// contribute to the hasPage accounting.
+	fallbackByRoute := make(map[string]string, len(opts.SSRFallbackRoutes))
+	for _, fb := range opts.SSRFallbackRoutes {
+		fallbackByRoute[fb.Pattern] = fb.Source
+	}
 	var (
-		hasPage   bool
-		hasSvelte bool
-		ssrRoutes = opts.SSRRenderRoutes
+		hasPage     bool
+		hasSvelte   bool
+		hasFallback = len(fallbackByRoute) > 0
+		ssrRoutes   = opts.SSRRenderRoutes
 	)
 	for _, e := range entries {
 		if !e.route.HasPage {
@@ -225,10 +236,13 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 		}
 		svelteMode := isSvelteRoute(e.route.Pattern, opts.RouteOptions)
 		_, hasSSR := ssrRoutes[e.route.Pattern]
+		_, isFallback := fallbackByRoute[e.route.Pattern]
 		switch {
 		case svelteMode && hasSSR:
 			hasPage = true
 			hasSvelte = true
+		case svelteMode && isFallback:
+			hasPage = true
 		case !svelteMode:
 			hasPage = true
 		}
@@ -302,6 +316,9 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 	if hasSvelte {
 		b.Line(`server "github.com/binsarjr/sveltego/packages/sveltego/runtime/svelte/server"`)
 	}
+	if hasFallback {
+		b.Line(`fallback "github.com/binsarjr/sveltego/packages/sveltego/runtime/svelte/fallback"`)
+	}
 	b.Line(`"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"`)
 	if len(imports) > 0 {
 		b.Line("")
@@ -334,6 +351,8 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 	// happens inside the adapter so a dispatcher mismatch fails fast
 	// with a descriptive error instead of a panic.
 	emitRenderAdapters(&b, entries, opts.RouteOptions, ssrRoutes)
+	emitFallbackAdapters(&b, entries, opts.RouteOptions, fallbackByRoute)
+	emitFallbackInit(&b, opts.SSRFallbackRoutes)
 	emitHeadAdapters(&b, entries, opts.PageHeads, opts.RouteOptions)
 	emitLayoutAdapters(&b, layoutImports)
 	emitLayoutHeadAdapters(&b, layoutImports)
@@ -356,7 +375,7 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 			errorAliasByPath[ei.pkgPath] = ei.alias
 		}
 		for _, e := range entries {
-			emitRouteEntry(&b, e.route, e.alias, layoutByPath, errorAliasByPath, opts.RouteOptions, opts.PageHeads, opts.ClientKeys, ssrRoutes)
+			emitRouteEntry(&b, e.route, e.alias, layoutByPath, errorAliasByPath, opts.RouteOptions, opts.PageHeads, opts.ClientKeys, ssrRoutes, fallbackByRoute)
 		}
 		b.Dedent()
 		b.Line("}")
@@ -520,6 +539,71 @@ func emitSvelteRenderAdapter(b *Builder, e entry) {
 	b.Line("")
 }
 
+// emitFallbackAdapters writes one `renderFallback__<routeIdent>` Page
+// handler per route annotated with `<!-- sveltego:ssr-fallback -->`.
+// The handler dispatches the (route, data) pair through the
+// runtime/svelte/fallback registry which talks to the long-running
+// Node sidecar over HTTP and caches by `(route, hash(load_result))`.
+// Per ADR 0009 sub-decision 2 these handlers exist only for routes the
+// build-time transpiler intentionally skipped — non-annotated lowering
+// failures are hard build errors.
+func emitFallbackAdapters(b *Builder, entries []entry, routeOptions map[string]kit.PageOptions, fallbackByRoute map[string]string) {
+	if len(fallbackByRoute) == 0 {
+		return
+	}
+	for _, e := range entries {
+		if !e.route.HasPage {
+			continue
+		}
+		if !isSvelteRoute(e.route.Pattern, routeOptions) {
+			continue
+		}
+		if _, ok := fallbackByRoute[e.route.Pattern]; !ok {
+			continue
+		}
+		ident := routeIdent(e.route.Segments)
+		b.Linef("// renderFallback__%s dispatches %s through the long-running sidecar (Phase 8 / #430).", ident, quoteGo(e.route.Pattern))
+		b.Linef("func renderFallback__%s(w *render.Writer, ctx *kit.RenderCtx, data any) error {", ident)
+		b.Indent()
+		b.Line("rctx := ctx.Request.Context()")
+		b.Linef("resp, err := fallback.Default().Render(rctx, %s, data)", quoteGo(e.route.Pattern))
+		b.Line("if err != nil {")
+		b.Indent()
+		b.Line("return err")
+		b.Dedent()
+		b.Line("}")
+		b.Line("if resp.Head != \"\" {")
+		b.Indent()
+		b.Line("w.WriteString(resp.Head)")
+		b.Dedent()
+		b.Line("}")
+		b.Line("w.WriteString(resp.Body)")
+		b.Line("return nil")
+		b.Dedent()
+		b.Line("}")
+		b.Line("")
+	}
+}
+
+// emitFallbackInit writes a package-level init() that registers each
+// fallback route with runtime/svelte/fallback.Default() so a single
+// Configure call from the server boot wires them all to the live
+// Client. The init() is omitted when no routes opt in.
+func emitFallbackInit(b *Builder, fallback []SSRFallbackRoute) {
+	if len(fallback) == 0 {
+		return
+	}
+	b.Line("func init() {")
+	b.Indent()
+	b.Line("r := fallback.Default()")
+	for _, fb := range fallback {
+		b.Linef("r.Register(%s, %s)", quoteGo(fb.Pattern), quoteGo(fb.Source))
+	}
+	b.Dedent()
+	b.Line("}")
+	b.Line("")
+}
+
 // emitLayoutAdapters writes one `render__layout__<alias>` function per
 // unique layout package. Each adapter widens Layout{}.Render's typed
 // LayoutData to the `any`-shaped router.LayoutHandler. Layout packages
@@ -649,13 +733,14 @@ func emitErrorAdapters(b *Builder, imports []errorImport) {
 	}
 }
 
-func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutByPath map[string]layoutImport, errorAliasByPath map[string]string, routeOptions map[string]kit.PageOptions, pageHeads map[string]bool, clientKeys map[string]string, ssrRoutes map[string]string) {
+func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutByPath map[string]layoutImport, errorAliasByPath map[string]string, routeOptions map[string]kit.PageOptions, pageHeads map[string]bool, clientKeys map[string]string, ssrRoutes map[string]string, fallbackByRoute map[string]string) {
 	b.Line("{")
 	b.Indent()
 	b.Linef("Pattern: %s,", quoteGo(r.Pattern))
 	emitSegments(b, r.Segments)
 	svelteMode := isSvelteRoute(r.Pattern, routeOptions)
 	_, hasSSR := ssrRoutes[r.Pattern]
+	_, isFallback := fallbackByRoute[r.Pattern]
 	switch {
 	case r.HasServer:
 		b.Linef("Server: %s.Handlers,", alias)
@@ -672,6 +757,14 @@ func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutBy
 			// PageHandler shape so the existing renderPage path
 			// produces a full HTML body.
 			b.Linef("Page: render__%s,", alias)
+		case isFallback:
+			// Phase 8 (#430): annotated route routes through the
+			// long-running sidecar at request time. The renderFallback
+			// adapter dispatches via the runtime/svelte/fallback
+			// registry. The route ident is used so two routes that
+			// happen to share a package alias still get distinct
+			// handler names.
+			b.Linef("Page: renderFallback__%s,", routeIdent(r.Segments))
 		}
 		if ck := clientKeys[r.PackagePath]; ck != "" {
 			b.Linef("ClientKey: %s,", quoteGo(ck))

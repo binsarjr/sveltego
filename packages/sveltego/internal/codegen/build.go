@@ -22,11 +22,12 @@ import (
 
 // log attribute keys for sloglint compliance.
 const (
-	logKeyDiagnostic = "diagnostic"
-	logKeyRoutes     = "routes"
-	logKeyManifest   = "manifest"
-	logKeyModule     = "module"
-	logKeyElapsed    = "elapsed"
+	logKeyDiagnostic    = "diagnostic"
+	logKeyRoutes        = "routes"
+	logKeyManifest      = "manifest"
+	logKeyModule        = "module"
+	logKeyElapsed       = "elapsed"
+	logKeyFallbackCount = "fallback_count"
 )
 
 // genFileMode is the permission applied to every file written under
@@ -303,28 +304,32 @@ func Build(ctx context.Context, opts BuildOptions) (*BuildResult, error) {
 		}
 	}
 
-	// RFC #379 / ADR 0009 phase 6: drive the SSR Option-B pipeline.
-	// Pure-Svelte routes that aren't prerendered get a Render(payload,
-	// data) Go file emitted under .gen/usersrc/<encoded-pkg>/ via the
-	// svelte_js2go transpiler. The set of patterns successfully emitted
-	// is threaded into the manifest emitter so the Svelte-mode Page
-	// adapter can bridge the typed Render into router.PageHandler.
-	ssrEmitted, err := runSSRTranspile(ctx, opts.ProjectRoot, outDir, modulePath, logger, scan, routeOptions)
+	// RFC #379 / ADR 0009 phase 6 + phase 8: drive the SSR Option-B
+	// pipeline. Pure-Svelte routes that aren't prerendered and aren't
+	// annotated with `<!-- sveltego:ssr-fallback -->` get a
+	// Render(payload, data) Go file emitted under
+	// .gen/usersrc/<encoded-pkg>/ via the svelte_js2go transpiler.
+	// Annotated routes are returned as Fallback entries so the manifest
+	// can wire the runtime sidecar handler instead. ADR 0009 sub-decision
+	// 2: any non-annotated transpile or lowering failure is a hard
+	// build error.
+	ssrPlan, err := runSSRTranspile(ctx, opts.ProjectRoot, outDir, modulePath, logger, scan, routeOptions)
 	if err != nil {
 		return nil, err
 	}
 
 	hasServiceWorker := serviceWorkerEntry(opts.ProjectRoot) != ""
 	manifestBytes, err := GenerateManifest(scan, ManifestOptions{
-		PackageName:      "gen",
-		ModulePath:       modulePath,
-		GenRoot:          outDir,
-		RouteOptions:     routeOptions,
-		PageHeads:        pageHeads,
-		LayoutHeads:      layoutHeads,
-		ClientKeys:       clientKeysByPkg,
-		HasServiceWorker: hasServiceWorker,
-		SSRRenderRoutes:  ssrEmitted,
+		PackageName:       "gen",
+		ModulePath:        modulePath,
+		GenRoot:           outDir,
+		RouteOptions:      routeOptions,
+		PageHeads:         pageHeads,
+		LayoutHeads:       layoutHeads,
+		ClientKeys:        clientKeysByPkg,
+		HasServiceWorker:  hasServiceWorker,
+		SSRRenderRoutes:   ssrPlan.Transpiled,
+		SSRFallbackRoutes: ssrPlan.Fallback,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("codegen: generate manifest: %w", err)
