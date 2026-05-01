@@ -259,6 +259,16 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 		return nil, fmt.Errorf("codegen: component tree: %w", err)
 	}
 
+	// RFC #379 phase 2: emit `_page.svelte.d.ts` / `_layout.svelte.d.ts`
+	// next to each route's `.svelte` so pure-Svelte templates pick up
+	// the Go-side data shape via Svelte LSP. Runs alongside (does not
+	// replace) the Mustache-Go pipeline.
+	tgDiags, tgErr := runTypegen(scan.Routes)
+	if tgErr != nil {
+		return nil, tgErr
+	}
+	warnings = append(warnings, tgDiags...)
+
 	routeOptions, err := resolvePageOptions(scan)
 	if err != nil {
 		return nil, fmt.Errorf("codegen: resolve page options: %w", err)
