@@ -1,0 +1,45 @@
+{
+  "name": "create-sveltego",
+  "version": "0.1.0",
+  "description": "Scaffold a fresh sveltego project. Wraps the sveltego-init Go binary, with go-run-@latest fallback.",
+  "type": "module",
+  "bin": {
+    "create-sveltego": "./bin/create-sveltego.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "README.md",
+    "STABILITY.md",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test test/*.test.mjs",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/binsarjr/sveltego",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/binsarjr/sveltego.git",
+    "directory": "packages/create-sveltego"
+  },
+  "bugs": {
+    "url": "https://github.com/binsarjr/sveltego/issues"
+  },
+  "keywords": [
+    "sveltego",
+    "svelte",
+    "go",
+    "scaffold",
+    "create"
+  ]
+}

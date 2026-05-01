@@ -8,20 +8,32 @@ summary: Install the sveltego CLI, scaffold a project, run dev, build, ship.
 
 sveltego is pre-alpha. Expect rough edges and breaking changes. The shape below tracks the v1.0 milestone; commands and flags may shift.
 
-## Install
+## Scaffold
+
+One command from any terminal. Pick whichever you have:
+
+```sh
+# Node >= 20 — downloads the scaffold engine on demand
+npm create sveltego@latest ./hello
+
+# Go >= 1.23 — resolves the binary via the Go module proxy
+go run github.com/binsarjr/sveltego/packages/init/cmd/sveltego-init@latest ./hello
+```
+
+Both paths produce the same project tree. `npm create sveltego@latest` falls back to `go run @latest` automatically when Go is on `PATH` and a release binary is not yet available (release binaries are pending [#368](https://github.com/binsarjr/sveltego/issues/368)).
+
+## Install the framework CLI
 
 ```sh
 go install github.com/binsarjr/sveltego/cmd/sveltego@latest
-go install github.com/binsarjr/sveltego/init/cmd/sveltego-init@latest
 sveltego version
 ```
 
-Two binaries today: `sveltego` (build / compile / routes / version) and `sveltego-init` (project scaffolder, separate module under `packages/init`). No Node runtime is required to run a built app; Node is only needed at build time for the Vite client bundle.
+`sveltego` (build / compile / routes / version) is the only binary you need installed locally; the scaffold engine (`sveltego-init`) runs through `npm create` or `go run @latest` as shown above. No Node runtime is required at run time; Node is only needed at build time for the Vite client bundle.
 
-## Scaffold
+## Scaffold flags
 
 ```sh
-sveltego-init ./hello
 cd hello
 ```
 
@@ -42,15 +54,15 @@ hello/
   .gitignore
 ```
 
-::: warning Scaffold gap (#356)
-The scaffold does not yet emit `cmd/app/main.go`, `app.html`, `package.json`, or `vite.config.js`. To run the project end-to-end today, copy those four files from [`playgrounds/basic/`](https://github.com/binsarjr/sveltego/tree/main/playgrounds/basic) into your scaffold output. Tracked in [#356](https://github.com/binsarjr/sveltego/issues/356).
-:::
-
 Add `--ai` to also write `AGENTS.md`, `CLAUDE.md`, `.cursorrules`, and `.github/copilot-instructions.md` from the bundled AI templates:
 
 ```sh
-sveltego-init --ai ./hello
+npm create sveltego@latest --ai ./hello
+# or:
+go run github.com/binsarjr/sveltego/packages/init/cmd/sveltego-init@latest --ai ./hello
 ```
+
+Other flags supported by both paths: `--tailwind=v4|v3|none` (Tailwind opt-in), `--service-worker` (starter `src/service-worker.ts`), `--module <path>` (override the generated Go module path), `--force` (overwrite existing files), `--non-interactive` (never prompt).
 
 ## A minimal route
 

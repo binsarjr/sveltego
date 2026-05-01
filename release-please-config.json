@@ -27,6 +27,7 @@
     "packages/adapter-static":     { "component": "adapter-static",     "package-name": "adapter-static" },
     "packages/enhanced-img":       { "component": "enhanced-img",       "package-name": "enhanced-img" },
     "packages/create-sveltego":    { "component": "create-sveltego",    "package-name": "create-sveltego" },
+    "packages/init":               { "component": "packages/init",      "package-name": "init" },
     "packages/mcp":                { "component": "mcp",                "package-name": "mcp" },
     "packages/lsp":                { "component": "lsp",                "package-name": "lsp" }
   }

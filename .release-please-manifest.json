@@ -8,6 +8,7 @@
   "packages/adapter-static": "0.0.0",
   "packages/enhanced-img": "0.0.0",
   "packages/create-sveltego": "0.0.0",
+  "packages/init": "0.0.0",
   "packages/mcp": "0.0.0",
   "packages/lsp": "0.0.0"
 }

@@ -43,26 +43,40 @@ server.go               ──→  REST endpoints              (//go:build svelt
 
 ## Quickstart
 
-Pre-alpha — expect rough edges. The baseline scaffold writes files; it does **not** yet wire up `cmd/app/main.go` or the Vite shell. Until [#356](https://github.com/binsarjr/sveltego/issues/356) closes, the path of least resistance is to copy [`playgrounds/basic/`](playgrounds/basic/) and edit it.
+Pre-alpha — expect rough edges. One command from any terminal — no clone, no global install:
+
+```sh
+# Recommended: npm/npx (Node >= 20)
+npm create sveltego@latest ./hello
+cd hello
+sveltego build && ./build/app           # listens on :3000
+
+# Or, if you have Go on PATH:
+go run github.com/binsarjr/sveltego/packages/init/cmd/sveltego-init@latest ./hello
+```
+
+`npm create sveltego@latest` downloads the scaffold engine (or falls back to `go run @latest` when Go is on PATH) and produces the same project tree either way. Add `--ai` for `AGENTS.md`, `CLAUDE.md`, `.cursorrules`, and the Copilot rules; `--tailwind=v4|v3|none` to opt into Tailwind; `--service-worker` for a starter `src/service-worker.ts`.
+
+Build the framework CLI separately (until release binaries land in [#368](https://github.com/binsarjr/sveltego/issues/368)):
 
 ```sh
 go install github.com/binsarjr/sveltego/cmd/sveltego@latest
-go install github.com/binsarjr/sveltego/init/cmd/sveltego-init@latest
-
-# Option A — copy the working playground (recommended today):
-git clone https://github.com/binsarjr/sveltego
-cd sveltego/playgrounds/basic
-sveltego build && ./build/app           # listens on :3000
-
-# Option B — scaffold + finish manually (gap tracked in #356):
-sveltego-init --ai ./hello
-cd hello
-# Add cmd/app/main.go, app.html, package.json, vite.config.js
-# (copy them from playgrounds/basic/ for now)
-sveltego build && ./build/app
+sveltego version
 ```
 
 `sveltego build` chains codegen → Vite → `go build` in one step; you do not need a separate `go build` invocation. The full quickstart with annotated layout lives in [docs/guide/quickstart.md](docs/guide/quickstart.md).
+
+<details><summary>From-source path (clone the repo)</summary>
+
+```sh
+git clone https://github.com/binsarjr/sveltego
+cd sveltego
+go install ./packages/sveltego/cmd/sveltego
+go install ./packages/init/cmd/sveltego-init
+sveltego-init ./hello
+```
+
+</details>
 
 ## Expression philosophy
 

@@ -6,11 +6,10 @@ summary: sveltego command reference — build, compile, dev, check, routes, vers
 
 # CLI
 
-`sveltego` is the project's primary command-line entry point. Project scaffolding lives in a separate binary, `sveltego-init`. Install with:
+`sveltego` is the project's primary command-line entry point. Project scaffolding lives in a separate binary, `sveltego-init`, that is normally invoked through `npm create sveltego@latest` or `go run @latest` rather than installed globally. Install the framework CLI with:
 
 ```sh
 go install github.com/binsarjr/sveltego/cmd/sveltego@latest
-go install github.com/binsarjr/sveltego/init/cmd/sveltego-init@latest
 ```
 
 ## Global flags
@@ -51,16 +50,19 @@ Print version, Go runtime version, OS, and architecture.
 
 ## `sveltego-init` (separate binary)
 
-Project scaffolder. See [`packages/init/README.md`](https://github.com/binsarjr/sveltego/blob/main/packages/init/README.md) for the full flag list. Quickly:
+Project scaffolder. Two zero-clone entry points, plus `npm create sveltego@latest` (recommended). See [`packages/init/README.md`](https://github.com/binsarjr/sveltego/blob/main/packages/init/README.md) for the full flag list.
 
 ```sh
-sveltego-init ./my-app                    # baseline scaffold
-sveltego-init --ai ./my-app               # baseline + AI-assistant templates
-sveltego-init --module example.com/x ./my-app
-sveltego-init --force ./my-app            # overwrite existing files
+# npm wrapper (Node >= 20). Auto-falls-back to `go run @latest`.
+npm create sveltego@latest ./my-app
+npm create sveltego@latest --ai ./my-app
+npm create sveltego@latest --tailwind=v4 --module example.com/x ./my-app
+
+# Go-only path (no clone required).
+go run github.com/binsarjr/sveltego/packages/init/cmd/sveltego-init@latest ./my-app
 ```
 
-Scaffold output is incomplete pending [#356](https://github.com/binsarjr/sveltego/issues/356) — copy `cmd/app/main.go`, `app.html`, `package.json`, and `vite.config.js` from `playgrounds/basic/` until that lands.
+The npm wrapper and the Go binary share the same flag surface; both paths produce identical project trees.
 
 ## Exit codes
 

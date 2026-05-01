@@ -42,6 +42,7 @@ jobs:
       adapter-static: ${{ steps.filter.outputs.adapter-static }}
       enhanced-img: ${{ steps.filter.outputs.enhanced-img }}
       create-sveltego: ${{ steps.filter.outputs.create-sveltego }}
+      init: ${{ steps.filter.outputs.init }}
       mcp: ${{ steps.filter.outputs.mcp }}
       lsp: ${{ steps.filter.outputs.lsp }}
       playground: ${{ steps.filter.outputs.playground }}
@@ -63,6 +64,7 @@ jobs:
             adapter-static: 'packages/adapter-static/**'
             enhanced-img: 'packages/enhanced-img/**'
             create-sveltego: 'packages/create-sveltego/**'
+            init: 'packages/init/**'
             mcp: 'packages/mcp/**'
             lsp: 'packages/lsp/**'
             playground: ['playgrounds/basic/**', 'playgrounds/blog/**', 'playgrounds/dashboard/**']
@@ -153,6 +155,7 @@ jobs:
           ADAPTER_STATIC: ${{ needs.changes.outputs.adapter-static }}
           ENHANCED_IMG: ${{ needs.changes.outputs.enhanced-img }}
           CREATE_SVELTEGO: ${{ needs.changes.outputs.create-sveltego }}
+          INIT: ${{ needs.changes.outputs.init }}
           MCP: ${{ needs.changes.outputs.mcp }}
           LSP: ${{ needs.changes.outputs.lsp }}
           PLAYGROUND: ${{ needs.changes.outputs.playground }}
@@ -176,6 +179,7 @@ jobs:
                 */packages/adapter-static)       [[ "$ADAPTER_STATIC" == "true" ]]      || continue ;;
                 */packages/enhanced-img)         [[ "$ENHANCED_IMG" == "true" ]]        || continue ;;
                 */packages/create-sveltego)      [[ "$CREATE_SVELTEGO" == "true" ]]     || continue ;;
+                */packages/init)                 [[ "$INIT" == "true" ]]                || continue ;;
                 */packages/mcp)                  [[ "$MCP" == "true" ]]                 || continue ;;
                 */packages/lsp)                  [[ "$LSP" == "true" ]]                 || continue ;;
                 */benchmarks)                    [[ "$BENCHMARKS" == "true" ]]          || continue ;;
@@ -200,6 +204,7 @@ jobs:
           ADAPTER_STATIC: ${{ needs.changes.outputs.adapter-static }}
           ENHANCED_IMG: ${{ needs.changes.outputs.enhanced-img }}
           CREATE_SVELTEGO: ${{ needs.changes.outputs.create-sveltego }}
+          INIT: ${{ needs.changes.outputs.init }}
           MCP: ${{ needs.changes.outputs.mcp }}
           LSP: ${{ needs.changes.outputs.lsp }}
           PLAYGROUND: ${{ needs.changes.outputs.playground }}
@@ -222,6 +227,7 @@ jobs:
                 */packages/adapter-static)       [[ "$ADAPTER_STATIC" == "true" ]]      || continue ;;
                 */packages/enhanced-img)         [[ "$ENHANCED_IMG" == "true" ]]        || continue ;;
                 */packages/create-sveltego)      [[ "$CREATE_SVELTEGO" == "true" ]]     || continue ;;
+                */packages/init)                 [[ "$INIT" == "true" ]]                || continue ;;
                 */packages/mcp)                  [[ "$MCP" == "true" ]]                 || continue ;;
                 */packages/lsp)                  [[ "$LSP" == "true" ]]                 || continue ;;
                 */benchmarks)                    [[ "$BENCHMARKS" == "true" ]]          || continue ;;
@@ -246,6 +252,7 @@ jobs:
           ADAPTER_STATIC: ${{ needs.changes.outputs.adapter-static }}
           ENHANCED_IMG: ${{ needs.changes.outputs.enhanced-img }}
           CREATE_SVELTEGO: ${{ needs.changes.outputs.create-sveltego }}
+          INIT: ${{ needs.changes.outputs.init }}
           MCP: ${{ needs.changes.outputs.mcp }}
           LSP: ${{ needs.changes.outputs.lsp }}
           PLAYGROUND: ${{ needs.changes.outputs.playground }}
@@ -269,6 +276,7 @@ jobs:
                 */packages/adapter-static)       [[ "$ADAPTER_STATIC" == "true" ]]      || continue ;;
                 */packages/enhanced-img)         [[ "$ENHANCED_IMG" == "true" ]]        || continue ;;
                 */packages/create-sveltego)      [[ "$CREATE_SVELTEGO" == "true" ]]     || continue ;;
+                */packages/init)                 [[ "$INIT" == "true" ]]                || continue ;;
                 */packages/mcp)                  [[ "$MCP" == "true" ]]                 || continue ;;
                 */packages/lsp)                  [[ "$LSP" == "true" ]]                 || continue ;;
                 */benchmarks)                    [[ "$BENCHMARKS" == "true" ]]          || continue ;;
@@ -297,6 +305,7 @@ jobs:
           ADAPTER_STATIC: ${{ needs.changes.outputs.adapter-static }}
           ENHANCED_IMG: ${{ needs.changes.outputs.enhanced-img }}
           CREATE_SVELTEGO: ${{ needs.changes.outputs.create-sveltego }}
+          INIT: ${{ needs.changes.outputs.init }}
           MCP: ${{ needs.changes.outputs.mcp }}
           LSP: ${{ needs.changes.outputs.lsp }}
           PLAYGROUND: ${{ needs.changes.outputs.playground }}
@@ -319,6 +328,7 @@ jobs:
                 */packages/adapter-static)       [[ "$ADAPTER_STATIC" == "true" ]]      || continue ;;
                 */packages/enhanced-img)         [[ "$ENHANCED_IMG" == "true" ]]        || continue ;;
                 */packages/create-sveltego)      [[ "$CREATE_SVELTEGO" == "true" ]]     || continue ;;
+                */packages/init)                 [[ "$INIT" == "true" ]]                || continue ;;
                 */packages/mcp)                  [[ "$MCP" == "true" ]]                 || continue ;;
                 */packages/lsp)                  [[ "$LSP" == "true" ]]                 || continue ;;
                 */benchmarks)                    [[ "$BENCHMARKS" == "true" ]]          || continue ;;
@@ -417,6 +427,7 @@ jobs:
           ADAPTER_STATIC: ${{ needs.changes.outputs.adapter-static }}
           ENHANCED_IMG: ${{ needs.changes.outputs.enhanced-img }}
           CREATE_SVELTEGO: ${{ needs.changes.outputs.create-sveltego }}
+          INIT: ${{ needs.changes.outputs.init }}
           MCP: ${{ needs.changes.outputs.mcp }}
           LSP: ${{ needs.changes.outputs.lsp }}
           PLAYGROUND: ${{ needs.changes.outputs.playground }}
@@ -440,6 +451,7 @@ jobs:
                 */packages/adapter-static)       [[ "$ADAPTER_STATIC" == "true" ]]      || continue ;;
                 */packages/enhanced-img)         [[ "$ENHANCED_IMG" == "true" ]]        || continue ;;
                 */packages/create-sveltego)      [[ "$CREATE_SVELTEGO" == "true" ]]     || continue ;;
+                */packages/init)                 [[ "$INIT" == "true" ]]                || continue ;;
                 */packages/mcp)                  [[ "$MCP" == "true" ]]                 || continue ;;
                 */packages/lsp)                  [[ "$LSP" == "true" ]]                 || continue ;;
                 */benchmarks)                    [[ "$BENCHMARKS" == "true" ]]          || continue ;;
@@ -464,6 +476,7 @@ jobs:
           ADAPTER_STATIC: ${{ needs.changes.outputs.adapter-static }}
           ENHANCED_IMG: ${{ needs.changes.outputs.enhanced-img }}
           CREATE_SVELTEGO: ${{ needs.changes.outputs.create-sveltego }}
+          INIT: ${{ needs.changes.outputs.init }}
           MCP: ${{ needs.changes.outputs.mcp }}
           LSP: ${{ needs.changes.outputs.lsp }}
           PLAYGROUND: ${{ needs.changes.outputs.playground }}
@@ -486,6 +499,7 @@ jobs:
                 */packages/adapter-static)       [[ "$ADAPTER_STATIC" == "true" ]]      || continue ;;
                 */packages/enhanced-img)         [[ "$ENHANCED_IMG" == "true" ]]        || continue ;;
                 */packages/create-sveltego)      [[ "$CREATE_SVELTEGO" == "true" ]]     || continue ;;
+                */packages/init)                 [[ "$INIT" == "true" ]]                || continue ;;
                 */packages/mcp)                  [[ "$MCP" == "true" ]]                 || continue ;;
                 */packages/lsp)                  [[ "$LSP" == "true" ]]                 || continue ;;
                 */benchmarks)                    [[ "$BENCHMARKS" == "true" ]]          || continue ;;
@@ -510,6 +524,7 @@ jobs:
           ADAPTER_STATIC: ${{ needs.changes.outputs.adapter-static }}
           ENHANCED_IMG: ${{ needs.changes.outputs.enhanced-img }}
           CREATE_SVELTEGO: ${{ needs.changes.outputs.create-sveltego }}
+          INIT: ${{ needs.changes.outputs.init }}
           MCP: ${{ needs.changes.outputs.mcp }}
           LSP: ${{ needs.changes.outputs.lsp }}
           PLAYGROUND: ${{ needs.changes.outputs.playground }}
@@ -533,6 +548,7 @@ jobs:
                 */packages/adapter-static)       [[ "$ADAPTER_STATIC" == "true" ]]      || continue ;;
                 */packages/enhanced-img)         [[ "$ENHANCED_IMG" == "true" ]]        || continue ;;
                 */packages/create-sveltego)      [[ "$CREATE_SVELTEGO" == "true" ]]     || continue ;;
+                */packages/init)                 [[ "$INIT" == "true" ]]                || continue ;;
                 */packages/mcp)                  [[ "$MCP" == "true" ]]                 || continue ;;
                 */packages/lsp)                  [[ "$LSP" == "true" ]]                 || continue ;;
                 */benchmarks)                    [[ "$BENCHMARKS" == "true" ]]          || continue ;;
@@ -561,6 +577,7 @@ jobs:
           ADAPTER_STATIC: ${{ needs.changes.outputs.adapter-static }}
           ENHANCED_IMG: ${{ needs.changes.outputs.enhanced-img }}
           CREATE_SVELTEGO: ${{ needs.changes.outputs.create-sveltego }}
+          INIT: ${{ needs.changes.outputs.init }}
           MCP: ${{ needs.changes.outputs.mcp }}
           LSP: ${{ needs.changes.outputs.lsp }}
           PLAYGROUND: ${{ needs.changes.outputs.playground }}
@@ -583,6 +600,7 @@ jobs:
                 */packages/adapter-static)       [[ "$ADAPTER_STATIC" == "true" ]]      || continue ;;
                 */packages/enhanced-img)         [[ "$ENHANCED_IMG" == "true" ]]        || continue ;;
                 */packages/create-sveltego)      [[ "$CREATE_SVELTEGO" == "true" ]]     || continue ;;
+                */packages/init)                 [[ "$INIT" == "true" ]]                || continue ;;
                 */packages/mcp)                  [[ "$MCP" == "true" ]]                 || continue ;;
                 */packages/lsp)                  [[ "$LSP" == "true" ]]                 || continue ;;
                 */benchmarks)                    [[ "$BENCHMARKS" == "true" ]]          || continue ;;
@@ -791,3 +809,69 @@ jobs:
         shell: bash
         run: |
           if [ -f server.pid ]; then kill "$(cat server.pid)" 2>/dev/null || true; fi
+
+  # End-to-end smoke for `npm create sveltego` + sveltego-init.
+  # Builds sveltego-init from source, points the wrapper at it via
+  # SVELTEGO_INIT_LOCAL_PATH, and asserts the produced tree matches
+  # what `sveltego-init` writes directly. Both paths must agree.
+  create-sveltego-smoke:
+    name: create-sveltego-smoke
+    needs: changes
+    if: |
+      (needs.changes.outputs.shared == 'true' ||
+       needs.changes.outputs.create-sveltego == 'true' ||
+       needs.changes.outputs.init == 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build sveltego-init
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          go build -o "$RUNNER_TEMP/bin/sveltego-init" ./packages/init/cmd/sveltego-init
+
+      - name: Build npm wrapper (tsc)
+        working-directory: packages/create-sveltego
+        shell: bash
+        run: |
+          npm install --no-save typescript@5.4 @types/node@20
+          npx tsc -p tsconfig.json
+
+      - name: Run wrapper unit tests
+        working-directory: packages/create-sveltego
+        shell: bash
+        run: node --test test/*.test.mjs
+
+      - name: Wrapper produces a tree (via SVELTEGO_INIT_LOCAL_PATH)
+        shell: bash
+        run: |
+          set -euo pipefail
+          out_a="$RUNNER_TEMP/path-a"
+          rm -rf "$out_a"
+          SVELTEGO_INIT_LOCAL_PATH="$RUNNER_TEMP/bin/sveltego-init" \
+            node packages/create-sveltego/bin/create-sveltego.js \
+              --non-interactive --module example.com/x "$out_a"
+          test -f "$out_a/go.mod"
+          test -f "$out_a/cmd/app/main.go"
+          test -f "$out_a/src/routes/+page.svelte"
+
+      - name: Direct sveltego-init produces identical tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          out_a="$RUNNER_TEMP/path-a"
+          out_b="$RUNNER_TEMP/path-b"
+          rm -rf "$out_b"
+          "$RUNNER_TEMP/bin/sveltego-init" --non-interactive \
+            --module example.com/x "$out_b"
+          diff -r "$out_a" "$out_b"
