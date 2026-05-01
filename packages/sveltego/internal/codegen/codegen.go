@@ -44,6 +44,14 @@ type Options struct {
 	// resolved to its generated variant set. The codegen-time lookup
 	// rejects unknown sources with a clear diagnostic.
 	ImageVariants map[string]images.Result
+	// MirrorImportPath is the Go import path of the user-source mirror
+	// (`<module>/.gen/usersrc/<encoded>`) for this route. Set by the
+	// build driver when a sibling page.server.go exists. Generate emits
+	// `type PageData = <usersrc-alias>.PageData` whenever the server file
+	// declares a named PageData type, preserving type identity between
+	// the user-authored type and the manifest's adapter assertion. Empty
+	// preserves the inline-struct alias behavior.
+	MirrorImportPath string
 }
 
 // LayoutOptions configures GenerateLayout.
@@ -64,6 +72,12 @@ type LayoutOptions struct {
 	GeneratedAt time.Time
 	// ImageVariants mirrors Options.ImageVariants for layout files.
 	ImageVariants map[string]images.Result
+	// MirrorImportPath mirrors Options.MirrorImportPath for layouts. When
+	// the layout server file declares a named LayoutData type, the
+	// emitter aliases to `<usersrc>.LayoutData` instead of synthesizing
+	// an inline struct, so the manifest's runtime type assertion sees
+	// the user-authored type.
+	MirrorImportPath string
 }
 
 // ErrorPageOptions configures GenerateErrorPage.
@@ -111,15 +125,24 @@ func Generate(frag *ast.Fragment, opts Options) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if opts.HasActions {
+	mirrorAlias := ""
+	if pageData.HasNamedType && opts.MirrorImportPath != "" {
+		mirrorAlias = "usersrc"
+	}
+	if opts.HasActions && !pageData.HasNamedType {
 		// Remove any user-declared Form field before injecting the contract field.
 		// This allows page.server.go to declare `Form any` in its Load return
-		// without causing a duplicate-field compile error. See #143.
+		// without causing a duplicate-field compile error. See #143. The
+		// named-type branch leaves Form to the user's authored declaration.
 		pageData.Fields = dropField(pageData.Fields, "Form")
 		pageData.Fields = append(pageData.Fields, pageDataField{Name: "Form", Type: "any"})
 	}
 
-	imports := mergeImports(scripts.Imports, pageData.Imports)
+	pageDataImports := pageData.Imports
+	if mirrorAlias != "" {
+		pageDataImports = append(pageDataImports, fmt.Sprintf("%s %q", mirrorAlias, opts.MirrorImportPath))
+	}
+	imports := mergeImports(scripts.Imports, pageDataImports)
 	headChildren, bodyChildren := extractHeadChildren(frag.Children)
 
 	var b Builder
@@ -153,7 +176,7 @@ func Generate(frag *ast.Fragment, opts Options) ([]byte, error) {
 
 	b.Line("type Page struct{}")
 	b.Line("")
-	emitPageDataStruct(&b, pageData.Fields)
+	emitPageDataStruct(&b, pageData.Fields, mirrorAlias)
 	b.Line("")
 	if scripts.HasProps {
 		emitPropsStruct(&b, scripts.Props)
@@ -222,12 +245,20 @@ func GenerateLayout(frag *ast.Fragment, opts LayoutOptions) ([]byte, error) {
 		return nil, err
 	}
 	applyScopeClass(frag.Children, style.ScopeClass)
-	layoutData, err := inferPageData(opts.ServerFilePath)
+	layoutData, err := inferLayoutData(opts.ServerFilePath)
 	if err != nil {
 		return nil, err
 	}
+	mirrorAlias := ""
+	if layoutData.HasNamedType && opts.MirrorImportPath != "" {
+		mirrorAlias = "usersrc"
+	}
 
-	imports := mergeImports(scripts.Imports, layoutData.Imports)
+	layoutDataImports := layoutData.Imports
+	if mirrorAlias != "" {
+		layoutDataImports = append(layoutDataImports, fmt.Sprintf("%s %q", mirrorAlias, opts.MirrorImportPath))
+	}
+	imports := mergeImports(scripts.Imports, layoutDataImports)
 	headChildren, bodyChildren := extractHeadChildren(frag.Children)
 
 	var b Builder
@@ -262,7 +293,7 @@ func GenerateLayout(frag *ast.Fragment, opts LayoutOptions) ([]byte, error) {
 
 	b.Line("type Layout struct{}")
 	b.Line("")
-	emitLayoutDataAlias(&b, layoutData.Fields)
+	emitLayoutDataAlias(&b, layoutData.Fields, mirrorAlias)
 	b.Line("")
 	if scripts.HasProps {
 		emitPropsStruct(&b, scripts.Props)
@@ -395,11 +426,16 @@ func GenerateErrorPage(frag *ast.Fragment, opts ErrorPageOptions) ([]byte, error
 	return restoreRunesBytes(out), nil
 }
 
-// emitLayoutDataAlias writes `type LayoutData = struct{...}` mirroring
-// the alias-form rationale on emitPageDataStruct: type identity between
-// the user's inline struct literal and the LayoutData symbol asserted
-// by the manifest adapter must be preserved.
-func emitLayoutDataAlias(b *Builder, fields []pageDataField) {
+// emitLayoutDataAlias writes the layout's LayoutData type alias.
+// Mirrors emitPageDataStruct's three-shape contract: when mirrorAlias is
+// non-empty, emits `type LayoutData = <alias>.LayoutData` so the
+// manifest's runtime assertion against the user-authored type
+// succeeds; otherwise emits the inline-struct alias form.
+func emitLayoutDataAlias(b *Builder, fields []pageDataField, mirrorAlias string) {
+	if mirrorAlias != "" {
+		b.Linef("type LayoutData = %s.LayoutData", mirrorAlias)
+		return
+	}
 	if len(fields) == 0 {
 		b.Line("type LayoutData = struct{}")
 		return

@@ -234,7 +234,7 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 			if i < len(route.LayoutServerFiles) {
 				serverFile = route.LayoutServerFiles[i]
 			}
-			hasHead, err := emitLayout(opts.ProjectRoot, outDir, layoutDir, pkgPath, pkgName, serverFile, opts.Release, opts.EnvLookup, opts.Provenance, start, imageVariants)
+			hasHead, err := emitLayout(opts.ProjectRoot, outDir, modulePath, layoutDir, pkgPath, pkgName, serverFile, opts.Release, opts.EnvLookup, opts.Provenance, start, imageVariants)
 			if err != nil {
 				return nil, err
 			}
@@ -427,6 +427,8 @@ func emitPage(projectRoot, outDir, modulePath string, route routescan.ScannedRou
 			return 0, false, false, err
 		}
 		opts.HasActions = actionInfo.HasActions
+		encodedSub := strings.TrimPrefix(route.PackagePath, ".gen/")
+		opts.MirrorImportPath = modulePath + "/" + outDir + "/usersrc/" + encodedSub
 	}
 	out, err := Generate(frag, opts)
 	if err != nil {
@@ -725,7 +727,7 @@ func emitErrorPage(projectRoot, outDir, errorDir, pkgPath, pkgName string, prove
 // struct return is used to infer LayoutData fields. When release is true,
 // any $lib/dev/** import is a fatal error. lookup resolves env.Static*
 // calls to literal string values at build time.
-func emitLayout(projectRoot, outDir, layoutDir, pkgPath, pkgName, serverFile string, release bool, lookup EnvLookup, provenance bool, generatedAt time.Time, imageVariants map[string]images.Result) (bool, error) {
+func emitLayout(projectRoot, outDir, modulePath, layoutDir, pkgPath, pkgName, serverFile string, release bool, lookup EnvLookup, provenance bool, generatedAt time.Time, imageVariants map[string]images.Result) (bool, error) {
 	layoutPath, err := resolveLayoutSource(layoutDir)
 	if err != nil {
 		return false, err
@@ -747,14 +749,20 @@ func emitLayout(projectRoot, outDir, layoutDir, pkgPath, pkgName, serverFile str
 	if len(perrs) > 0 {
 		return false, fmt.Errorf("codegen: parse %s: %w", layoutPath, perrs)
 	}
+	mirrorImportPath := ""
+	if serverFile != "" {
+		encodedSub := strings.TrimPrefix(pkgPath, ".gen/")
+		mirrorImportPath = modulePath + "/" + outDir + "/layoutsrc/" + encodedSub
+	}
 	out, err := GenerateLayout(frag, LayoutOptions{
-		PackageName:    pkgName,
-		ServerFilePath: serverFile,
-		Filename:       layoutPath,
-		Provenance:     provenance,
-		SourceContent:  src,
-		GeneratedAt:    generatedAt,
-		ImageVariants:  imageVariants,
+		PackageName:      pkgName,
+		ServerFilePath:   serverFile,
+		Filename:         layoutPath,
+		Provenance:       provenance,
+		SourceContent:    src,
+		GeneratedAt:      generatedAt,
+		ImageVariants:    imageVariants,
+		MirrorImportPath: mirrorImportPath,
 	})
 	if err != nil {
 		return false, fmt.Errorf("codegen: generate %s: %w", layoutPath, err)

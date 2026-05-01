@@ -119,3 +119,53 @@ func TestBuildCmd_NoGoMod(t *testing.T) {
 		t.Fatal("expected error when no go.mod exists in cwd ancestry")
 	}
 }
+
+// TestHasRequire pins the go.mod parsing used by ensureSveltegoRequire
+// to decide whether `go get @latest` needs to run on first build. The
+// rule matters because the fresh-scaffold (#110) deliberately omits the
+// require line and we must not run `go get` on already-tidy projects.
+func TestHasRequire(t *testing.T) {
+	t.Parallel()
+	const target = "github.com/binsarjr/sveltego/packages/sveltego"
+
+	cases := []struct {
+		name string
+		body string
+		want bool
+	}{
+		{
+			name: "bare module clause (fresh scaffold)",
+			body: "module example.com/hello\n\ngo 1.23\n",
+			want: false,
+		},
+		{
+			name: "single-line require",
+			body: "module example.com/hello\n\ngo 1.23\n\nrequire " + target + " v0.0.0-bootstrap.0.20260501100517-d57b1b5d2445\n",
+			want: true,
+		},
+		{
+			name: "block-form require",
+			body: "module example.com/hello\n\ngo 1.23\n\nrequire (\n\t" + target + " v0.0.0-bootstrap.0.20260501100517-d57b1b5d2445\n)\n",
+			want: true,
+		},
+		{
+			name: "different module required",
+			body: "module example.com/hello\n\ngo 1.23\n\nrequire github.com/spf13/cobra v1.0.0\n",
+			want: false,
+		},
+		{
+			name: "comment line referencing module",
+			body: "module example.com/hello\n\ngo 1.23\n\n// " + target + " is the framework\n",
+			want: false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := hasRequire([]byte(tc.body), target)
+			if got != tc.want {
+				t.Errorf("hasRequire(%q) = %v, want %v", tc.name, got, tc.want)
+			}
+		})
+	}
+}

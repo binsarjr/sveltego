@@ -764,3 +764,119 @@ func TestRewriteLibImports(t *testing.T) {
 		})
 	}
 }
+
+// TestBuild_PageDataNamedType reproduces the standalone-scaffold variant
+// of #143: when the user's page.server.go declares a top-level
+// `type PageData struct{...}`, the generated page.gen.go must alias to
+// the mirrored type — `type PageData = usersrc.PageData` — instead of
+// synthesizing an empty `type PageData = struct{}`. Without this, the
+// gen file references `data.<UserField>` against the empty alias and
+// fails to compile.
+//
+// The scaffold flow is the canonical repro: a fresh project's
+// page.server.go uses the named-type form by default to keep Load()
+// readable. See feedback_minimal_setup.md (2026-05-01).
+func TestBuild_PageDataNamedType(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/named\n\ngo 1.23\n")
+	writeFile(t, filepath.Join(root, "src", "routes", "+page.svelte"),
+		"<h1>{data.Greeting}</h1>\n")
+	writeFile(t, filepath.Join(root, "src", "routes", "page.server.go"),
+		`//go:build sveltego
+
+package routes
+
+import "github.com/binsarjr/sveltego/exports/kit"
+
+type PageData struct {
+	Greeting string
+}
+
+func Load(ctx *kit.LoadCtx) (PageData, error) {
+	_ = ctx
+	return PageData{Greeting: "hello"}, nil
+}
+`)
+
+	if _, err := Build(BuildOptions{ProjectRoot: root}); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	pageGen := filepath.Join(root, ".gen", "routes", "page.gen.go")
+	body, err := os.ReadFile(pageGen)
+	if err != nil {
+		t.Fatalf("read page.gen.go: %v", err)
+	}
+	got := string(body)
+
+	const wantAlias = "type PageData = usersrc.PageData"
+	if !strings.Contains(got, wantAlias) {
+		t.Errorf("expected %q in page.gen.go, got:\n%s", wantAlias, got)
+	}
+	if strings.Contains(got, "type PageData = struct{}") {
+		t.Errorf("empty alias `type PageData = struct{}` leaked into named-type branch:\n%s", got)
+	}
+	const wantImport = `usersrc "example.com/named/.gen/usersrc/routes"`
+	if !strings.Contains(got, wantImport) {
+		t.Errorf("expected import %q, got:\n%s", wantImport, got)
+	}
+	// page.gen.go must parse as Go and reference data.Greeting (the
+	// alias gives the gen file access to the user's named field).
+	assertParsesAsGo(t, pageGen)
+	if !strings.Contains(got, "data.Greeting") {
+		t.Errorf("expected data.Greeting reference in render body:\n%s", got)
+	}
+}
+
+// TestBuild_LayoutDataNamedType mirrors TestBuild_PageDataNamedType for
+// layouts. A layout.server.go declaring `type LayoutData struct{...}`
+// produces `type LayoutData = usersrc.LayoutData` in layout.gen.go.
+func TestBuild_LayoutDataNamedType(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/lyt\n\ngo 1.23\n")
+	writeFile(t, filepath.Join(root, "src", "routes", "+layout.svelte"),
+		"<header>{data.Title}</header><slot />\n")
+	writeFile(t, filepath.Join(root, "src", "routes", "layout.server.go"),
+		`//go:build sveltego
+
+package routes
+
+import "github.com/binsarjr/sveltego/exports/kit"
+
+type LayoutData struct {
+	Title string
+}
+
+func Load(ctx *kit.LoadCtx) (LayoutData, error) {
+	_ = ctx
+	return LayoutData{Title: "x"}, nil
+}
+`)
+	writeFile(t, filepath.Join(root, "src", "routes", "+page.svelte"),
+		"<h1>page</h1>\n")
+
+	if _, err := Build(BuildOptions{ProjectRoot: root}); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	layoutGen := filepath.Join(root, ".gen", "routes", "layout.gen.go")
+	body, err := os.ReadFile(layoutGen)
+	if err != nil {
+		t.Fatalf("read layout.gen.go: %v", err)
+	}
+	got := string(body)
+	const wantAlias = "type LayoutData = usersrc.LayoutData"
+	if !strings.Contains(got, wantAlias) {
+		t.Errorf("expected %q in layout.gen.go, got:\n%s", wantAlias, got)
+	}
+	if strings.Contains(got, "type LayoutData = struct{}") {
+		t.Errorf("empty alias leaked into named-type branch:\n%s", got)
+	}
+	const wantImport = `usersrc "example.com/lyt/.gen/layoutsrc/routes"`
+	if !strings.Contains(got, wantImport) {
+		t.Errorf("expected import %q, got:\n%s", wantImport, got)
+	}
+	assertParsesAsGo(t, layoutGen)
+}

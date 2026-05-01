@@ -56,6 +56,34 @@ func TestRun_BaseScaffold(t *testing.T) {
 	}
 }
 
+// TestRun_GoModNoLiteralV000 pins the contract that the scaffold never
+// emits a `require ... v0.0.0` line for the framework module. The
+// release-please bootstrap pseudo-version churns on every commit to
+// main, and the proxy cannot resolve the literal v0.0.0 — pinning it
+// silently breaks every fresh project on first `go build`. See #110.
+//
+// The fix from the standalone-scaffold repro (#110): drop the require
+// line entirely. `sveltego build` shells out to `go get @latest` on
+// first invocation to seed it.
+func TestRun_GoModNoLiteralV000(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := Run(Options{Dir: dir, Module: "example.com/hello"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	gomod, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+	if err != nil {
+		t.Fatalf("read go.mod: %v", err)
+	}
+	if bytes.Contains(gomod, []byte("v0.0.0")) {
+		t.Errorf("go.mod contains literal v0.0.0; the proxy cannot resolve it. body:\n%s", gomod)
+	}
+	// And no require line for the framework module at all — sveltego
+	// build will add the resolved pseudo-version on first run.
+	if bytes.Contains(gomod, []byte("github.com/binsarjr/sveltego")) {
+		t.Errorf("go.mod references sveltego before first build; expected bare module clause. body:\n%s", gomod)
+	}
+}
+
 // TestRun_MainGoCompiles parses cmd/app/main.go to confirm the scaffold
 // emits syntactically valid Go and that the import path for the generated
 // package picks up the user's module path. Full type-check would require
