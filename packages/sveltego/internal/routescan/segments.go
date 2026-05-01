@@ -160,10 +160,10 @@ func BuildPattern(segments []router.Segment) string {
 }
 
 // ParseResetFilename splits a reset-bearing filename (e.g.
-// "+page@(app).svelte") into its base ("+page", "+layout", "+error"),
+// "_page@(app).svelte") into its base ("_page", "_layout", "_error"),
 // the @<target> suffix, and an ok flag. The base is returned without
 // the @ marker; target may be empty for root-reset names like
-// "+page@.svelte". When the filename has no @ before the extension or
+// "_page@.svelte". When the filename has no @ before the extension or
 // is malformed, ok is false and the other return values are zero.
 func ParseResetFilename(name string) (base, target string, ok bool) {
 	const ext = ".svelte"
@@ -177,7 +177,7 @@ func ParseResetFilename(name string) (base, target string, ok bool) {
 	}
 	base = before
 	switch base {
-	case "+page", "+layout", "+error":
+	case "_page", "_layout", "_error":
 	default:
 		return "", "", false
 	}

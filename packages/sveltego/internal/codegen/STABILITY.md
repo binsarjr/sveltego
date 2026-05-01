@@ -27,9 +27,9 @@ and internal helpers are exempt and may change at any time.
 - `codegen.Options` — options for single-page Generate calls
 - `codegen.LayoutOptions` — options for GenerateLayout calls
 - `codegen.ErrorPageOptions` — options for GenerateErrorPage calls
-- `codegen.Generate` — emits a Go source file for a `+page.svelte` fragment
-- `codegen.GenerateLayout` — emits a Go source file for a `+layout.svelte` fragment
-- `codegen.GenerateErrorPage` — emits a Go source file for a `+error.svelte` fragment
+- `codegen.Generate` — emits a Go source file for a `_page.svelte` fragment
+- `codegen.GenerateLayout` — emits a Go source file for a `_layout.svelte` fragment
+- `codegen.GenerateErrorPage` — emits a Go source file for a `_error.svelte` fragment
 - `codegen.BuildOptions` — options for a full project code generation run
 - `codegen.BuildResult` — result returned by Build (generated file list, diagnostics)
 - `codegen.Build` — runs a full codegen pass over a project's routes directory

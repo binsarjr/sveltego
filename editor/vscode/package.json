@@ -19,8 +19,8 @@
   ],
   "activationEvents": [
     "onLanguage:svelte",
-    "workspaceContains:**/+page.svelte",
-    "workspaceContains:**/+layout.svelte"
+    "workspaceContains:**/_page.svelte",
+    "workspaceContains:**/_layout.svelte"
   ],
   "main": "./out/extension.js",
   "contributes": {

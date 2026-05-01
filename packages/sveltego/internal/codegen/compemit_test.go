@@ -12,7 +12,7 @@ import (
 // emitComponentTree integration tests
 // ---------------------------------------------------------------------------
 
-// TestEmitComponentTree_SimpleChild verifies that a +page.svelte importing
+// TestEmitComponentTree_SimpleChild verifies that a _page.svelte importing
 // one sibling component emits a component.gen.go for that component.
 func TestEmitComponentTree_SimpleChild(t *testing.T) {
 	t.Parallel()
@@ -21,7 +21,7 @@ func TestEmitComponentTree_SimpleChild(t *testing.T) {
 
 	writeFile(t, filepath.Join(root, "src", "routes", "button.svelte"),
 		`<span>{props.Label}</span>`+"\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "+page.svelte"),
+	writeFile(t, filepath.Join(root, "src", "routes", "_page.svelte"),
 		`<script lang="go">
 import button "./button"
 </script>
@@ -71,7 +71,7 @@ import icon "./icon"
 <icon.Icon /><span>{props.Label}</span>
 `)
 	// page imports button
-	writeFile(t, filepath.Join(root, "src", "routes", "+page.svelte"),
+	writeFile(t, filepath.Join(root, "src", "routes", "_page.svelte"),
 		`<script lang="go">
 import button "./button"
 </script>
@@ -103,13 +103,13 @@ func TestEmitComponentTree_SharedChild(t *testing.T) {
 
 	writeFile(t, filepath.Join(root, "src", "routes", "badge.svelte"),
 		`<span>badge</span>`+"\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "+page.svelte"),
+	writeFile(t, filepath.Join(root, "src", "routes", "_page.svelte"),
 		`<script lang="go">
 import badge "./badge"
 </script>
 <badge.Badge />
 `)
-	writeFile(t, filepath.Join(root, "src", "routes", "about", "+page.svelte"),
+	writeFile(t, filepath.Join(root, "src", "routes", "about", "_page.svelte"),
 		`<script lang="go">
 import badge "../badge"
 </script>
@@ -147,7 +147,7 @@ import a "./a"
 </script>
 <a.A />
 `)
-	writeFile(t, filepath.Join(root, "src", "routes", "+page.svelte"),
+	writeFile(t, filepath.Join(root, "src", "routes", "_page.svelte"),
 		`<script lang="go">
 import a "./a"
 </script>
@@ -194,7 +194,7 @@ func TestEmitComponentTree_CasingCollision(t *testing.T) {
 		t.Skip("case-insensitive filesystem: Card.svelte and card.svelte are the same file")
 	}
 
-	writeFile(t, filepath.Join(root, "src", "routes", "+page.svelte"),
+	writeFile(t, filepath.Join(root, "src", "routes", "_page.svelte"),
 		`<script lang="go">
 import card1 "./Card"
 import card2 "./card"
@@ -212,7 +212,7 @@ import card2 "./card"
 	}
 }
 
-// TestEmitComponentTree_RelativeImportResolution verifies that a +page.svelte
+// TestEmitComponentTree_RelativeImportResolution verifies that a _page.svelte
 // at a nested route depth resolves `"./button"` to the correct sibling.
 func TestEmitComponentTree_RelativeImportResolution(t *testing.T) {
 	t.Parallel()
@@ -221,7 +221,7 @@ func TestEmitComponentTree_RelativeImportResolution(t *testing.T) {
 
 	writeFile(t, filepath.Join(root, "src", "routes", "dashboard", "widgets", "button.svelte"),
 		`<button>{props.Label}</button>`+"\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "dashboard", "widgets", "+page.svelte"),
+	writeFile(t, filepath.Join(root, "src", "routes", "dashboard", "widgets", "_page.svelte"),
 		`<script lang="go">
 import button "./button"
 </script>

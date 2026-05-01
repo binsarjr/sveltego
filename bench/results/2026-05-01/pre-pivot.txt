@@ -1,0 +1,50 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/binsarjr/sveltego/bench
+cpu: Apple M1 Pro
+BenchmarkServeHTTP_Hello-10      	  681615	      1694 ns/op	    2726 B/op	      31 allocs/op
+BenchmarkServeHTTP_Hello-10      	  733236	      1717 ns/op	    2726 B/op	      31 allocs/op
+BenchmarkServeHTTP_Hello-10      	  723524	      1700 ns/op	    2726 B/op	      31 allocs/op
+BenchmarkServeHTTP_Hello-10      	  713428	      1682 ns/op	    2726 B/op	      31 allocs/op
+BenchmarkServeHTTP_Hello-10      	  718345	      1687 ns/op	    2726 B/op	      31 allocs/op
+BenchmarkServeHTTP_Hello-10      	  731251	      1678 ns/op	    2726 B/op	      31 allocs/op
+BenchmarkServeHTTP_List-10       	  597102	      2093 ns/op	    3199 B/op	      32 allocs/op
+BenchmarkServeHTTP_List-10       	  571843	      2160 ns/op	    3199 B/op	      32 allocs/op
+BenchmarkServeHTTP_List-10       	  558529	      2090 ns/op	    3199 B/op	      32 allocs/op
+BenchmarkServeHTTP_List-10       	  571213	      2085 ns/op	    3199 B/op	      32 allocs/op
+BenchmarkServeHTTP_List-10       	  603487	      2046 ns/op	    3199 B/op	      32 allocs/op
+BenchmarkServeHTTP_List-10       	  607689	      2104 ns/op	    3199 B/op	      32 allocs/op
+BenchmarkServeHTTP_Detail-10     	  449220	      2440 ns/op	    3969 B/op	      38 allocs/op
+BenchmarkServeHTTP_Detail-10     	  509226	      2350 ns/op	    3969 B/op	      38 allocs/op
+BenchmarkServeHTTP_Detail-10     	  542882	      2437 ns/op	    3969 B/op	      38 allocs/op
+BenchmarkServeHTTP_Detail-10     	  479917	      2375 ns/op	    3969 B/op	      38 allocs/op
+BenchmarkServeHTTP_Detail-10     	  476721	      2378 ns/op	    3969 B/op	      38 allocs/op
+BenchmarkServeHTTP_Detail-10     	  506922	      2302 ns/op	    3969 B/op	      38 allocs/op
+BenchmarkServeHTTP_Action-10     	 1000000	      1042 ns/op	    1728 B/op	      23 allocs/op
+BenchmarkServeHTTP_Action-10     	 1201256	       990.5 ns/op	    1728 B/op	      23 allocs/op
+BenchmarkServeHTTP_Action-10     	 1208896	      1005 ns/op	    1728 B/op	      23 allocs/op
+BenchmarkServeHTTP_Action-10     	 1209876	       997.6 ns/op	    1728 B/op	      23 allocs/op
+BenchmarkServeHTTP_Action-10     	 1212854	       997.9 ns/op	    1728 B/op	      23 allocs/op
+BenchmarkServeHTTP_Action-10     	 1204054	       993.6 ns/op	    1728 B/op	      23 allocs/op
+BenchmarkRouteResolution-10      	 9530584	       121.9 ns/op	     336 B/op	       2 allocs/op
+BenchmarkRouteResolution-10      	 9969133	       122.9 ns/op	     336 B/op	       2 allocs/op
+BenchmarkRouteResolution-10      	 9806685	       125.5 ns/op	     336 B/op	       2 allocs/op
+BenchmarkRouteResolution-10      	 9851599	       123.2 ns/op	     336 B/op	       2 allocs/op
+BenchmarkRouteResolution-10      	 9727340	       133.8 ns/op	     336 B/op	       2 allocs/op
+BenchmarkRouteResolution-10      	 9674086	       126.7 ns/op	     336 B/op	       2 allocs/op
+BenchmarkRenderWriter-10         	73403096	        16.42 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRenderWriter-10         	72657732	        16.46 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRenderWriter-10         	70452679	        16.53 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRenderWriter-10         	72835050	        16.56 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRenderWriter-10         	71719933	        16.51 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRenderWriter-10         	72969584	        16.62 ns/op	       0 B/op	       0 allocs/op
+BenchmarkManifestColdStart-10    	  519643	      2279 ns/op	    7731 B/op	      43 allocs/op
+BenchmarkManifestColdStart-10    	  539319	      2344 ns/op	    7731 B/op	      43 allocs/op
+BenchmarkManifestColdStart-10    	  521304	      2325 ns/op	    7731 B/op	      43 allocs/op
+BenchmarkManifestColdStart-10    	  541201	      2284 ns/op	    7731 B/op	      43 allocs/op
+BenchmarkManifestColdStart-10    	  485796	      2290 ns/op	    7731 B/op	      43 allocs/op
+BenchmarkManifestColdStart-10    	  482366	      2291 ns/op	    7731 B/op	      43 allocs/op
+PASS
+ok  	github.com/binsarjr/sveltego/bench	58.027s
+?   	github.com/binsarjr/sveltego/bench/cmd/sveltego-bench	[no test files]
+?   	github.com/binsarjr/sveltego/bench/scenarios	[no test files]

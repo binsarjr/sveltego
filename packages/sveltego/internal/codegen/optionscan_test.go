@@ -12,7 +12,7 @@ import (
 func writeTempServerGo(t *testing.T, body string) string {
 	t.Helper()
 	dir := t.TempDir()
-	path := filepath.Join(dir, "page.server.go")
+	path := filepath.Join(dir, "_page.server.go")
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
@@ -199,7 +199,7 @@ func TestScanPrerenderFromSvelte(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			dir := t.TempDir()
-			p := filepath.Join(dir, "+page.svelte")
+			p := filepath.Join(dir, "_page.svelte")
 			if err := os.WriteFile(p, []byte(tc.body), 0o644); err != nil {
 				t.Fatal(err)
 			}
@@ -211,6 +211,70 @@ func TestScanPrerenderFromSvelte(t *testing.T) {
 				t.Errorf("got %+v, want %+v", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestScanPageOptions_templatesSvelte(t *testing.T) {
+	t.Parallel()
+	body := `//go:build sveltego
+
+package routes
+
+const Templates = "svelte"
+`
+	path := writeTempServerGo(t, body)
+	got, err := scanPageOptions(path)
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if !got.HasTemplates || got.Templates != kit.TemplatesSvelte {
+		t.Errorf("Templates not set to svelte: %+v", got)
+	}
+}
+
+func TestScanPageOptions_templatesGoMustacheRejected(t *testing.T) {
+	t.Parallel()
+	body := `//go:build sveltego
+
+package routes
+
+const Templates = "go-mustache"
+`
+	path := writeTempServerGo(t, body)
+	if _, err := scanPageOptions(path); err == nil {
+		t.Fatal("expected error on legacy go-mustache value")
+	} else if !strings.Contains(err.Error(), "go-mustache") || !strings.Contains(err.Error(), "phase 5") {
+		t.Errorf("expected migration hint in err, got: %v", err)
+	}
+}
+
+func TestScanPageOptions_templatesUnknownRejected(t *testing.T) {
+	t.Parallel()
+	body := `//go:build sveltego
+
+package routes
+
+const Templates = "react"
+`
+	path := writeTempServerGo(t, body)
+	if _, err := scanPageOptions(path); err == nil {
+		t.Fatal("expected error on unknown Templates value")
+	} else if !strings.Contains(err.Error(), "unknown Templates value") {
+		t.Errorf("err = %v", err)
+	}
+}
+
+func TestScanPageOptions_templatesNonStringRejected(t *testing.T) {
+	t.Parallel()
+	body := `//go:build sveltego
+
+package routes
+
+const Templates = 1
+`
+	path := writeTempServerGo(t, body)
+	if _, err := scanPageOptions(path); err == nil {
+		t.Fatal("expected error on non-string Templates")
 	}
 }
 

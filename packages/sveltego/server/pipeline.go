@@ -82,7 +82,7 @@ func hasAnyLayoutLoader(loaders []router.LayoutLoadHandler) bool {
 	return false
 }
 
-// errServerRouteWrote is the sentinel resolve returns when a +server.go
+// errServerRouteWrote is the sentinel resolve returns when a _server.go
 // handler has already written directly to the http.ResponseWriter and
 // the surrounding pipeline must not emit anything else.
 var errServerRouteWrote = errors.New("server: server route wrote response")
@@ -238,7 +238,14 @@ func (s *Server) resolve(w http.ResponseWriter, r *http.Request, ev *kit.Request
 		h(w, r)
 		return nil, errServerRouteWrote
 	}
-	if route.Page == nil {
+	// Svelte-mode routes have no Go-side Page handler; the server
+	// returns the shell + JSON hydration payload and Vite's client
+	// bundle mounts and renders. As of RFC #379 phase 5, "svelte" is
+	// the only template pipeline new routes use; routes without a
+	// Templates value fall back to the legacy Page handler when one
+	// is wired (kept for runtime tests that construct Routes by hand).
+	isSvelteMode := route.Options.Templates == kit.TemplatesSvelte
+	if !isSvelteMode && route.Page == nil {
 		return nil, kit.SafeError{Code: http.StatusNotFound, Message: http.StatusText(http.StatusNotFound)}
 	}
 	var form *formData
@@ -269,6 +276,9 @@ func (s *Server) resolve(w http.ResponseWriter, r *http.Request, ev *kit.Request
 	}
 	if !optionsAllowSSR(route.Options) {
 		return s.renderEmptyShell(), nil
+	}
+	if isSvelteMode {
+		return s.renderSvelteShell(r, ev, route, form)
 	}
 	return s.renderPage(w, r, ev, route, form, pageBuf)
 }
@@ -345,7 +355,7 @@ type clientPayload struct {
 // router. Pattern is the SvelteKit-canonical pattern (the same string
 // used as RouteID), Segments is the parsed form so the client can match
 // URLs without re-parsing the bracket syntax. Only routes with a Page
-// handler are emitted; pure +server.go routes do not participate in SPA
+// handler are emitted; pure _server.go routes do not participate in SPA
 // navigation.
 type clientManifestEntry struct {
 	Pattern  string                  `json:"pattern"`
@@ -564,6 +574,99 @@ func canonicalRedirect(u *url.URL, path string) string {
 	out.Host = ""
 	out.User = nil
 	return out.RequestURI()
+}
+
+// renderSvelteShell handles RFC #379 phase 3 Svelte-mode routes. It
+// runs the load chain, packs the result into the JSON hydration
+// payload, and returns the app.html shell with the payload script and
+// Vite asset tags injected — no Go-side page render. Vite's client
+// bundle mounts the .svelte component and renders against the payload.
+//
+// Layout chain rendering is intentionally skipped: the client owns
+// layouts in Svelte mode. Layout LOADS still run so client-side props
+// have parent data via the existing payload.LayoutData channel.
+func (s *Server) renderSvelteShell(r *http.Request, ev *kit.RequestEvent, route *router.Route, form *formData) (*kit.Response, error) {
+	var (
+		data        any
+		layoutDatas []any
+		lctx        *kit.LoadCtx
+	)
+	if route.Load != nil || hasAnyLayoutLoader(route.LayoutLoaders) {
+		lctx = kit.NewLoadCtx(r, ev.Params)
+		lctx.Locals = ev.Locals
+		lctx.Cookies = ev.Cookies
+		lctx.RawParams = ev.RawParams
+		layoutDatas = make([]any, len(route.LayoutChain))
+		for i, layoutLoad := range route.LayoutLoaders {
+			if layoutLoad == nil {
+				continue
+			}
+			d, err := layoutLoad(lctx)
+			if err != nil {
+				for k, vs := range lctx.CollectHeaders() {
+					ev.ResponseHeader()[k] = vs
+				}
+				return nil, err
+			}
+			layoutDatas[i] = d
+			lctx.PushParent(d)
+		}
+		if route.Load != nil {
+			d, err := route.Load(lctx)
+			if err != nil {
+				for k, vs := range lctx.CollectHeaders() {
+					ev.ResponseHeader()[k] = vs
+				}
+				return nil, err
+			}
+			data = d
+		}
+	}
+	if form != nil {
+		data = injectFormField(data, form.data)
+	}
+
+	buf := render.Acquire()
+	defer render.Release(buf)
+
+	buf.WriteString(s.shellHead)
+	if route.ClientKey != "" {
+		if tags := s.viteManifest.assetTags(route.ClientKey, s.viteBase); tags != "" {
+			buf.WriteString(tags)
+		}
+	}
+	buf.WriteString(s.shellMid)
+	buf.WriteString(`<div id="app"></div>`)
+	payload := buildClientPayload(r, route, data, layoutDatas, form)
+	payload.Manifest = s.clientManifest
+	if lctx != nil {
+		payload.Deps = lctx.CollectDeps()
+	}
+	emitPayloadScriptTag(buf, payload)
+	if s.serviceWorker != "" {
+		buf.WriteString(s.serviceWorker)
+	}
+	buf.WriteString(s.shellTail)
+
+	body := make([]byte, len(buf.Bytes()))
+	copy(body, buf.Bytes())
+	headers := http.Header{}
+	if lctx != nil {
+		for k, vs := range lctx.CollectHeaders() {
+			headers[k] = vs
+		}
+	}
+	headers.Set("Content-Type", "text/html; charset=utf-8")
+	headers.Set("Content-Length", strconv.Itoa(len(body)))
+	status := http.StatusOK
+	if form != nil && form.code != 0 {
+		status = form.code
+	}
+	return &kit.Response{
+		Status:  status,
+		Headers: headers,
+		Body:    body,
+	}, nil
 }
 
 // renderPage runs the load chain and renders the page. When the load

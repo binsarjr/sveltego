@@ -11,14 +11,14 @@ import (
 type RouterOptions struct {
 	// Routes maps each route's canonical pattern (matching the server's
 	// router.Route.Pattern, also surfaced as `routeId` in the hydration
-	// payload) to the path of its +page.svelte source relative to the
+	// payload) to the path of its _page.svelte source relative to the
 	// directory that will contain router.ts.
 	//
 	// The generated module uses dynamic imports so each route's component
 	// remains in its own Vite chunk; navigation only pulls in the chunk
 	// for the destination route.
 	Routes map[string]string
-	// SnapshotRoutes flags route patterns whose +page.svelte exports a
+	// SnapshotRoutes flags route patterns whose _page.svelte exports a
 	// `snapshot` from `<script module>`. The generated router pulls the
 	// export from the module record returned by the dynamic import and
 	// runs capture()/restore() across SPA navigations (#84). Patterns
@@ -681,7 +681,7 @@ export async function fetchSPA(input: RequestInfo | URL, init?: RequestInit): Pr
       await goto(target);
       return current;
     }
-    // Same-origin but not a SPA route — could be another +server.go that
+    // Same-origin but not a SPA route — could be another _server.go that
     // itself redirects. Re-fetch to allow chaining; cap protects loops.
     current = await fetch(target.href, reqInit);
   }

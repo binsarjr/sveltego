@@ -105,7 +105,7 @@ func tailwindFiles(flavor TailwindFlavor) []file {
 	return nil
 }
 
-// renderLayoutSvelte returns the +layout.svelte body. When Tailwind is
+// renderLayoutSvelte returns the _layout.svelte body. When Tailwind is
 // enabled the layout imports app.css so the bundle picks it up at build
 // time. The plain layout has no imports.
 func renderLayoutSvelte(flavor TailwindFlavor) string {
@@ -120,7 +120,7 @@ func renderLayoutSvelte(flavor TailwindFlavor) string {
 	return b.String()
 }
 
-// renderPageSvelte returns the +page.svelte body. With Tailwind we ship
+// renderPageSvelte returns the _page.svelte body. With Tailwind we ship
 // a short snippet exercising both a utility class and a scoped style so
 // the smoke test confirms coexistence.
 func renderPageSvelte(flavor TailwindFlavor) string {

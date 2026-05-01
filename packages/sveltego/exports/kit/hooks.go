@@ -43,7 +43,7 @@ type ResolveFn func(ev *RequestEvent) (*Response, error)
 type HandleFn func(ev *RequestEvent, resolve ResolveFn) (*Response, error)
 
 // HandleErrorFn is the signature of the optional HandleError hook. The
-// pipeline calls it whenever Handle, Load, Render, or a +server.go
+// pipeline calls it whenever Handle, Load, Render, or a _server.go
 // handler returns an error and converts the SafeError into the user-
 // facing HTTP response.
 //
@@ -51,7 +51,7 @@ type HandleFn func(ev *RequestEvent, resolve ResolveFn) (*Response, error)
 // The returned error is handled by the same sentinel logic as pipeline
 // errors: a *RedirectErr produces a redirect, a *HTTPErr produces a
 // plain HTTP response. This lets a HandleError hook redirect
-// unauthenticated users to /login instead of rendering +error.svelte.
+// unauthenticated users to /login instead of rendering _error.svelte.
 // The short-circuit does NOT re-enter HandleError (no infinite loop).
 type HandleErrorFn func(ev *RequestEvent, err error) (SafeError, error)
 

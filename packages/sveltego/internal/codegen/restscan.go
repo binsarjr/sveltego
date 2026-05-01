@@ -11,8 +11,8 @@ import (
 )
 
 // restVerbs is the closed set of HTTP verb function names recognized in
-// a server.go file. Anything else exported is treated as a build error
-// per issue #29 ("Build fails clearly if a +server.go exports an
+// a _server.go file. Anything else exported is treated as a build error
+// per issue #29 ("Build fails clearly if a _server.go exports an
 // unknown verb").
 var restVerbs = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"}
 

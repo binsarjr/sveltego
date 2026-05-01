@@ -10,15 +10,15 @@ func TestGenerateRouter_emitsImportMap(t *testing.T) {
 
 	src := GenerateRouter(RouterOptions{
 		Routes: map[string]string{
-			"/":          "../../routes/+page.svelte",
-			"/blog/[id]": "../../routes/blog/[id]/+page.svelte",
+			"/":          "../../routes/_page.svelte",
+			"/blog/[id]": "../../routes/blog/[id]/_page.svelte",
 		},
 	})
 
-	if !strings.Contains(src, `"/": () => import("../../routes/+page.svelte")`) {
+	if !strings.Contains(src, `"/": () => import("../../routes/_page.svelte")`) {
 		t.Errorf("missing root route import:\n%s", src)
 	}
-	if !strings.Contains(src, `"/blog/[id]": () => import("../../routes/blog/[id]/+page.svelte")`) {
+	if !strings.Contains(src, `"/blog/[id]": () => import("../../routes/blog/[id]/_page.svelte")`) {
 		t.Errorf("missing param route import:\n%s", src)
 	}
 }
@@ -28,9 +28,9 @@ func TestGenerateRouter_deterministic(t *testing.T) {
 
 	in := RouterOptions{
 		Routes: map[string]string{
-			"/z": "../routes/z/+page.svelte",
-			"/a": "../routes/a/+page.svelte",
-			"/m": "../routes/m/+page.svelte",
+			"/z": "../routes/z/_page.svelte",
+			"/a": "../routes/a/_page.svelte",
+			"/m": "../routes/m/_page.svelte",
 		},
 	}
 	a := GenerateRouter(in)
@@ -53,7 +53,7 @@ func TestGenerateRouter_deterministic(t *testing.T) {
 func TestGenerateRouter_includesRuntime(t *testing.T) {
 	t.Parallel()
 
-	src := GenerateRouter(RouterOptions{Routes: map[string]string{"/": "../routes/+page.svelte"}})
+	src := GenerateRouter(RouterOptions{Routes: map[string]string{"/": "../routes/_page.svelte"}})
 	want := []string{
 		"export function startRouter",
 		"export function shouldNotIntercept",
@@ -270,11 +270,11 @@ func TestGenerateClientEntry_importsRouter(t *testing.T) {
 	t.Parallel()
 
 	src := GenerateClientEntry(ClientEntryOptions{
-		RelSveltePath: "../../routes/+page.svelte",
+		RelSveltePath: "../../routes/_page.svelte",
 		RelRouterPath: "../__router/router",
 	})
 	for _, want := range []string{
-		`import Page from "../../routes/+page.svelte"`,
+		`import Page from "../../routes/_page.svelte"`,
 		`import { startRouter } from "../__router/router"`,
 		"const component = mount(Page",
 		"startRouter({ component, payload, target: document.body })",
@@ -289,18 +289,18 @@ func TestGenerateClientEntry_importsRouter(t *testing.T) {
 }
 
 // TestGenerateClientEntry_snapshotImport asserts that opting in routes
-// pull the `snapshot` named export out of the +page.svelte module and
+// pull the `snapshot` named export out of the _page.svelte module and
 // hand it to startRouter.
 func TestGenerateClientEntry_snapshotImport(t *testing.T) {
 	t.Parallel()
 
 	src := GenerateClientEntry(ClientEntryOptions{
-		RelSveltePath: "../../routes/+page.svelte",
+		RelSveltePath: "../../routes/_page.svelte",
 		RelRouterPath: "../__router/router",
 		HasSnapshot:   true,
 	})
 	for _, want := range []string{
-		`import Page, { snapshot } from "../../routes/+page.svelte"`,
+		`import Page, { snapshot } from "../../routes/_page.svelte"`,
 		"startRouter({ component, payload, target: document.body, snapshot })",
 	} {
 		if !strings.Contains(src, want) {
@@ -316,7 +316,7 @@ func TestGenerateRouter_snapshotRuntime(t *testing.T) {
 	t.Parallel()
 
 	src := GenerateRouter(RouterOptions{
-		Routes:         map[string]string{"/": "../routes/+page.svelte"},
+		Routes:         map[string]string{"/": "../routes/_page.svelte"},
 		SnapshotRoutes: map[string]bool{"/": true},
 	})
 	for _, want := range []string{
@@ -344,9 +344,9 @@ func TestGenerateRouter_snapshotKeysSorted(t *testing.T) {
 
 	src := GenerateRouter(RouterOptions{
 		Routes: map[string]string{
-			"/a": "../routes/a/+page.svelte",
-			"/m": "../routes/m/+page.svelte",
-			"/z": "../routes/z/+page.svelte",
+			"/a": "../routes/a/_page.svelte",
+			"/m": "../routes/m/_page.svelte",
+			"/z": "../routes/z/_page.svelte",
 		},
 		SnapshotRoutes: map[string]bool{
 			"/z": true,
@@ -368,7 +368,7 @@ func TestGenerateRouter_noSnapshotRoutes(t *testing.T) {
 	t.Parallel()
 
 	src := GenerateRouter(RouterOptions{
-		Routes: map[string]string{"/": "../routes/+page.svelte"},
+		Routes: map[string]string{"/": "../routes/_page.svelte"},
 	})
 	if !strings.Contains(src, "const snapshotRoutes: Record<string, true> = {\n};") {
 		t.Errorf("expected empty snapshotRoutes table:\n%s", src)
@@ -460,7 +460,7 @@ func TestGenerateRouter_windowSurface(t *testing.T) {
 // TestGenerateEnhance_redirectFollowsSPA pins the enhance runtime: when
 // the action envelope reports a redirect with an internal target and the
 // router exposes goto, we SPA-navigate; otherwise we fall back to a full
-// load. This is the form-action POST -> +server.go 303 path from #181.
+// load. This is the form-action POST -> _server.go 303 path from #181.
 func TestGenerateEnhance_redirectFollowsSPA(t *testing.T) {
 	t.Parallel()
 

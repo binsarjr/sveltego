@@ -116,7 +116,7 @@ func Fail(code int, data any) error {
 //	func (e *NotFoundError) Public() string { return "The requested item does not exist." }
 //
 //	// In Load:
-//	return nil, &NotFoundError{ID: id}  // pipeline renders +error.svelte with 404
+//	return nil, &NotFoundError{ID: id}  // pipeline renders _error.svelte with 404
 type HTTPError interface {
 	error
 	// Status returns the HTTP status code for this error (e.g. 404, 409).

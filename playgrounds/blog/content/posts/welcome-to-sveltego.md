@@ -12,7 +12,7 @@ no JavaScript runtime on the server.
 
 ## Highlights
 
-- File convention you already know: `+page.svelte`, `page.server.go`.
+- File convention you already know: `_page.svelte`, `page.server.go`.
 - Server-side `Load()` returns Go structs.
 - Form `Actions()` for things like comments.
 - Markdown rendered through `goldmark` and sanitized with `bluemonday`.

@@ -69,7 +69,7 @@ type ManifestOptions struct {
 	// <alias> adapter and a LayoutHeads slot for keys present here.
 	LayoutHeads map[string]bool
 	// ClientKeys maps ScannedRoute.PackagePath to the Vite client entry
-	// key (e.g. "routes/+page"). When present the manifest emits a
+	// key (e.g. "routes/_page"). When present the manifest emits a
 	// ClientKey field on each matching router.Route.
 	ClientKeys map[string]string
 	// HasServiceWorker, when true, makes the manifest declare a
@@ -83,12 +83,12 @@ type ManifestOptions struct {
 // GenerateManifest emits a deterministic, gofmt-clean Go source file
 // declaring `func Routes() []router.Route` from a [routescan.ScanResult].
 //
-// Routes with neither a +page.svelte nor a +server.go are skipped (e.g.
-// orphan +page.server.go directories — the scanner already emits a
+// Routes with neither a _page.svelte nor a _server.go are skipped (e.g.
+// orphan _page.server.go directories — the scanner already emits a
 // diagnostic for these). Page routes emit Page: <pkg>.Page{}.Render and
-// optionally Load / Actions when a +page.server.go is present alongside.
+// optionally Load / Actions when a _page.server.go is present alongside.
 // API-only routes emit Server: <pkg>.Handlers; the generated package's
-// +server.go is expected to declare `var Handlers map[string]http.HandlerFunc`.
+// _server.go is expected to declare `var Handlers map[string]http.HandlerFunc`.
 //
 // Symbol existence is not verified — Load / Actions / Handlers are emitted
 // unconditionally on file presence and `go build` surfaces the missing
@@ -168,7 +168,7 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 
 	// Reserve aliases for error-page packages. A boundary may live in a
 	// directory that itself contributes neither a page nor a layout
-	// (orphan +error.svelte), so the lookup walks every route's
+	// (orphan _error.svelte), so the lookup walks every route's
 	// ErrorBoundaryPackagePath rather than relying on entries / layouts.
 	var errorImports []errorImport
 	seenErrorPkg := make(map[string]struct{})
@@ -203,10 +203,12 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 	}
 
 	// Adapter emission needs `fmt` for the type-mismatch error message
-	// only when at least one Page or Layout adapter is present.
+	// only when at least one Mustache-Go Page or Layout adapter is
+	// present. Svelte-mode pages do not emit a render adapter so they
+	// do not contribute to the `hasPage` accounting.
 	var hasPage bool
 	for _, e := range entries {
-		if e.route.HasPage {
+		if e.route.HasPage && !isSvelteRoute(e.route.Pattern, opts.RouteOptions) {
 			hasPage = true
 			break
 		}
@@ -224,6 +226,13 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 	seenAlias := make(map[string]struct{})
 	for _, e := range entries {
 		if _, ok := seenAlias[e.alias]; ok {
+			continue
+		}
+		// RFC #379 phase 3: Svelte-mode page routes without a sibling
+		// _page.server.go contribute no Go symbols (no Page render, no
+		// Load wire). Skipping the import keeps the manifest compiling
+		// when the route directory holds only `_page.svelte`.
+		if isSvelteRoute(e.route.Pattern, opts.RouteOptions) && !e.route.HasPageServer && !e.route.HasServer {
 			continue
 		}
 		seenAlias[e.alias] = struct{}{}
@@ -301,8 +310,8 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 	// parameter to the `any`-shaped router.PageHandler. Type assertion
 	// happens inside the adapter so a dispatcher mismatch fails fast
 	// with a descriptive error instead of a panic.
-	emitRenderAdapters(&b, entries)
-	emitHeadAdapters(&b, entries, opts.PageHeads)
+	emitRenderAdapters(&b, entries, opts.RouteOptions)
+	emitHeadAdapters(&b, entries, opts.PageHeads, opts.RouteOptions)
 	emitLayoutAdapters(&b, layoutImports)
 	emitLayoutHeadAdapters(&b, layoutImports)
 	emitErrorAdapters(&b, errorImports)
@@ -397,11 +406,13 @@ func emitRouteIDConsts(b *Builder, entries []entry) error {
 // emitRenderAdapters writes one `render__<alias>` function per Page
 // route that wraps Page{}.Render into router.PageHandler shape. The
 // adapter zero-values PageData on a nil input so an empty Load() return
-// renders cleanly.
-func emitRenderAdapters(b *Builder, entries []entry) {
+// renders cleanly. Svelte-mode routes (RFC #379 phase 3) are skipped:
+// the .svelte body is owned by Vite and Svelte at runtime, so there is
+// no Go-side Page{}.Render to wrap.
+func emitRenderAdapters(b *Builder, entries []entry, routeOptions map[string]kit.PageOptions) {
 	hasAny := false
 	for _, e := range entries {
-		if e.route.HasPage {
+		if e.route.HasPage && !isSvelteRoute(e.route.Pattern, routeOptions) {
 			hasAny = true
 			break
 		}
@@ -410,7 +421,7 @@ func emitRenderAdapters(b *Builder, entries []entry) {
 		return
 	}
 	for _, e := range entries {
-		if !e.route.HasPage {
+		if !e.route.HasPage || isSvelteRoute(e.route.Pattern, routeOptions) {
 			continue
 		}
 		b.Linef("// render__%s adapts %s.Page{}.Render to router.PageHandler.", e.alias, e.alias)
@@ -471,16 +482,29 @@ func emitLayoutAdapters(b *Builder, imports []layoutImport) {
 	}
 }
 
+// isSvelteRoute reports whether the route's resolved page options
+// select the pure-Svelte template pipeline (RFC #379 phase 3). Used by
+// adapter emission to skip Go-side render/head wrapping for Svelte
+// routes — those are served as shell + JSON payload at runtime and
+// rendered client-side by Svelte.
+func isSvelteRoute(pattern string, routeOptions map[string]kit.PageOptions) bool {
+	if routeOptions == nil {
+		return false
+	}
+	return routeOptions[pattern].Templates == kit.TemplatesSvelte
+}
+
 // emitHeadAdapters writes one `head__<alias>` function per Page
 // route whose template emits a Head method. Each adapter widens the
 // typed PageData parameter to router.PageHeadHandler shape using the
-// same type-assert-or-error pattern as render__<alias>.
-func emitHeadAdapters(b *Builder, entries []entry, pageHeads map[string]bool) {
+// same type-assert-or-error pattern as render__<alias>. Svelte-mode
+// routes are skipped: Head is part of the .svelte body that Vite owns.
+func emitHeadAdapters(b *Builder, entries []entry, pageHeads map[string]bool, routeOptions map[string]kit.PageOptions) {
 	if len(pageHeads) == 0 {
 		return
 	}
 	for _, e := range entries {
-		if !e.route.HasPage || !pageHeads[e.route.PackagePath] {
+		if !e.route.HasPage || !pageHeads[e.route.PackagePath] || isSvelteRoute(e.route.Pattern, routeOptions) {
 			continue
 		}
 		b.Linef("// head__%s adapts %s.Page{}.Head to router.PageHeadHandler.", e.alias, e.alias)
@@ -556,13 +580,16 @@ func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutBy
 	b.Indent()
 	b.Linef("Pattern: %s,", quoteGo(r.Pattern))
 	emitSegments(b, r.Segments)
+	svelteMode := isSvelteRoute(r.Pattern, routeOptions)
 	switch {
 	case r.HasServer:
 		b.Linef("Server: %s.Handlers,", alias)
 	case r.HasPage:
-		b.Linef("Page: render__%s,", alias)
-		if pageHeads[r.PackagePath] {
-			b.Linef("Head: head__%s,", alias)
+		if !svelteMode {
+			b.Linef("Page: render__%s,", alias)
+			if pageHeads[r.PackagePath] {
+				b.Linef("Head: head__%s,", alias)
+			}
 		}
 		if ck := clientKeys[r.PackagePath]; ck != "" {
 			b.Linef("ClientKey: %s,", quoteGo(ck))
@@ -649,8 +676,9 @@ func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutBy
 
 // emitOptionsField writes one `Options: kit.PageOptions{...}` line per
 // route when routeOptions is non-nil. Routes without an entry default
-// to kit.DefaultPageOptions(); the default value is suppressed so the
-// generated source stays minimal for projects that declare no options.
+// to kit.DefaultPageOptions(). The Options literal is always emitted
+// so the runtime sees the resolved cascade (Templates in particular,
+// which gates the svelte vs legacy render path).
 func emitOptionsField(b *Builder, pattern string, routeOptions map[string]kit.PageOptions) {
 	if routeOptions == nil {
 		return
@@ -658,9 +686,6 @@ func emitOptionsField(b *Builder, pattern string, routeOptions map[string]kit.Pa
 	opts, ok := routeOptions[pattern]
 	if !ok {
 		opts = kit.DefaultPageOptions()
-	}
-	if opts.Equal(kit.DefaultPageOptions()) {
-		return
 	}
 	b.Linef("Options: %s,", formatPageOptions(opts))
 }
@@ -699,6 +724,9 @@ func formatPageOptions(o kit.PageOptions) string {
 	}
 	if o.TrailingSlash != kit.TrailingSlashNever {
 		parts = append(parts, "TrailingSlash: "+trailingSlashIdent(o.TrailingSlash))
+	}
+	if o.Templates != "" {
+		parts = append(parts, "Templates: "+quoteGo(o.Templates))
 	}
 	return "kit.PageOptions{" + strings.Join(parts, ", ") + "}"
 }

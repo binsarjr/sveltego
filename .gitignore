@@ -5,6 +5,10 @@ dist/
 node_modules/
 vite.config.gen.js
 
+# RFC #379 typegen output (auto-generated next to .svelte routes)
+**/_page.svelte.d.ts
+**/_layout.svelte.d.ts
+
 # Go
 /sveltego
 /sveltego.exe

@@ -23,7 +23,7 @@ func TestResolvePageOptions_cascade(t *testing.T) {
 		t.Fatalf("resolve: %v", err)
 	}
 
-	rootDefaults := kit.PageOptions{SSR: true, CSR: true, CSRF: true, TrailingSlash: kit.TrailingSlashAlways}
+	rootDefaults := kit.PageOptions{SSR: true, CSR: true, CSRF: true, TrailingSlash: kit.TrailingSlashAlways, Templates: kit.TemplatesSvelte}
 	if !got["/"].Equal(rootDefaults) {
 		t.Errorf("/ effective options = %+v, want %+v", got["/"], rootDefaults)
 	}
@@ -35,6 +35,7 @@ func TestResolvePageOptions_cascade(t *testing.T) {
 		SSROnly:       true,
 		CSRF:          true,
 		TrailingSlash: kit.TrailingSlashIgnore,
+		Templates:     kit.TemplatesSvelte,
 	}
 	if !got["/dash/billing"].Equal(billing) {
 		t.Errorf("/dash/billing effective options = %+v, want %+v", got["/dash/billing"], billing)

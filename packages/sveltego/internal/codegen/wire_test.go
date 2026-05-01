@@ -82,7 +82,7 @@ var Actions = kit.ActionMap{}
 func Load(ctx *kit.LoadCtx) (any, error) { return nil, nil }
 `)
 	dir := t.TempDir()
-	userPath := filepath.Join(dir, "page.server.go")
+	userPath := filepath.Join(dir, "_page.server.go")
 	if err := os.WriteFile(userPath, src, 0o600); err != nil {
 		t.Fatalf("write user: %v", err)
 	}
@@ -124,7 +124,7 @@ import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 func Load(ctx *kit.LoadCtx) (any, error) { return nil, nil }
 `)
 	dir := t.TempDir()
-	userPath := filepath.Join(dir, "page.server.go")
+	userPath := filepath.Join(dir, "_page.server.go")
 	if err := os.WriteFile(userPath, src, 0o600); err != nil {
 		t.Fatalf("write user: %v", err)
 	}

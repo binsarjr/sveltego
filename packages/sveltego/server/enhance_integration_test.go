@@ -20,6 +20,7 @@ func enhanceRoute(t *testing.T, action kit.ActionFn) []router.Route {
 	t.Helper()
 	opts := kit.DefaultPageOptions()
 	opts.CSRF = false
+	opts.Templates = ""
 	return []router.Route{{
 		Pattern:  "/login",
 		Segments: []router.Segment{{Kind: router.SegmentStatic, Value: "login"}},
@@ -135,13 +136,15 @@ func TestEnhance_CSRFForbidden(t *testing.T) {
 			return kit.ActionDataResult(200, "ok")
 		},
 	}
+	opts := kit.DefaultPageOptions()
+	opts.Templates = ""
 	srv := newTestServer(t, []router.Route{{
 		Pattern:  "/login",
 		Segments: []router.Segment{{Kind: router.SegmentStatic, Value: "login"}},
 		Page:     formAwarePage(),
 		Load:     formAwareLoad(),
 		Actions:  func() any { return actions },
-		Options:  kit.DefaultPageOptions(),
+		Options:  opts,
 	}})
 	ts := httptest.NewServer(srv)
 	defer ts.Close()

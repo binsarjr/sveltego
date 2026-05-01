@@ -25,7 +25,7 @@ var manifestFixtures = []string{
 
 // pageOptionsFixture lives under testdata/page-options/ rather than
 // the routescan testdata tree because the option scanner needs paired
-// layout.server.go / page.server.go files; replicating them under
+// _layout.server.go / _page.server.go files; replicating them under
 // routescan would distort the routescan goldens.
 var pageOptionsFixture = "page-options"
 

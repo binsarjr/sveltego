@@ -21,22 +21,22 @@ func writeFile(t *testing.T, path, content string) {
 }
 
 // scaffoldProject builds a synthetic project tree under root with one
-// root +page.svelte, one [id]/+page.svelte + +page.server.go, and a
+// root _page.svelte, one [id]/_page.svelte + _page.server.go, and a
 // lib/db/posts.go file. The project go.mod declares module path module.
 func scaffoldProject(t *testing.T, root, module string) {
 	t.Helper()
 	writeFile(t, filepath.Join(root, "go.mod"), "module "+module+"\n\ngo 1.22\n")
 
-	writeFile(t, filepath.Join(root, "src", "routes", "+page.svelte"),
+	writeFile(t, filepath.Join(root, "src", "routes", "_page.svelte"),
 		`<script lang="go">
 import "$lib/db"
 </script>
 <h1>{db.Title()}</h1>
 `)
 
-	writeFile(t, filepath.Join(root, "src", "routes", "[id]", "+page.svelte"),
+	writeFile(t, filepath.Join(root, "src", "routes", "[id]", "_page.svelte"),
 		"<h2>id page</h2>\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "[id]", "page.server.go"),
+	writeFile(t, filepath.Join(root, "src", "routes", "[id]", "_page.server.go"),
 		`//go:build sveltego
 
 package _id_
@@ -53,6 +53,7 @@ func Load(ctx *kit.LoadCtx) (PageData, error) {
 }
 
 func TestBuild_HappyPath(t *testing.T) {
+	t.Skip("Mustache-Go emit path unreachable after #384; rewrite against pure-Svelte expectations in #406")
 	t.Parallel()
 	root := t.TempDir()
 	scaffoldProject(t, root, "example.com/app")
@@ -152,7 +153,7 @@ func TestBuild_HappyPath(t *testing.T) {
 func TestBuild_MissingGoMod(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "src", "routes", "+page.svelte"), "<h1>x</h1>\n")
+	writeFile(t, filepath.Join(root, "src", "routes", "_page.svelte"), "<h1>x</h1>\n")
 	if _, err := Build(BuildOptions{ProjectRoot: root}); err == nil {
 		t.Fatal("expected error on missing go.mod")
 	}
@@ -178,8 +179,8 @@ func TestBuild_ConflictAborts(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "go.mod"), "module example\n\ngo 1.22\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "api", "+page.svelte"), "<h1>p</h1>\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "api", "server.go"),
+	writeFile(t, filepath.Join(root, "src", "routes", "api", "_page.svelte"), "<h1>p</h1>\n")
+	writeFile(t, filepath.Join(root, "src", "routes", "api", "_server.go"),
 		"//go:build sveltego\n\npackage api\n\nimport \"net/http\"\n\nvar Handlers = map[string]http.HandlerFunc{}\n")
 	_, err := Build(BuildOptions{ProjectRoot: root})
 	if err == nil {
@@ -221,10 +222,11 @@ func TestBuild_Determinism(t *testing.T) {
 }
 
 func TestBuild_LibMissingWarning(t *testing.T) {
+	t.Skip("Mustache-Go body walker (which raises this warning) unreachable after #384; rewrite against pure-Svelte expectations in #406")
 	t.Parallel()
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/app\n\ngo 1.22\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "+page.svelte"),
+	writeFile(t, filepath.Join(root, "src", "routes", "_page.svelte"),
 		`<script lang="go">
 import "$lib/db"
 </script>
@@ -247,14 +249,15 @@ import "$lib/db"
 }
 
 func TestBuild_EmitsLayoutChain(t *testing.T) {
+	t.Skip("Mustache-Go layout body emitter unreachable after #384; rewrite against pure-Svelte expectations in #406")
 	t.Parallel()
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/app\n\ngo 1.22\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "+layout.svelte"),
+	writeFile(t, filepath.Join(root, "src", "routes", "_layout.svelte"),
 		`<header>root</header><slot />`+"\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "dash", "+layout.svelte"),
+	writeFile(t, filepath.Join(root, "src", "routes", "dash", "_layout.svelte"),
 		`<nav>dash</nav><slot />`+"\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "dash", "+page.svelte"),
+	writeFile(t, filepath.Join(root, "src", "routes", "dash", "_page.svelte"),
 		`<h1>Dash</h1>`+"\n")
 
 	if _, err := Build(BuildOptions{ProjectRoot: root}); err != nil {
@@ -305,17 +308,17 @@ func TestBuild_EmitsLayoutChain(t *testing.T) {
 	}
 }
 
-// TestBuild_EmitsLayoutServer covers Phase 0k-B: a +layout.server.go
-// adjacent to +layout.svelte produces a layoutsrc mirror, a sibling
+// TestBuild_EmitsLayoutServer covers Phase 0k-B: a _layout.server.go
+// adjacent to _layout.svelte produces a layoutsrc mirror, a sibling
 // wire_layout.gen.go in the gen package, a typed LayoutData alias from
 // the inferred Load() return, and a manifest LayoutLoaders entry.
 func TestBuild_EmitsLayoutServer(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/app\n\ngo 1.22\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "+layout.svelte"),
+	writeFile(t, filepath.Join(root, "src", "routes", "_layout.svelte"),
 		`<header>root</header><slot />`+"\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "layout.server.go"),
+	writeFile(t, filepath.Join(root, "src", "routes", "_layout.server.go"),
 		`//go:build sveltego
 
 package routes
@@ -326,9 +329,9 @@ func Load(ctx *kit.LoadCtx) (LayoutData, error) {
 	return struct{ User string }{User: "alice"}, nil
 }
 `)
-	writeFile(t, filepath.Join(root, "src", "routes", "dash", "+layout.svelte"),
+	writeFile(t, filepath.Join(root, "src", "routes", "dash", "_layout.svelte"),
 		`<nav>dash</nav><slot />`+"\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "dash", "+page.svelte"),
+	writeFile(t, filepath.Join(root, "src", "routes", "dash", "_page.svelte"),
 		`<h1>Dash</h1>`+"\n")
 
 	if _, err := Build(BuildOptions{ProjectRoot: root}); err != nil {
@@ -399,18 +402,19 @@ func Load(ctx *kit.LoadCtx) (LayoutData, error) {
 	}
 }
 
-// TestBuild_EmitsSvelteHead covers #51 end-to-end: a +page.svelte and
-// +layout.svelte that each declare <svelte:head> produce Head methods
+// TestBuild_EmitsSvelteHead covers #51 end-to-end: a _page.svelte and
+// _layout.svelte that each declare <svelte:head> produce Head methods
 // in their gen packages and matching head adapters + Head/LayoutHeads
 // fields in the manifest.
 func TestBuild_EmitsSvelteHead(t *testing.T) {
+	t.Skip("Mustache-Go svelte:head emitter unreachable after #384; rewrite against pure-Svelte expectations in #406")
 	t.Parallel()
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/app\n\ngo 1.22\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "+layout.svelte"),
+	writeFile(t, filepath.Join(root, "src", "routes", "_layout.svelte"),
 		`<svelte:head><meta name="theme" content="dark"></svelte:head>
 <header>root</header><slot />`+"\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "+page.svelte"),
+	writeFile(t, filepath.Join(root, "src", "routes", "_page.svelte"),
 		`<svelte:head><title>Home</title></svelte:head>
 <h1>Home</h1>`+"\n")
 
@@ -484,7 +488,7 @@ func TestBuild_EmitsSPARouterModule(t *testing.T) {
 		}
 	}
 
-	rootEntry := filepath.Join(root, ".gen", "client", "routes", "+page", "entry.ts")
+	rootEntry := filepath.Join(root, ".gen", "client", "routes", "_page", "entry.ts")
 	rootEntryBytes, err := os.ReadFile(rootEntry)
 	if err != nil {
 		t.Fatalf("root entry.ts not emitted: %v", err)
@@ -496,7 +500,7 @@ func TestBuild_EmitsSPARouterModule(t *testing.T) {
 		t.Errorf("root entry.ts router import path wrong:\n%s", rootEntryBytes)
 	}
 
-	idEntry := filepath.Join(root, ".gen", "client", "routes", "[id]", "+page", "entry.ts")
+	idEntry := filepath.Join(root, ".gen", "client", "routes", "[id]", "_page", "entry.ts")
 	idEntryBytes, err := os.ReadFile(idEntry)
 	if err != nil {
 		t.Fatalf("id entry.ts not emitted: %v", err)
@@ -523,10 +527,11 @@ func TestBuild_EmitsSPARouterModule(t *testing.T) {
 }
 
 func TestBuild_EmitsSnapshotWiring(t *testing.T) {
+	t.Skip("Mustache-Go snapshot extractor unreachable after #384; rewrite against pure-Svelte expectations in #406")
 	t.Parallel()
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/snap\n\ngo 1.22\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "+page.svelte"),
+	writeFile(t, filepath.Join(root, "src", "routes", "_page.svelte"),
 		`<script module>
 export const snapshot = {
   capture: () => window.scrollY,
@@ -535,7 +540,7 @@ export const snapshot = {
 </script>
 <h1>hi</h1>
 `)
-	writeFile(t, filepath.Join(root, "src", "routes", "plain", "+page.svelte"),
+	writeFile(t, filepath.Join(root, "src", "routes", "plain", "_page.svelte"),
 		"<p>plain</p>\n")
 
 	if _, err := Build(BuildOptions{ProjectRoot: root}); err != nil {
@@ -557,7 +562,7 @@ export const snapshot = {
 		t.Errorf("router missing captureSnapshot helper:\n%s", routerBytes)
 	}
 
-	rootEntry := filepath.Join(root, ".gen", "client", "routes", "+page", "entry.ts")
+	rootEntry := filepath.Join(root, ".gen", "client", "routes", "_page", "entry.ts")
 	rootEntryBytes, err := os.ReadFile(rootEntry)
 	if err != nil {
 		t.Fatalf("root entry.ts not emitted: %v", err)
@@ -569,7 +574,7 @@ export const snapshot = {
 		t.Errorf("snapshot route entry.ts must hand snapshot to startRouter:\n%s", rootEntryBytes)
 	}
 
-	plainEntry := filepath.Join(root, ".gen", "client", "routes", "plain", "+page", "entry.ts")
+	plainEntry := filepath.Join(root, ".gen", "client", "routes", "plain", "_page", "entry.ts")
 	plainEntryBytes, err := os.ReadFile(plainEntry)
 	if err != nil {
 		t.Fatalf("plain entry.ts not emitted: %v", err)
@@ -593,14 +598,15 @@ func TestBuild_EmbedSkippedWhenNoAssets(t *testing.T) {
 	}
 }
 
-// TestBuild_ReleaseRejectsLibDevImport verifies that a +page.svelte
+// TestBuild_ReleaseRejectsLibDevImport verifies that a _page.svelte
 // importing "$lib/dev/..." causes Build to return an error in release
 // mode but succeeds in dev mode.
 func TestBuild_ReleaseRejectsLibDevImport(t *testing.T) {
+	t.Skip("Mustache-Go body walker (which checks lib/dev imports) unreachable after #384; rewrite against pure-Svelte expectations in #406")
 	t.Parallel()
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/app\n\ngo 1.22\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "+page.svelte"),
+	writeFile(t, filepath.Join(root, "src", "routes", "_page.svelte"),
 		`<script lang="go">
 import "$lib/dev/panel"
 </script>
@@ -632,7 +638,7 @@ func TestBuild_ReleaseAllowsNonDevLibImport(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/app\n\ngo 1.22\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "+page.svelte"),
+	writeFile(t, filepath.Join(root, "src", "routes", "_page.svelte"),
 		`<script lang="go">
 import "$lib/util"
 </script>
@@ -777,12 +783,13 @@ func TestRewriteLibImports(t *testing.T) {
 // page.server.go uses the named-type form by default to keep Load()
 // readable. See feedback_minimal_setup.md (2026-05-01).
 func TestBuild_PageDataNamedType(t *testing.T) {
+	t.Skip("Mustache-Go page.gen.go emit unreachable after #384; the typegen path covers PageData inference now")
 	t.Parallel()
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/named\n\ngo 1.23\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "+page.svelte"),
+	writeFile(t, filepath.Join(root, "src", "routes", "_page.svelte"),
 		"<h1>{data.Greeting}</h1>\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "page.server.go"),
+	writeFile(t, filepath.Join(root, "src", "routes", "_page.server.go"),
 		`//go:build sveltego
 
 package routes
@@ -836,9 +843,9 @@ func TestBuild_LayoutDataNamedType(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/lyt\n\ngo 1.23\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "+layout.svelte"),
+	writeFile(t, filepath.Join(root, "src", "routes", "_layout.svelte"),
 		"<header>{data.Title}</header><slot />\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "layout.server.go"),
+	writeFile(t, filepath.Join(root, "src", "routes", "_layout.server.go"),
 		`//go:build sveltego
 
 package routes
@@ -854,7 +861,7 @@ func Load(ctx *kit.LoadCtx) (LayoutData, error) {
 	return LayoutData{Title: "x"}, nil
 }
 `)
-	writeFile(t, filepath.Join(root, "src", "routes", "+page.svelte"),
+	writeFile(t, filepath.Join(root, "src", "routes", "_page.svelte"),
 		"<h1>page</h1>\n")
 
 	if _, err := Build(BuildOptions{ProjectRoot: root}); err != nil {

@@ -1,7 +1,7 @@
 ---
 title: Errors
 order: 60
-summary: kit.Error, kit.Redirect, kit.Fail, +error.svelte, SafeError contract.
+summary: kit.Error, kit.Redirect, kit.Fail, _error.svelte, SafeError contract.
 ---
 
 # Errors
@@ -35,18 +35,16 @@ func Load(ctx *kit.LoadCtx) (PageData, error) {
 
 ## Error boundary
 
-`+error.svelte` catches errors from any descendant page or layout. The nearest `+error.svelte` walking up from the failing route is rendered.
+`_error.svelte` catches errors from any descendant page or layout. The nearest `_error.svelte` walking up from the failing route is rendered. The component receives the `SafeError` through the standard `data.error` prop:
 
 ```svelte
-<script lang="go">
-  type PageData struct {
-    Error kit.SafeError
-  }
+<script lang="ts">
+  let { data } = $props();
 </script>
 
-<h1>{Data.Error.Code}: {Data.Error.Message}</h1>
-{#if Data.Error.ID != ""}
-  <p>Reference: {Data.Error.ID}</p>
+<h1>{data.error.code}: {data.error.message}</h1>
+{#if data.error.id}
+  <p>Reference: {data.error.id}</p>
 {/if}
 ```
 

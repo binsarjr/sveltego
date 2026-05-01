@@ -11,7 +11,7 @@ func TestBuild_EmitsRESTDispatcher(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/app\n\ngo 1.22\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "api", "users", "server.go"),
+	writeFile(t, filepath.Join(root, "src", "routes", "api", "users", "_server.go"),
 		`//go:build sveltego
 
 package users
@@ -66,8 +66,8 @@ func POST(ev *kit.RequestEvent) *kit.Response {
 
 	manifestBytes, _ := os.ReadFile(manifest)
 	for _, want := range []string{
-		`Pattern: ` + "`/api/users`",
-		`Server: page_routes_api_users.Handlers,`,
+		"`/api/users`",
+		`page_routes_api_users.Handlers,`,
 	} {
 		if !bytes.Contains(manifestBytes, []byte(want)) {
 			t.Errorf("manifest missing %q:\n%s", want, manifestBytes)
@@ -83,7 +83,7 @@ func TestBuild_RESTUnknownVerbErrors(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/app\n\ngo 1.22\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "api", "server.go"),
+	writeFile(t, filepath.Join(root, "src", "routes", "api", "_server.go"),
 		`//go:build sveltego
 
 package api

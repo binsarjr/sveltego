@@ -19,7 +19,7 @@ func TestWatcherDetectsSvelteChange(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "src", "routes"), 0o755); err != nil {
 		t.Fatalf("mkdir routes: %v", err)
 	}
-	page := filepath.Join(root, "src", "routes", "+page.svelte")
+	page := filepath.Join(root, "src", "routes", "_page.svelte")
 	if err := os.WriteFile(page, []byte("<h1>v1</h1>"), 0o644); err != nil {
 		t.Fatalf("seed page: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestWatcherCoalescesBurst(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "src", "routes"), 0o755); err != nil {
 		t.Fatalf("mkdir routes: %v", err)
 	}
-	page := filepath.Join(root, "src", "routes", "+page.svelte")
+	page := filepath.Join(root, "src", "routes", "_page.svelte")
 	if err := os.WriteFile(page, []byte("v1"), 0o644); err != nil {
 		t.Fatalf("seed: %v", err)
 	}

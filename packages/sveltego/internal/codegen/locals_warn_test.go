@@ -34,7 +34,7 @@ func Load(ctx *kit.LoadCtx) (any, error) {
 	return nil, nil
 }
 `
-	p := writeServerFile(t, tmp, "page.server.go", body)
+	p := writeServerFile(t, tmp, "_page.server.go", body)
 	diags, err := scanLocalsAccessUnderPrerender(p)
 	if err != nil {
 		t.Fatalf("scan: %v", err)
@@ -62,7 +62,7 @@ func Load(ctx *kit.LoadCtx) (any, error) {
 	return nil, nil
 }
 `
-	p := writeServerFile(t, tmp, "page.server.go", body)
+	p := writeServerFile(t, tmp, "_page.server.go", body)
 	diags, err := scanLocalsAccessUnderPrerender(p)
 	if err != nil {
 		t.Fatalf("scan: %v", err)
@@ -81,7 +81,7 @@ package routes
 
 var Marker = 1
 `
-	p := writeServerFile(t, tmp, "page.server.go", body)
+	p := writeServerFile(t, tmp, "_page.server.go", body)
 	diags, err := scanLocalsAccessUnderPrerender(p)
 	if err != nil {
 		t.Fatalf("scan: %v", err)
@@ -107,7 +107,7 @@ func LayoutLoad(ctx *kit.LoadCtx) (any, error) {
 	return nil, nil
 }
 `
-	p := writeServerFile(t, tmp, "layout.server.go", body)
+	p := writeServerFile(t, tmp, "_layout.server.go", body)
 	diags, err := scanLocalsAccessUnderPrerender(p)
 	if err != nil {
 		t.Fatalf("scan: %v", err)

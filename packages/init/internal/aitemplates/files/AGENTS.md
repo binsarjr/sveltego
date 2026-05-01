@@ -14,31 +14,38 @@ All four files carry the same canonical rules; the per-tool variants add tool-sp
 
 ## 1. Stack
 
-- This is a **sveltego** project. SSR is generated at build time from `.svelte` to Go via `sveltego compile`.
-- The server runtime is **pure Go**. There is no JS/Node runtime on the server.
+- This is a **sveltego** project. `.svelte` files are pure Svelte 5; `sveltego compile` reads sibling `_*.server.go` files and emits TypeScript declarations (`.svelte.d.ts`) so editors and the Svelte LSP get strong types for `data`, plus the Go runtime that hosts SSG output and SPA payloads.
+- The server runtime is **pure Go**. There is no JS/Node runtime on the server at request time. Node may run **at build time only** to prerender SSG routes through `svelte/server`.
 - The client uses **Svelte 5 runes** (`$props`, `$state`, `$derived`, `$effect`, `$bindable`) bundled by Vite for hydration only.
-- Generated code lives under `.gen/` (gitignored). Never edit `.gen/*.go` by hand — edit the `.svelte` source.
+- Generated code lives under `.gen/` (gitignored). Never edit `.gen/*` by hand — edit the `.svelte` source or its `_*.server.go` sibling.
 
 ---
 
-## 2. Template expressions are Go, not JavaScript
+## 2. Templates are pure Svelte / JS / TS
 
-Inside `{...}` mustaches, write **Go** expressions. Field access is **PascalCase** (Go exported fields).
+Inside `.svelte` files, write **Svelte/JS/TS only**. Field access uses **camelCase** keys derived from JSON tags on the Go-side `PageData` struct.
 
-| Wrong (JS) | Right (Go) |
+| Wrong (Go in mustaches) | Right (pure Svelte) |
 |---|---|
-| `{user.name}` | `{Data.User.Name}` |
-| `{posts.length}` | `{len(Data.Posts)}` |
-| `{count + 1}` | `{Count + 1}` |
-| `{"Hello, " + name}` | `{"Hello, " + Name}` |
-| `{n.toString()}` | `{strconv.Itoa(N)}` |
-| `{user?.name ?? "guest"}` | resolve in `Load()`, expose via `Data` |
-| `{users.filter(u => u.active)}` | filter in `Load()`, expose pre-filtered slice |
-| `null` | `nil` |
+| `{Data.User.Name}` | `{data.user.name}` |
+| `{len(Data.Posts)}` | `{data.posts.length}` |
+| `{Count + 1}` | `{count + 1}` |
+| `{strconv.Itoa(N)}` | `{n.toString()}` |
+| `nil` | `null` |
+| `{#if Data.User != nil}` | `{#if data.user != null}` |
 
-Expressions are validated at codegen via `go/parser.ParseExpr`. Anything that does not parse as a Go expression is a build error, not a runtime error.
+Server-side data shaping (filtering, formatting, computing derived fields) belongs in `Load()`. Templates only render.
 
-Imports for any package referenced inside `{...}` (e.g. `strconv`) go in the `<script lang="go">` block of the same component.
+Imports inside `<script lang="ts">` are normal TypeScript. Reach for `PageData` from the sibling `.svelte.d.ts` codegen emits:
+
+```svelte
+<script lang="ts">
+  import type { PageData } from './_page.svelte';
+  let { data }: { data: PageData } = $props();
+</script>
+
+<h1>{data.title}</h1>
+```
 
 ---
 
@@ -46,14 +53,14 @@ Imports for any package referenced inside `{...}` (e.g. `strconv`) go in the `<s
 
 ```
 src/routes/
-  +page.svelte           SSR template, Go expressions inside {...}
-  page.server.go         Load(), Actions      — needs //go:build sveltego
-  +layout.svelte         layout chain
-  layout.server.go       layout-level Load    — needs //go:build sveltego
-  server.go              REST endpoints       — needs //go:build sveltego
-  +error.svelte          error boundary
+  _page.svelte           SSR template, pure Svelte
+  _page.server.go        Load(), Actions      (Go skips '_*' automatically)
+  _layout.svelte         layout chain
+  _layout.server.go      layout-level Load    (Go skips '_*' automatically)
+  _server.go             REST endpoints       (Go skips '_*' automatically)
+  _error.svelte          error boundary
   (group)/               route group, no URL segment
-  +page@.svelte          layout reset
+  _page@.svelte          layout reset
   [param]/               route param
   [[optional]]/          optional segment
   [...rest]/             catch-all
@@ -62,26 +69,18 @@ src/lib/                 shared modules ($lib alias)
 hooks.server.go          Handle, HandleError, HandleFetch, Reroute, Init
 ```
 
-**`+` prefix rules (do not invert):**
+**`_` prefix rules:**
 
-- `.svelte` files keep the `+` prefix: `+page.svelte`, `+layout.svelte`, `+error.svelte`, `+page@.svelte`.
-- User `.go` files **drop** the `+` prefix: `page.server.go`, `layout.server.go`, `server.go`, `hooks.server.go`. SvelteKit-style `+page.server.go` is rejected by the scanner.
+- All route files under `src/routes/` use the `_` prefix: `_page.svelte`, `_layout.svelte`, `_error.svelte`, `_page@.svelte`, `_page.server.go`, `_layout.server.go`, `_server.go`. The `_` prefix on `.go` files makes Go's default toolchain skip them automatically.
+- `hooks.server.go` (project root) and `src/params/<name>.go` keep the `//go:build sveltego` constraint because their filenames have no `_` prefix.
 
-**Build constraint:** every user `.go` file under `src/` (and `hooks.server.go` at project root) **must** start with:
-
-```go
-//go:build sveltego
-
-package myroute
-```
-
-Without that line, `go build` / `go vet` / `golangci-lint` would try to compile the file in a default Go module that lacks sveltego's generated context. The constraint makes the standard toolchain skip these files; codegen reads them through `go/parser` directly.
+Without that constraint on the non-`_` files, `go build` / `go vet` / `golangci-lint` would try to compile them in a default Go module that lacks sveltego's generated context. Codegen reads every user `.go` file through `go/parser` directly regardless of the constraint.
 
 ---
 
 ## 4. Common patterns
 
-### `Load`
+### `Load` (`_page.server.go`)
 
 ```go
 //go:build sveltego
@@ -90,20 +89,32 @@ package routes
 
 import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
+const Templates = "svelte"
+
+type User struct {
+    ID   string `json:"id"`
+    Name string `json:"name"`
+}
+
+type Post struct {
+    ID    string `json:"id"`
+    Title string `json:"title"`
+}
+
+type PageData struct {
+    User  User   `json:"user"`
+    Posts []Post `json:"posts"`
+}
+
 func Load(ctx *kit.LoadCtx) (PageData, error) {
     return PageData{
         User:  currentUser(ctx),
         Posts: fetchPosts(ctx),
     }, nil
 }
-
-type PageData struct {
-    User  User
-    Posts []Post
-}
 ```
 
-`PageData` is inferred from the `Load` return type. The template references its fields as `{Data.User.Name}`, `{len(Data.Posts)}`.
+The struct's JSON tags drive the Go ↔ TypeScript boundary. The template references its fields as `{data.user.name}`, `{data.posts.length}`. Codegen generates a sibling `.svelte.d.ts` declaration so the Svelte LSP type-checks `data` end-to-end.
 
 ### Actions (form POST)
 
@@ -123,6 +134,8 @@ var Actions = kit.ActionMap{
 ```
 
 `kit.ActionRedirect`, `kit.ActionFail`, `kit.ActionDataResult` are the three sealed `ActionResult` constructors — do not invent new variants.
+
+When a route declares `Actions`, codegen widens the page payload with a `form` field. Add `Form any \`json:"form"\`` to your `PageData` struct so the template can render the action result via `{data.form?.error}` or similar.
 
 ### Redirect / Fail from Load
 
@@ -155,11 +168,22 @@ func Load(ctx *kit.LoadCtx) (PageData, error) {
 
 `LoadCtx.Parent()` returns `any`. Type-assert to the immediate parent's data type.
 
-### REST endpoints (`server.go`)
+### Prerender (SSG)
+
+For routes that are content-stable at build time, opt into static prerender:
 
 ```go
-//go:build sveltego
+const (
+    Templates = "svelte"
+    Prerender = true
+)
+```
 
+`sveltego build` runs Node once at build time and writes `static/_prerendered/<path>/index.html`. The deployed binary serves it as a static file — no Node, no Go template work per request.
+
+### REST endpoints (`_server.go`)
+
+```go
 package api
 
 func GET(ev *kit.RequestEvent) (*kit.Response, error) { ... }
@@ -181,7 +205,7 @@ var Handle kit.HandleFn = func(ev *kit.RequestEvent, resolve kit.ResolveFn) (*ki
 var HandleError kit.HandleErrorFn = func(ev *kit.RequestEvent, err error) kit.SafeError { ... }
 ```
 
-`HandleError` returns a sanitized `kit.SafeError` (Code, Message, ID). The `+error.svelte` template binds `data` to this type directly: `{data.Code}`, `{data.Message}`.
+`HandleError` returns a sanitized `kit.SafeError` (Code, Message, ID). The `_error.svelte` template binds `data` to this type directly: `{data.code}`, `{data.message}`.
 
 ---
 
@@ -189,15 +213,15 @@ var HandleError kit.HandleErrorFn = func(ev *kit.RequestEvent, err error) kit.Sa
 
 Reject these at code review. They will fail at codegen or produce wrong runtime behavior.
 
-- **JS expressions in mustaches.** No `?.`, no `??`, no template literals, no `.map`/`.filter`/`.length`. Compute in `Load()` and expose via `Data`.
+- **Go expressions in mustaches.** No `{Data.User.Name}`, no `{len(...)}`, no `nil`. Pure Svelte/JS/TS only — `{data.user.name}`, `{data.posts.length}`, `null`. The legacy `Templates: "go-mustache"` mode is removed.
+- **PascalCase field access in templates.** Templates read JSON-tagged fields, so use camelCase: `{data.user.name}`, not `{data.User.Name}`.
+- **Missing JSON tags on `PageData` fields.** Without explicit `\`json:"..."\`` tags, Go marshals fields with their PascalCase Go names and the template `{data.foo}` won't match.
 - **Svelte 4 reactivity.** No `export let`, no `$:` blocks, no store autoload. Use `$props()`, `$state()`, `$derived()`, `$effect()`.
-- **`null` instead of `nil`.** Templates evaluate as Go.
-- **camelCase field access in templates.** `{data.user.name}` will not compile against a `PageData` whose field is `User`.
-- **Adding a JS server runtime.** No Node, no Bun, no Deno on the server. The point of sveltego is Go-only SSR.
-- **Editing `.gen/*.go`.** Generated files are overwritten on every `sveltego compile`.
-- **Universal `Load` (`+page.ts`).** sveltego is server-only by design (ADR 0005). All `Load` runs on the server in Go.
-- **`+page.server.go` filename.** Drop the `+` prefix on user `.go` files.
-- **Missing `//go:build sveltego`.** Codegen will warn; the standard Go toolchain will then try to compile a file that references undeclared symbols.
+- **Adding a JS server runtime at request time.** No Node, no Bun, no Deno on the request path. Node may run at build time for SSG only.
+- **Editing `.gen/*` files.** Generated files are overwritten on every `sveltego compile`.
+- **Universal `Load` (e.g. SvelteKit's `+page.ts`).** sveltego is server-only by design (ADR 0005). All `Load` runs on the server in Go.
+- **`+` prefix on route files** (SvelteKit-style `+page.svelte`, `+layout.svelte`, `+page.server.go`). Use `_` prefix instead (`_page.svelte`, `_layout.svelte`, `_page.server.go`).
+- **Missing `//go:build sveltego` on `hooks.server.go` or `src/params/<name>.go`.** The standard Go toolchain will try to compile those files (they have no `_` prefix to auto-skip them). Route files under `src/routes/**` no longer need the constraint — the `_` prefix handles skipping.
 
 ---
 

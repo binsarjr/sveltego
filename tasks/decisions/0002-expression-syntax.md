@@ -1,8 +1,14 @@
 # ADR 0002 — Template Expression Syntax
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR 0008](0008-pure-svelte-pivot.md) (2026-05-01)
 - **Date:** 2026-04-29
 - **Issue:** [binsarjr/sveltego#2](https://github.com/binsarjr/sveltego/issues/2)
+
+> **Superseded.** ADR 0008 replaces Go-expression mustaches with 100% pure
+> Svelte/JS/TS templates. The Go-parser-driven validation flow described
+> below no longer applies — template expressions are JavaScript and are
+> validated by the Svelte compiler. This file is kept for historical
+> context.
 
 ## Decision
 

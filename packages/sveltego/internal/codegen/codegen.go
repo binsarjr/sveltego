@@ -16,7 +16,7 @@ import (
 type Options struct {
 	// PackageName is written verbatim into the generated `package` clause.
 	PackageName string
-	// ServerFilePath optionally points at a sibling +page.server.go whose
+	// ServerFilePath optionally points at a sibling _page.server.go whose
 	// Load() inline struct return is used to infer PageData fields.
 	ServerFilePath string
 	// HasActions is true when the sibling page.server.go declares
@@ -58,7 +58,7 @@ type Options struct {
 type LayoutOptions struct {
 	// PackageName is written verbatim into the generated `package` clause.
 	PackageName string
-	// ServerFilePath optionally points at a sibling layout.server.go whose
+	// ServerFilePath optionally points at a sibling _layout.server.go whose
 	// Load() inline struct return is used to infer LayoutData fields.
 	ServerFilePath string
 	// Filename is the .svelte source path used to seed the CSS scope
@@ -220,7 +220,7 @@ func Generate(frag *ast.Fragment, opts Options) ([]byte, error) {
 // The signature mirrors Generate but accepts a `children` callback that
 // any <slot /> element in the template lowers to. LayoutData is emitted
 // as an empty type alias today; Phase 0k-B introduces real data via
-// +layout.server.go.
+// _layout.server.go.
 func GenerateLayout(frag *ast.Fragment, opts LayoutOptions) ([]byte, error) {
 	if frag == nil {
 		return nil, errors.New("codegen: nil fragment")
@@ -334,7 +334,7 @@ func GenerateLayout(frag *ast.Fragment, opts LayoutOptions) ([]byte, error) {
 	return restoreRunesBytes(out), nil
 }
 
-// GenerateErrorPage lowers a +error.svelte fragment to Go source for an
+// GenerateErrorPage lowers a _error.svelte fragment to Go source for an
 // ErrorPage.Render method. The render parameter binds to kit.SafeError so
 // templates reference {data.Code}, {data.Message}, {data.ID} directly.
 func GenerateErrorPage(frag *ast.Fragment, opts ErrorPageOptions) ([]byte, error) {

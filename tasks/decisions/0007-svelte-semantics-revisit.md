@@ -1,10 +1,10 @@
 # ADR 0007 — Svelte Semantics Revisit (Go-mustache vs Full-Svelte)
 
-- **Status:** Proposed
+- **Status:** Superseded by [ADR 0008](0008-pure-svelte-pivot.md) (2026-05-01)
 - **Date:** 2026-04-30
 - **Authors:** binsarjr, orchestrator
 - **Issue:** [binsarjr/sveltego#309](https://github.com/binsarjr/sveltego/issues/309)
-- **Supersedes (if Accepted):** sections of [ADR 0001](0001-parser-strategy.md) and [ADR 0002](0002-expression-syntax.md) covering expression syntax and template semantics. Status remains **Proposed** until the team converges.
+- **Superseded by:** [ADR 0008 — Pivot to Pure-Svelte Templates](0008-pure-svelte-pivot.md). The team rejected all five options enumerated below (A status quo, B JS runtime SSR, C CSR-only, D Go VDOM, E sugar) and chose a sixth path captured in RFC [#379](https://github.com/binsarjr/sveltego/issues/379): pure-Svelte templates with Go-AST → TypeScript declaration codegen, plus hybrid SSG (Node at build time only) + SPA runtime. The no-JS-runtime-on-server invariant is preserved. See ADR 0008 for the resolution.
 - **Related:** [ADR 0003](0003-file-convention.md), [ADR 0004](0004-codegen-shape.md), [ADR 0005](0005-non-goals.md), Issue #174 (file-naming RFC).
 
 > Working document. Not a dictation. The recommendation below is the

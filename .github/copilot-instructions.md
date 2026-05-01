@@ -19,13 +19,16 @@ If a per-package `CLAUDE.md` exists (e.g. `packages/sveltego/internal/codegen/CL
 
 `sveltego` is a **rewrite of SvelteKit's shape in pure Go**, not an embedding of SvelteKit-the-JS-server. Pre-alpha. The Go workspace already hosts the core (`packages/sveltego`), auth (`packages/auth`), tooling (`packages/lsp`, `packages/mcp`, `packages/init`, `packages/enhanced-img`), six deploy adapters plus `adapter-auto`, the bench harness (`bench/`, `benchmarks/`), AI templates, and end-to-end playgrounds. MVP, v0.2, v0.4, and v1.1 milestones have shipped; v0.3, v0.5, v0.6, and v1.0 are in flight on `binsarjr/sveltego`.
 
-Hard invariants (do not reopen without new evidence — see [`tasks/lessons/2026-04-29-pivot-to-go-native-rewrite.md`](tasks/lessons/2026-04-29-pivot-to-go-native-rewrite.md)):
+As of 2026-05-01, [ADR 0008](tasks/decisions/0008-pure-svelte-pivot.md) supersedes [ADR 0007](tasks/decisions/0007-svelte-semantics-revisit.md): templates are **100% pure Svelte/JS/TS**, server-side Go files own data, and codegen emits TypeScript declaration files (Go AST → `.d.ts`) for IDE autocompletion. Runtime is hybrid: build-time SSG (Node only at build time) for prerendered routes, runtime SPA (Go-only) for everything else. Phases 2–6 land via [#381](https://github.com/binsarjr/sveltego/issues/381)–[#385](https://github.com/binsarjr/sveltego/issues/385); see [RFC #379](https://github.com/binsarjr/sveltego/issues/379) for the full plan.
 
-- **No JS runtime on the server.** `.svelte` compiles to Go source via codegen (`.gen/*.go`) for SSR. Vite produces the client bundle for hydration only.
-- **Mustache expressions are Go, not JS.** `{Data.User.Name}`, `{len(Data.Posts)}`, `nil` not `null`. PascalCase fields. Validated at codegen via `go/parser.ParseExpr`.
+Hard invariants (post-ADR 0008; do not reopen without new evidence — see [`tasks/lessons/2026-04-29-pivot-to-go-native-rewrite.md`](tasks/lessons/2026-04-29-pivot-to-go-native-rewrite.md)):
+
+- **No JS runtime on the server at runtime.** Node may run during `sveltego build` to prerender SSG routes via `svelte/server`. The deployed Go binary plus `static/` is the entire deployable; no JS engine on the request path.
+- **Templates are pure Svelte.** `.svelte` files contain only Svelte/JS/TS — runes, JS expressions, lowercase props (`{data.user.name}`). Zero Go syntax in mustaches, blocks, or `<script>`. Svelte LSP and the npm Svelte ecosystem work without a fork.
+- **Go owns the server.** Server-side Go files return a typed data shape from `Load(ctx kit.LoadCtx)`; that shape becomes `data` in client `$props()`. JSON tags drive the Go ↔ TypeScript boundary.
+- **Codegen, not interpretation.** Static decisions at build time. Codegen emits `.svelte.d.ts` declarations (Go AST → TypeScript) plus prerendered HTML for SSG routes, instead of the old `.gen/*.go` template artifacts.
 - **Svelte 5 only.** Runes (`$props`, `$state`, `$derived`, `$effect`, `$bindable`). Skip Svelte 4 legacy reactivity.
-- **Codegen, not interpretation.** Static decisions at build time, no per-request template walking.
-- **Performance target:** 20–40k rps mid-complexity SSR. If a proposal cannot reach that, surface the gap before writing code.
+- **Performance target:** 20–40k rps for SSG (zero per-request work) and JSON-payload responses for SPA-mode dynamic routes. If a proposal cannot reach that, surface the gap before writing code.
 
 For high-level project context, read [`README.md`](./README.md) first, then [`CLAUDE.md`](./CLAUDE.md).
 
@@ -201,14 +204,14 @@ When designing, codegen, or runtime work touches these names, treat them as **lo
 
 ```
 src/routes/
-  +page.svelte           // SSR template, Go expressions inside {...}
-  page.server.go         // Load(), Actions()           — needs //go:build sveltego
-  +layout.svelte         // layout chain
-  layout.server.go       // parent data flow            — needs //go:build sveltego
-  server.go              // REST endpoints (GET, POST)  — needs //go:build sveltego
-  +error.svelte          // error boundary
+  _page.svelte           // pure Svelte/JS/TS template
+  _page.server.go        // Load(), Actions()           (Go skips _* automatically)
+  _layout.svelte         // layout chain
+  _layout.server.go      // parent data flow            (Go skips _* automatically)
+  _server.go             // REST endpoints (GET, POST)  (Go skips _* automatically)
+  _error.svelte          // error boundary
   (group)/               // route group, no URL segment
-  +page@.svelte          // layout reset
+  _page@.svelte          // layout reset
   [param]/               // route param
   [[optional]]/          // optional segment
   [...rest]/             // catch-all
@@ -218,7 +221,7 @@ src/service-worker.ts    // service worker convention
 hooks.server.go          // Handle, HandleError, HandleFetch, Reroute, Init
 ```
 
-Generated output lives under `.gen/` (gitignored). Every `.gen/*.go` starts with a provenance header — do not edit generated files directly; edit the `.svelte` source. User `.go` files under `src/routes/**` and `src/params/**` MUST start with `//go:build sveltego` so Go's default toolchain skips them; codegen parses them via `go/parser`. See ADR 0003 amendment (Phase 0i-fix).
+Generated output lives under `.gen/` (gitignored). Every `.gen/*.go` starts with a provenance header — do not edit generated files directly; edit the `.svelte` source. Files under `src/routes/**` use the `_` prefix (`_page.server.go`, `_layout.server.go`, `_server.go`); Go's default toolchain skips files whose names start with `_`, so no `//go:build sveltego` constraint is required there (RFC #379 phase 1b). Files under `src/params/**` MUST still start with `//go:build sveltego` because their filenames have no `_` prefix. Codegen parses every user `.go` file via `go/parser` regardless. See ADR 0003 amendment (Phase 0i-fix) and RFC #379.
 
 ---
 
@@ -245,7 +248,7 @@ Concurrency: PR runs cancel-in-progress; main and merge_group runs always comple
 
 ## 7. Out of scope (do not propose)
 
-See [ADR 0005](tasks/decisions/0005-non-goals.md) for the canonical list and reasoning. [ADR 0007](tasks/decisions/0007-svelte-semantics-revisit.md) revisits expression semantics — consult it before proposing a JS-runtime or full-Svelte alternative.
+See [ADR 0005](tasks/decisions/0005-non-goals.md) for the canonical list and reasoning. [ADR 0008](tasks/decisions/0008-pure-svelte-pivot.md) is the live decision on template semantics (pure Svelte/JS/TS, no Go in mustaches); [ADR 0007](tasks/decisions/0007-svelte-semantics-revisit.md) is superseded — consult ADR 0008 before proposing a JS-runtime-on-server, Go-mustache, or Go-VDOM alternative.
 
 Quick reference:
 

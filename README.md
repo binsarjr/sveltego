@@ -1,45 +1,51 @@
 # sveltego
 
-> SvelteKit-shape framework for Go. Native runtime, zero JS server.
+> SvelteKit-shape framework for Go. Pure-Svelte templates, Go-only server, zero JS at runtime.
 
-Rewritten from scratch in Go. File layout and DX mirror SvelteKit (file-based routing, `page.server.go`, layouts, hooks, form actions). Svelte components are compiled to Go source via codegen — no JS runtime on the server. The CPU bonds to Go, not V8.
+Rewritten from scratch in Go. File layout and DX mirror SvelteKit (file-based routing, server-side Go data loaders, layouts, hooks, form actions). Templates are 100% pure Svelte/JS/TS; Go owns the server and emits TypeScript declarations for IDE autocompletion. The runtime is hybrid: build-time static prerender (SSG) for marketing-style routes, client-side render (SPA) for everything else. The deployed Go binary has no JS engine.
 
 ## Status
 
 🚧 Pre-alpha. MVP closed; v0.2 (form actions, hooks), v0.4 (Svelte 5 runes), and v1.1 (LLM tooling) shipped. v0.3 (client SPA + hydration), v0.5 (SvelteKit-parity catch-up), v0.6 (auth), and v1.0 (production hardening) in flight. See [GitHub issues](https://github.com/binsarjr/sveltego/issues) for the live roadmap.
 
+[ADR 0008](tasks/decisions/0008-pure-svelte-pivot.md) (2026-05-01) pivots templates from Go-decorated mustaches to **100% pure Svelte/JS/TS**. Migration phases land via [RFC #379](https://github.com/binsarjr/sveltego/issues/379) → [#380](https://github.com/binsarjr/sveltego/issues/380)–[#385](https://github.com/binsarjr/sveltego/issues/385).
+
 ## Goals
 
-- Go-level performance — target **20–40k rps** for mid-complexity SSR
+- Go-level performance — target **20–40k rps** for SSG output (zero per-request work) and JSON-payload responses on SPA-mode dynamic routes
 - Goroutine-native concurrency, no JS worker pool
-- DX nearly identical to SvelteKit (file structure and conventions)
-- Single Go binary deploy, no Node or Bun runtime
-- Svelte 5 (runes) as the UI source of truth, dual-target codegen (server Go + client JS)
+- DX identical to SvelteKit at the template layer — copy `.svelte` files between projects unchanged
+- Single Go binary deploy, no Node or Bun runtime at request time (Node runs only during `sveltego build` for SSG)
+- Svelte 5 (runes) as the UI source of truth; Go AST → TypeScript declaration codegen for type-safe `data` props in templates
 
 ## Non-Goals
 
-- 100% compatibility with SvelteKit JS plugins or libraries
+- A server-side JS runtime at request time
 - Svelte 4 legacy syntax
-- Dynamic JS execution on the server
+- Backward compatibility with the previous Mustache-Go template dialect (pre-alpha; users rewrite)
 
-Full enumerated list with reasoning: [ADR 0005 — Non-goals](tasks/decisions/0005-non-goals.md) (mirrors [issue #94](https://github.com/binsarjr/sveltego/issues/94)).
+Full enumerated list with reasoning: [ADR 0005 — Non-goals](tasks/decisions/0005-non-goals.md) (mirrors [issue #94](https://github.com/binsarjr/sveltego/issues/94)). Template semantics: [ADR 0008 — Pure-Svelte pivot](tasks/decisions/0008-pure-svelte-pivot.md).
 
 ## Architecture
 
+Pure-Svelte templates on the client, Go-only on the server, hybrid runtime.
+
 ```
-.svelte (UI)            ──┬─→ codegen → .gen/*.go    (server SSR)
-                          └─→ Vite build → JS bundle (client hydration)
-page.server.go          ──→  Load(), Actions()           (//go:build sveltego)
-layout.server.go        ──→  Load() with parent data flow (//go:build sveltego)
-hooks.server.go         ──→  Handle, HandleError, HandleFetch
-server.go               ──→  REST endpoints              (//go:build sveltego)
-                          ↓
-                  sveltego CLI (pure Go)
-                          ↓
-                       go:embed
-                          ↓
-                   single binary deploy
+.svelte (UI, 100% Svelte/JS/TS)  ──→ Vite build → JS bundle   (client hydration)
+                                  └─→ svelte/server (build time only) → static HTML (SSG)
+server-side Go (route data)      ──→ Load(), Actions()        (//go:build sveltego)
+                                  └─→ codegen → .svelte.d.ts  (Go AST → TypeScript types)
+hooks.server.go                  ──→ Handle, HandleError, HandleFetch
+                                          ↓
+                                  sveltego CLI (pure Go)
+                                          ↓
+                                       go:embed
+                                          ↓
+                                  single binary deploy
+                                  + static/ (SSG output, optional)
 ```
+
+Routes opting into `kit.PageOptions{Prerender: true}` ship as static HTML rendered at build time via `svelte/server`. Everything else ships as a SPA shell + JSON payload at runtime; the client mounts and renders. **Node is required at build time only.** The deployed Go binary plus `static/` is the entire deployable.
 
 ## Quickstart
 
@@ -68,24 +74,41 @@ sveltego-init ./hello
 
 </details>
 
-## Expression philosophy
+## Template philosophy
 
-Inside `.svelte`, `{...}` mustaches are **Go expressions**, not JS:
+Templates are **100% pure Svelte/JS/TS** ([ADR 0008](tasks/decisions/0008-pure-svelte-pivot.md)). No Go syntax inside `.svelte` files; everything reads like SvelteKit:
 
 ```svelte
-<script lang="go">
-  import "strconv"
+<script lang="ts">
+  let { data } = $props();
 </script>
 
-<h1>{Data.User.Name}</h1>
-{#if len(Data.Posts) > 0}
-  {#each Data.Posts as p}
-    <li>{p.Title}</li>
-  {/each}
+<h1>Hello {data.user.name}</h1>
+{#if data.posts.length > 0}
+  <ul>
+    {#each data.posts as post}
+      <li>{post.title}</li>
+    {/each}
+  </ul>
 {/if}
 ```
 
-Field names are PascalCase (Go exported). `nil` not `null`, `len(x)` not `x.length`, `strconv.Itoa(n)` for explicit number formatting.
+Server-side, a Go file returns the `data` shape:
+
+```go
+//go:build sveltego
+
+type PageData struct {
+    User  User   `json:"user"`
+    Posts []Post `json:"posts"`
+}
+
+func Load(ctx kit.LoadCtx) (PageData, error) {
+    return PageData{User: fetchUser(ctx), Posts: fetchPosts(ctx)}, nil
+}
+```
+
+Codegen reads the Go AST and emits a sibling `.svelte.d.ts` declaration so Svelte LSP / vscode-svelte autocomplete `data.user.name` end to end. JSON tags drive field names at the Go ↔ TypeScript boundary; `kit.Streamed[T]` maps to `Promise<T[]>` for native `{#await}` blocks.
 
 ## Roadmap
 
@@ -111,7 +134,7 @@ packages/
   sveltego/             # Core: parser, codegen, runtime, kit, router, server, CLI
   auth/                 # First-party auth library (ADR 0006; #216–#255)
   init/                 # `sveltego-init` scaffolder (standalone binary)
-  lsp/                  # Language server for `.svelte` with Go expressions
+  lsp/                  # Language server for sveltego routes (Go-side `Load` + emitted `.svelte.d.ts`)
   mcp/                  # Model Context Protocol server (search_docs, lookup_api, …)
   enhanced-img/         # Image optimization helpers
   adapter-server/       # Bare HTTP binary deploy

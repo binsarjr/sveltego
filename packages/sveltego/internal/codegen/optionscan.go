@@ -8,6 +8,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 	"github.com/binsarjr/sveltego/packages/sveltego/internal/routescan"
@@ -25,6 +26,7 @@ var optionConstNames = map[string]struct{}{
 	"SSROnly":            {},
 	"CSRF":               {},
 	"TrailingSlash":      {},
+	"Templates":          {},
 }
 
 // scanPageOptions reads path (when present) and returns the page
@@ -139,8 +141,40 @@ func assignOption(out *kit.PageOptionsOverride, name string, expr goast.Expr, pa
 		}
 		out.TrailingSlash = v
 		out.HasTrailingSlash = true
+	case "Templates":
+		v, err := evalTemplates(expr)
+		if err != nil {
+			return fmt.Errorf("codegen: %s: Templates: %w", path, err)
+		}
+		out.Templates = v
+		out.HasTemplates = true
 	}
 	return nil
+}
+
+// evalTemplates accepts a string literal and validates it against the
+// known template pipeline values. The legacy "go-mustache" value is
+// rejected explicitly with a migration hint (RFC #379 phase 5).
+// Anything else is a fatal codegen error so a typo (e.g. "svetle")
+// never silently falls back to the default.
+func evalTemplates(expr goast.Expr) (string, error) {
+	bl, ok := expr.(*goast.BasicLit)
+	if !ok || bl.Kind != token.STRING {
+		return "", errors.New(`must be a string literal ("svelte")`)
+	}
+	val, err := strconv.Unquote(bl.Value)
+	if err != nil {
+		return "", fmt.Errorf("invalid string literal %s: %w", bl.Value, err)
+	}
+	switch val {
+	case kit.TemplatesSvelte:
+		return val, nil
+	case "":
+		return kit.TemplatesSvelte, nil
+	case "go-mustache":
+		return "", errors.New(`Templates: "go-mustache" was removed in RFC #379 phase 5; migrate the .svelte body to pure Svelte/JS/TS and either drop the Templates constant or set Templates: "svelte"`)
+	}
+	return "", fmt.Errorf(`unknown Templates value %q (want "svelte")`, val)
 }
 
 func evalBool(expr goast.Expr) (bool, error) {
@@ -172,14 +206,14 @@ func evalTrailingSlash(expr goast.Expr) (kit.TrailingSlash, error) {
 
 // resolvePageOptions walks scan.Routes and returns one effective
 // PageOptions per route Pattern. The cascade starts at
-// kit.DefaultPageOptions(), folds each layout's layout.server.go
+// kit.DefaultPageOptions(), folds each layout's _layout.server.go
 // override outer -> inner, then applies the route's own
-// page.server.go (or server.go) override last. Layout overrides are
+// _page.server.go (or _server.go) override last. Layout overrides are
 // memoized so chains shared across routes parse once.
 //
-// `<svelte:options prerender=...>` declarations on +layout.svelte and
-// +page.svelte are folded in alongside their server-file siblings so a
-// page can opt in to prerendering without authoring a +page.server.go.
+// `<svelte:options prerender=...>` declarations on _layout.svelte and
+// _page.svelte are folded in alongside their server-file siblings so a
+// page can opt in to prerendering without authoring a _page.server.go.
 func resolvePageOptions(scan *routescan.ScanResult) (map[string]kit.PageOptions, error) {
 	if scan == nil {
 		return nil, nil
@@ -201,7 +235,7 @@ func resolvePageOptions(scan *routescan.ScanResult) (map[string]kit.PageOptions,
 					base = base.Merge(over)
 				}
 			}
-			// 2. +layout.svelte's <svelte:options prerender>
+			// 2. _layout.svelte's <svelte:options prerender>
 			layoutSveltePath, err := resolveLayoutSource(layoutDir)
 			if err == nil {
 				over, err := loadCachedSveltePrerender(layoutSveltePath, sveltePrerenderCache)
@@ -214,9 +248,9 @@ func resolvePageOptions(scan *routescan.ScanResult) (map[string]kit.PageOptions,
 		var routeFile string
 		switch {
 		case r.HasPageServer:
-			routeFile = filepath.Join(r.Dir, "page.server.go")
+			routeFile = filepath.Join(r.Dir, "_page.server.go")
 		case r.HasServer:
-			routeFile = filepath.Join(r.Dir, "server.go")
+			routeFile = filepath.Join(r.Dir, "_server.go")
 		}
 		if routeFile != "" {
 			over, err := scanPageOptions(routeFile)
@@ -226,9 +260,9 @@ func resolvePageOptions(scan *routescan.ScanResult) (map[string]kit.PageOptions,
 			base = base.Merge(over)
 		}
 		if r.HasPage {
-			pageName := "+page.svelte"
+			pageName := "_page.svelte"
 			if r.HasReset {
-				pageName = "+page@" + r.ResetTarget + ".svelte"
+				pageName = "_page@" + r.ResetTarget + ".svelte"
 			}
 			pageSvelte := filepath.Join(r.Dir, pageName)
 			over, err := loadCachedSveltePrerender(pageSvelte, sveltePrerenderCache)
