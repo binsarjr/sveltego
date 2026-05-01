@@ -38,7 +38,7 @@ When in doubt about a convention: open the relevant issue with `gh issue view <N
 
 ## Repository state
 
-Pre-alpha. MVP closed; v0.2, v0.4, and v1.1 shipped; v0.3, v0.5, v0.6, and v1.0 in flight. The Go workspace already hosts the core (`packages/sveltego`), auth (`packages/auth`), tooling (`packages/lsp`, `packages/mcp`, `packages/init`, `packages/enhanced-img`), five deploy adapters plus `adapter-auto`, the bench harness (`bench/`, `benchmarks/`), AI templates (`templates/ai/`), and end-to-end playgrounds. New work continues to flow through:
+Pre-alpha. MVP closed; v0.2, v0.4, and v1.1 shipped; v0.3, v0.5, v0.6, and v1.0 in flight. The Go workspace already hosts the core (`packages/sveltego`), auth (`packages/auth`), tooling (`packages/lsp`, `packages/mcp`, `packages/init`, `packages/enhanced-img`), six deploy adapters plus `adapter-auto`, the bench harness (`bench/`, `benchmarks/`), AI templates (`templates/ai/`), and end-to-end playgrounds. New work continues to flow through:
 
 - `tasks/todo.md` — current execution plan, milestone scope, phase tracking
 - `tasks/lessons.md` — design decisions and self-rules captured per session (append-only journal)
@@ -211,7 +211,7 @@ If counts, file lists, or roadmap stages disagree across these, the doc set is b
 | v0.4 | 19 (#43–59, #86, #90) | Svelte 5 full coverage, a11y, `<svelte:options>` |
 | v0.5 | 23 (SvelteKit-parity catch-up + cookie-session core) | Upstream-tracked enhancements (`kit.After`, `HandleAction`, `RawParam`, `RouteID`, …) and the cookie-session auth core |
 | v0.6 | 40 (auth track) | `sveltego-auth` master plan (#155), storage adapters, sessions, password / magic-link / OTP / OAuth |
-| v1.0 | 25 (#60–69, #89, #91–93, plus post-merge code-quality follow-ups) | Bench, docs, streaming, SSG, CSP, sitemap, image opt, deploy adapters, post-Wave-1 hardening |
+| v1.0 | 28 (#60–69, #89, #91–93, plus post-merge code-quality follow-ups) | Bench, docs, streaming, SSG, CSP, sitemap, image opt, deploy adapters, post-Wave-1 hardening |
 | v1.1 | 6 (#70–75) | LLM tooling: `llms.txt`, MCP server, AI templates, provenance |
 
 Closed standalone issues (e.g. #94 non-goals RFC) live unmilestoned — search `gh issue list --search "no:milestone state:closed"` if needed.

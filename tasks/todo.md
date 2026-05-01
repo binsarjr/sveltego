@@ -47,7 +47,7 @@ Vite integration for the Svelte client bundle, `window.__sveltego__` hydration p
 
 Runes: `$props`, `$state`, `$derived`, `$effect`, `$bindable`. Snippets and `{@render}`. Legacy slots (default + named, with slot props). Special elements: `<svelte:head>`, `<svelte:body>` / `<svelte:window>` / `<svelte:document>`, `<svelte:component>`, `<svelte:options>`. CSS scope hash matching upstream. `{@html}`, `{@const}`, `{#await}`, `{#key}`. Nested component import and rendering. Compile-time a11y warnings.
 
-### v1.0 (25 issues) — Production Ready
+### v1.0 (28 issues) — Production Ready
 
 Benchmark suite vs adapter-bun with nightly regression gate. Docs site (Vitepress). Blog and dashboard examples. Streaming responses. Prerender / SSG mode. CSP nonce injection. CI (GitHub Actions). Release pipeline (release-please + GoReleaser). LSP for `.svelte` with Go expressions. Sitemap/robots helpers, image optimization (`<Image>`), service worker convention, deploy adapters (server, docker, static, lambda, cloudflare).
 
@@ -82,7 +82,7 @@ Full `sveltego-auth` package modeled on the better-auth feature set: master plan
 - [x] Direction confirmed (Go-native rewrite, not JS embed)
 - [x] Repo created at `binsarjr/sveltego`
 - [x] Issue templates (feature, RFC, bug)
-- [x] 20 labels, 6 milestones, 105 issues created (initial roadmap snapshot; live counts now 8 milestones / 221 issues — see milestone table above)
+- [x] 20 labels, 6 milestones, 105 issues created (initial roadmap snapshot; live counts now 8 milestones / 194 issues — see milestone table above)
 - [x] All 69 original issues rewritten in English with industry-standard detail
 - [x] v1.1 milestone added — LLM & AI tooling (#70–75)
 - [x] SvelteKit-parity gap audit + 19 issues filed with priorities (#76–94)
@@ -109,7 +109,7 @@ Full `sveltego-auth` package modeled on the better-auth feature set: master plan
 - [x] v1.1 milestone — Vitepress docs site + `llms.txt` + copy-for-LLM + AI guide (#70, #71, #72, #73, #74, #75). `sveltego mcp` scaffold (#71), AI templates `templates/ai/` (#73), `llms.txt` + `llms-full.txt`, markdown guide. 6 issues total. **CLOSED.**
 - [x] v0.5 wave (partial, ongoing) — SvelteKit-parity catch-up: `kit.After()`, `HandleAction`, `Init()` error fallback, `HandleError` short-circuit, `LoadCtx.Speculative()`, `kit.HTTPError`, headers/cookies on error responses, `kit.RedirectReload`, `LoadCtx.RawParam()`, codegen `RouteID` constants, dev-only code stripping, `kit.Header` Set vs Add, MIME type registration, `kit.Error` default message, `static asset precompression`. Auth core (`packages/auth`) scaffold + storage + mailer + SMS adapters (#216, #217, #226, #227). ADR 0006 (auth master plan), ADR 0007 (Svelte semantics revisit). STABILITY.md per package. 23 issues tracked; in flight.
 - [ ] v0.5 remaining — `kit.After`, `HandleAction` wire-up, `iter.Seq` streamed, kit.Cron, child-component pkg gen, cookiesession (#160, #161, #166, #167, #173, etc.) — 4 open issues.
-- [ ] v0.6 in-flight — auth: session strategy (#220), password hashing (#222), email verification (#224), magic-link (#229), OTP (#230), TOTP (#231), OAuth core (#236), RBAC (#245), and many more. 37 open issues.
+- [ ] v0.6 in-flight — auth: session strategy (#220), password hashing (#222), email verification (#224), magic-link (#229), OTP (#230), TOTP (#231), OAuth core (#236), RBAC (#245), and many more. 30 open issues.
 
 ## Open questions
 
