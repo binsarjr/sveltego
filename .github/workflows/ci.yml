@@ -1,8 +1,8 @@
 # CI budget split (Phase 0p + merge queue):
 #
-# - PR runs (lite): 1 OS × 1 Go (ubuntu-latest, 1.23.x) + changes +
+# - PR runs (lite): 1 OS × 1 Go (ubuntu-latest, 1.25.x) + changes +
 #   commit-lint + agents-sync. Roughly 4 jobs per push.
-# - merge_group runs: same lite matrix + isolated-modules (no playground-smoke).
+# - merge_group runs: full matrix [1.23.x, 1.25.x] + isolated-modules (no playground-smoke).
 #   CI runs once on the merged candidate; cancel-in-progress is disabled so
 #   the queue run always completes.
 # - Push to main: DISABLED. Flaky post-merge runs on main added noise without
@@ -71,16 +71,16 @@ jobs:
               - '.golangci.yml'
               - '.github/workflows/**'
 
-  # Lite matrix on PRs and merge_group: ubuntu-latest, go1.23.x. ~1 job.
+  # Lite matrix on PRs: ubuntu-latest, go1.25.x. ~1 job. Validates new floor.
   lint-and-test-pr:
     name: lint-and-test (${{ matrix.os }}, go${{ matrix.go }})
-    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+    if: github.event_name == 'pull_request'
     needs: changes
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        go: ['1.23.x']
+        go: ['1.25.x']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -320,23 +320,24 @@ jobs:
           done
 
       - name: Upload coverage to Codecov
-        if: matrix.os == 'ubuntu-latest' && matrix.go == '1.23.x'
+        if: matrix.os == 'ubuntu-latest' && matrix.go == '1.25.x'
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           directory: coverage
           fail_ci_if_error: false
 
-  # Full matrix on push to main: 3 OS × 2 Go. ~6 jobs.
-  lint-and-test-main:
+  # Full matrix on merge_group: 1 OS × 2 Go. ~2 jobs. Validates both toolchains
+  # before landing. Phase 4 of #387 drops 1.23.x once all modules declare 1.25.
+  lint-and-test-merge:
     name: lint-and-test (${{ matrix.os }}, go${{ matrix.go }})
-    if: github.event_name == 'push'
+    if: github.event_name == 'merge_group'
     needs: changes
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        go: ['1.22.x', '1.23.x']
+        os: [ubuntu-latest]
+        go: ['1.23.x', '1.25.x']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -576,18 +577,18 @@ jobs:
           done
 
       - name: Upload coverage to Codecov
-        if: matrix.os == 'ubuntu-latest' && matrix.go == '1.23.x'
+        if: matrix.os == 'ubuntu-latest' && matrix.go == '1.25.x'
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           directory: coverage
           fail_ci_if_error: false
 
-  # Push-to-main and merge_group: catches per-module isolation breakage that the
-  # workspace path can mask. Skipped on PRs to keep PR runs lean.
+  # merge_group: catches per-module isolation breakage that the workspace path
+  # can mask. Skipped on PRs to keep PR runs lean.
   isolated-modules:
     name: isolated-modules (GOWORK=off)
-    if: github.event_name == 'push' || github.event_name == 'merge_group'
+    if: github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     env:
       GOWORK: off
@@ -596,7 +597,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.22.x'
+          go-version: '1.25.x'
           cache: false
 
       - name: Cache Go module and build artifacts
@@ -605,9 +606,9 @@ jobs:
           path: |
             ~/go/pkg/mod
             ~/.cache/go-build
-          key: ${{ runner.os }}-go-1.22.x-isolated-${{ hashFiles('**/go.sum') }}
+          key: ${{ runner.os }}-go-1.25.x-isolated-${{ hashFiles('**/go.sum') }}
           restore-keys: |
-            ${{ runner.os }}-go-1.22.x-isolated-
+            ${{ runner.os }}-go-1.25.x-isolated-
 
       - name: Build and test each module in isolation
         shell: bash
@@ -681,7 +682,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.23.x'
+          go-version: '1.25.x'
           cache: false
 
       - name: Assert no replace in packages/init/go.mod
@@ -760,7 +761,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.23.x'
+          go-version: '1.25.x'
           cache: false
 
       - name: Assert no replace in packages/sveltego/go.mod
@@ -829,7 +830,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.23.x'
+          go-version: '1.25.x'
           cache: false
 
       - name: Compile + Build
