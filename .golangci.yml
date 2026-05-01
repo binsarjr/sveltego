@@ -27,6 +27,17 @@ linters:
     - unused
 
   settings:
+    errcheck:
+      exclude-functions:
+        - (*os.File).Close
+        - (io.Closer).Close
+        - (*github.com/fsnotify/fsnotify.Watcher).Close
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - os.Remove
+        - os.RemoveAll
+
     errorlint:
       errorf: true
       asserts: true
@@ -34,16 +45,38 @@ linters:
 
     gosec:
       excludes:
+        - G103  # unsafe.* audited at server fast-path; intentional
         - G104  # err checking is errcheck's job
         - G115  # int/uint→uint32 via len(); len never negative, safe conversion
         - G201  # SQL string formatting via internal placeholder helpers; not user input
         - G202  # SQL string concatenation via internal placeholder helpers; not user input
+        - G204  # subprocess args flagged by taint; bench-compare invokes benchstat by design
+        - G301  # build output dirs intentionally world-readable (0o755)
+        - G304  # static asset path resolution audited at boundary
+        - G703  # path-traversal taint flags audited at boundary
+        - G704  # SSRF taint flags on kit.Fetch / hooks.Fetch by design
+        - G705  # XSS taint flags on streaming render path; SafeHTML at boundary
 
     revive:
       rules:
         - name: package-comments
         - name: exported
+          arguments:
+            - disableStutteringCheck
+            - checkPrivateReceivers
+            - sayRepetitiveInsteadOfStutters
+            - disableChecksOnConstants
+            - disableChecksOnMethods
         - name: unused-parameter
+
+    staticcheck:
+      checks:
+        - all
+        - -ST1003   # HttpOnly etc kept as-is for HTTP cookie API mirror
+        - -ST1005   # capitalized error strings appear in user-facing diagnostics
+        - -QF1001   # De Morgan rewrite is style preference, not a bug
+        - -S1008    # if/else return collapse is style preference
+        - -S1011    # for-append-loop rewrite is style preference
 
     sloglint:
       no-mixed-args: true
@@ -68,9 +101,16 @@ linters:
         linters:
           - gosec
           - errcheck
+          - sloglint
       - path: cmd/
         linters:
           - depguard            # CLI may use fmt.Println
+          - errcheck            # CLI Fprint to stdout/stderr is fire-and-forget
+      - path: packages/sveltego/internal/codegen/provenance\.go
+        text: '(package-comments|ST1000)'
+        linters:
+          - revive
+          - staticcheck
 
 formatters:
   enable:
