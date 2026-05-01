@@ -214,6 +214,72 @@ func TestScanPrerenderFromSvelte(t *testing.T) {
 	}
 }
 
+func TestScanPageOptions_templatesSvelte(t *testing.T) {
+	t.Parallel()
+	body := `//go:build sveltego
+
+package routes
+
+const Templates = "svelte"
+`
+	path := writeTempServerGo(t, body)
+	got, err := scanPageOptions(path)
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if !got.HasTemplates || got.Templates != kit.TemplatesSvelte {
+		t.Errorf("Templates not set to svelte: %+v", got)
+	}
+}
+
+func TestScanPageOptions_templatesGoMustache(t *testing.T) {
+	t.Parallel()
+	body := `//go:build sveltego
+
+package routes
+
+const Templates = "go-mustache"
+`
+	path := writeTempServerGo(t, body)
+	got, err := scanPageOptions(path)
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if !got.HasTemplates || got.Templates != kit.TemplatesGoMustache {
+		t.Errorf("Templates not set to go-mustache: %+v", got)
+	}
+}
+
+func TestScanPageOptions_templatesUnknownRejected(t *testing.T) {
+	t.Parallel()
+	body := `//go:build sveltego
+
+package routes
+
+const Templates = "react"
+`
+	path := writeTempServerGo(t, body)
+	if _, err := scanPageOptions(path); err == nil {
+		t.Fatal("expected error on unknown Templates value")
+	} else if !strings.Contains(err.Error(), "unknown Templates value") {
+		t.Errorf("err = %v", err)
+	}
+}
+
+func TestScanPageOptions_templatesNonStringRejected(t *testing.T) {
+	t.Parallel()
+	body := `//go:build sveltego
+
+package routes
+
+const Templates = 1
+`
+	path := writeTempServerGo(t, body)
+	if _, err := scanPageOptions(path); err == nil {
+		t.Fatal("expected error on non-string Templates")
+	}
+}
+
 func TestScanPageOptions_dotImportTrailingSlash(t *testing.T) {
 	t.Parallel()
 	body := `//go:build sveltego

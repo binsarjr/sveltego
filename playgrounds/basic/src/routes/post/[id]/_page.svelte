@@ -1,3 +1,8 @@
-<h1>{data.Title}</h1>
-<p>{data.Body}</p>
+<script lang="ts">
+  import type { PageData } from './_page.svelte';
+  let { data }: { data: PageData } = $props();
+</script>
+
+<h1>{data.title}</h1>
+<p>{data.body}</p>
 <a href="/">Back</a>

@@ -151,6 +151,7 @@ func baseFiles(module string, flavor TailwindFlavor) []file {
 		{path: "app.html", body: []byte(appHTMLBody)},
 		{path: "package.json", body: []byte(renderPackageJSON(module, flavor))},
 		{path: "vite.config.js", body: []byte(viteConfigBody)},
+		{path: "tsconfig.json", body: []byte(tsconfigBody)},
 		{path: "sveltego.config.go", body: []byte(configBody)},
 		{path: "hooks.server.go", body: []byte(hooksBody)},
 		{path: "cmd/app/main.go", body: []byte(renderMainGo(module))},
@@ -288,6 +289,38 @@ const appHTMLBody = `<!DOCTYPE html>
 %sveltego.body%
 </body>
 </html>
+`
+
+// tsconfigBody seeds the TypeScript project so Svelte LSP and
+// vscode-svelte pick up the auto-generated `_page.svelte.d.ts` /
+// `_layout.svelte.d.ts` files (RFC #379 phase 2 typegen output) for
+// Svelte-mode routes. The include glob covers .svelte sources plus
+// the generated declarations alongside them. Users may extend the
+// strictness flags freely; sveltego does not re-read this file.
+const tsconfigBody = `{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "allowJs": true,
+    "checkJs": false
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.js",
+    "src/**/*.svelte",
+    "src/**/*.svelte.d.ts",
+    "vite.config.js"
+  ]
+}
 `
 
 const viteConfigBody = `import { svelte } from '@sveltejs/vite-plugin-svelte';

@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/codegen/svelterender"
 	"github.com/binsarjr/sveltego/packages/sveltego/internal/images"
 	"github.com/binsarjr/sveltego/packages/sveltego/internal/parser"
 	"github.com/binsarjr/sveltego/packages/sveltego/internal/routescan"
@@ -153,6 +155,13 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 		return nil, err
 	}
 
+	// Resolve page-options cascade up front so per-route emission can
+	// branch on Templates (Mustache-Go vs pure Svelte). RFC #379 phase 3.
+	routeOptions, err := resolvePageOptions(scan)
+	if err != nil {
+		return nil, fmt.Errorf("codegen: resolve page options: %w", err)
+	}
+
 	libDir := filepath.Join(opts.ProjectRoot, "lib")
 	libRefs := 0
 	routeCount := 0
@@ -186,18 +195,30 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 		}
 		switch {
 		case route.HasPage:
-			refs, hasHead, hasSnapshot, err := emitPage(opts.ProjectRoot, outDir, modulePath, route, opts.Release, opts.EnvLookup, opts.Provenance, start, imageVariants)
-			if err != nil {
-				return nil, err
-			}
-			libRefs += refs
-			if hasHead {
-				pageHeads[route.PackagePath] = true
-			}
-			routeCount++
 			pageName := "_page.svelte"
 			if route.HasReset {
 				pageName = "_page@" + route.ResetTarget + ".svelte"
+			}
+			isSvelteMode := routeOptions[route.Pattern].Templates == kit.TemplatesSvelte
+			var hasSnapshot bool
+			if isSvelteMode {
+				// RFC #379 phase 3: skip Mustache-Go body parsing. Vite +
+				// Svelte own the .svelte body for client compile; the Go
+				// side keeps Load + manifest entry only. componentSeeds
+				// still receives the .svelte path so component discovery
+				// runs across mixed-mode projects.
+				routeCount++
+			} else {
+				refs, hasHead, snap, err := emitPage(opts.ProjectRoot, outDir, modulePath, route, opts.Release, opts.EnvLookup, opts.Provenance, start, imageVariants)
+				if err != nil {
+					return nil, err
+				}
+				libRefs += refs
+				if hasHead {
+					pageHeads[route.PackagePath] = true
+				}
+				hasSnapshot = snap
+				routeCount++
 			}
 			componentSeeds = append(componentSeeds, filepath.Join(route.Dir, pageName))
 
@@ -269,15 +290,21 @@ func Build(opts BuildOptions) (*BuildResult, error) {
 	}
 	warnings = append(warnings, tgDiags...)
 
-	routeOptions, err := resolvePageOptions(scan)
-	if err != nil {
-		return nil, fmt.Errorf("codegen: resolve page options: %w", err)
-	}
 	localsDiags, err := collectLocalsPrerenderWarnings(scan, routeOptions)
 	if err != nil {
 		return nil, fmt.Errorf("codegen: locals/prerender scan: %w", err)
 	}
 	warnings = append(warnings, localsDiags...)
+
+	// RFC #379 phase 3: routes opting into pure Svelte templates AND
+	// Prerender: true must SSG via Node `svelte/server` at build time.
+	// Surface a clear error when Node is missing so users do not chase
+	// silent runtime SPA fallbacks.
+	if needsNodeForSvelteSSG(scan.Routes, routeOptions) {
+		if _, nerr := svelterender.EnsureNode(); nerr != nil {
+			return nil, fmt.Errorf("codegen: %w", nerr)
+		}
+	}
 	hasServiceWorker := serviceWorkerEntry(opts.ProjectRoot) != ""
 	manifestBytes, err := GenerateManifest(scan, ManifestOptions{
 		PackageName:      "gen",
@@ -843,6 +870,26 @@ func resolveLayoutSource(layoutDir string) (string, error) {
 		return filepath.Join(layoutDir, e.Name()), nil
 	}
 	return "", fmt.Errorf("codegen: %s contains no _layout.svelte", layoutDir)
+}
+
+// needsNodeForSvelteSSG reports whether at least one route opts into
+// the pure-Svelte template pipeline AND Prerender, requiring the Node
+// `svelte/server` sidecar at build time. Returns false fast for
+// projects that never use Templates: "svelte" or never set Prerender.
+func needsNodeForSvelteSSG(routes []routescan.ScannedRoute, routeOptions map[string]kit.PageOptions) bool {
+	for _, r := range routes {
+		if !r.HasPage {
+			continue
+		}
+		opts, ok := routeOptions[r.Pattern]
+		if !ok {
+			continue
+		}
+		if opts.Templates == kit.TemplatesSvelte && (opts.Prerender || opts.PrerenderAuto) {
+			return true
+		}
+	}
+	return false
 }
 
 // layoutPackageName extracts the directory's package name from a

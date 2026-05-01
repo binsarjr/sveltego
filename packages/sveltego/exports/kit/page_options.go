@@ -59,6 +59,20 @@ func (ts TrailingSlash) String() string {
 // pool and cache best when the width set is stable. Only the project
 // root's default value is consulted; per-route overrides are ignored
 // because the pool is not partitioned by route.
+//
+// Templates picks the per-route template pipeline (RFC #379 phase 3):
+//   - "go-mustache" (Phase 3 default for backward compat): codegen parses
+//     the .svelte body and emits Go SSR (Mustache-Go expressions).
+//   - "svelte": codegen leaves the .svelte body for Vite + Svelte to
+//     compile; the server returns the app.html shell plus a JSON
+//     hydration payload, the client mounts and renders. Routes with
+//     Prerender: true plus Templates: "svelte" are rendered to static
+//     HTML at build time via a Node `svelte/server` sidecar; the runtime
+//     stays JS-free.
+//
+// Phase 5 (#384) flips the default to "svelte" and removes the
+// Mustache-Go path. Empty Templates defaults to "go-mustache" until
+// then.
 type PageOptions struct {
 	Prerender          bool
 	PrerenderAuto      bool
@@ -69,18 +83,30 @@ type PageOptions struct {
 	CSRF               bool
 	TrailingSlash      TrailingSlash
 	ImageWidths        []int
+	Templates          string
 }
 
+// TemplatesGoMustache is the legacy Mustache-Go template pipeline
+// (Phase 3 default for backward compat). The .svelte body is parsed
+// at codegen time and emitted as Go SSR.
+const TemplatesGoMustache = "go-mustache"
+
+// TemplatesSvelte is the pure-Svelte template pipeline (RFC #379).
+// The .svelte body is left for Vite + Svelte to compile; the server
+// returns app.html plus a JSON hydration payload.
+const TemplatesSvelte = "svelte"
+
 // DefaultPageOptions returns the framework defaults: SSR, CSR, and CSRF
-// on, Prerender off, TrailingSlash never. Codegen seeds the cascade
-// with this value so a project that declares no options gets the same
-// behavior as today.
+// on, Prerender off, TrailingSlash never, Templates "go-mustache".
+// Codegen seeds the cascade with this value so a project that declares
+// no options gets the same behavior as today.
 func DefaultPageOptions() PageOptions {
 	return PageOptions{
 		SSR:           true,
 		CSR:           true,
 		CSRF:          true,
 		TrailingSlash: TrailingSlashNever,
+		Templates:     TemplatesGoMustache,
 	}
 }
 
@@ -95,7 +121,8 @@ func (base PageOptions) Equal(other PageOptions) bool {
 		base.CSR != other.CSR ||
 		base.SSROnly != other.SSROnly ||
 		base.CSRF != other.CSRF ||
-		base.TrailingSlash != other.TrailingSlash {
+		base.TrailingSlash != other.TrailingSlash ||
+		base.Templates != other.Templates {
 		return false
 	}
 	if len(base.ImageWidths) != len(other.ImageWidths) {
@@ -140,6 +167,9 @@ func (base PageOptions) Merge(override PageOptionsOverride) PageOptions {
 	if override.HasTrailingSlash {
 		out.TrailingSlash = override.TrailingSlash
 	}
+	if override.HasTemplates {
+		out.Templates = override.Templates
+	}
 	return out
 }
 
@@ -163,11 +193,14 @@ type PageOptionsOverride struct {
 	HasCSRF               bool
 	TrailingSlash         TrailingSlash
 	HasTrailingSlash      bool
+	Templates             string
+	HasTemplates          bool
 }
 
 // Any reports whether at least one option is declared. Codegen uses this
 // to skip cascade resolution when the file declares no options at all.
 func (o PageOptionsOverride) Any() bool {
 	return o.HasPrerender || o.HasPrerenderAuto || o.HasPrerenderProtected ||
-		o.HasSSR || o.HasCSR || o.HasSSROnly || o.HasCSRF || o.HasTrailingSlash
+		o.HasSSR || o.HasCSR || o.HasSSROnly || o.HasCSRF ||
+		o.HasTrailingSlash || o.HasTemplates
 }
