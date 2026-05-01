@@ -1,0 +1,590 @@
+{
+  "ast": {
+    "body": [
+      {
+        "attributes": [],
+        "end": 44,
+        "source": {
+          "end": 43,
+          "raw": "'svelte/internal/server'",
+          "start": 19,
+          "type": "Literal",
+          "value": "svelte/internal/server"
+        },
+        "specifiers": [
+          {
+            "end": 13,
+            "local": {
+              "end": 13,
+              "name": "$",
+              "start": 12,
+              "type": "Identifier"
+            },
+            "start": 7,
+            "type": "ImportNamespaceSpecifier"
+          }
+        ],
+        "start": 0,
+        "type": "ImportDeclaration"
+      },
+      {
+        "declaration": {
+          "async": false,
+          "body": {
+            "body": [
+              {
+                "end": 481,
+                "expression": {
+                  "arguments": [
+                    {
+                      "async": false,
+                      "body": {
+                        "body": [
+                          {
+                            "declarations": [
+                              {
+                                "end": 163,
+                                "id": {
+                                  "end": 153,
+                                  "properties": [
+                                    {
+                                      "computed": false,
+                                      "end": 151,
+                                      "key": {
+                                        "end": 151,
+                                        "name": "data",
+                                        "start": 147,
+                                        "type": "Identifier"
+                                      },
+                                      "kind": "init",
+                                      "method": false,
+                                      "shorthand": true,
+                                      "start": 147,
+                                      "type": "Property",
+                                      "value": {
+                                        "end": 151,
+                                        "name": "data",
+                                        "start": 147,
+                                        "type": "Identifier"
+                                      }
+                                    }
+                                  ],
+                                  "start": 145,
+                                  "type": "ObjectPattern"
+                                },
+                                "init": {
+                                  "end": 163,
+                                  "name": "$$props",
+                                  "start": 156,
+                                  "type": "Identifier"
+                                },
+                                "start": 145,
+                                "type": "VariableDeclarator"
+                              }
+                            ],
+                            "end": 164,
+                            "kind": "let",
+                            "start": 141,
+                            "type": "VariableDeclaration"
+                          },
+                          {
+                            "end": 200,
+                            "expression": {
+                              "arguments": [
+                                {
+                                  "end": 198,
+                                  "expressions": [],
+                                  "quasis": [
+                                    {
+                                      "end": 197,
+                                      "start": 185,
+                                      "tail": true,
+                                      "type": "TemplateElement",
+                                      "value": {
+                                        "cooked": "<ul><!--[-->",
+                                        "raw": "<ul><!--[-->"
+                                      }
+                                    }
+                                  ],
+                                  "start": 184,
+                                  "type": "TemplateLiteral"
+                                }
+                              ],
+                              "callee": {
+                                "computed": false,
+                                "end": 183,
+                                "object": {
+                                  "end": 178,
+                                  "name": "$$renderer",
+                                  "start": 168,
+                                  "type": "Identifier"
+                                },
+                                "optional": false,
+                                "property": {
+                                  "end": 183,
+                                  "name": "push",
+                                  "start": 179,
+                                  "type": "Identifier"
+                                },
+                                "start": 168,
+                                "type": "MemberExpression"
+                              },
+                              "end": 199,
+                              "optional": false,
+                              "start": 168,
+                              "type": "CallExpression"
+                            },
+                            "start": 168,
+                            "type": "ExpressionStatement"
+                          },
+                          {
+                            "declarations": [
+                              {
+                                "end": 254,
+                                "id": {
+                                  "end": 220,
+                                  "name": "each_array",
+                                  "start": 210,
+                                  "type": "Identifier"
+                                },
+                                "init": {
+                                  "arguments": [
+                                    {
+                                      "computed": false,
+                                      "end": 253,
+                                      "object": {
+                                        "end": 247,
+                                        "name": "data",
+                                        "start": 243,
+                                        "type": "Identifier"
+                                      },
+                                      "optional": false,
+                                      "property": {
+                                        "end": 253,
+                                        "name": "items",
+                                        "start": 248,
+                                        "type": "Identifier"
+                                      },
+                                      "start": 243,
+                                      "type": "MemberExpression"
+                                    }
+                                  ],
+                                  "callee": {
+                                    "computed": false,
+                                    "end": 242,
+                                    "object": {
+                                      "end": 224,
+                                      "name": "$",
+                                      "start": 223,
+                                      "type": "Identifier"
+                                    },
+                                    "optional": false,
+                                    "property": {
+                                      "end": 242,
+                                      "name": "ensure_array_like",
+                                      "start": 225,
+                                      "type": "Identifier"
+                                    },
+                                    "start": 223,
+                                    "type": "MemberExpression"
+                                  },
+                                  "end": 254,
+                                  "optional": false,
+                                  "start": 223,
+                                  "type": "CallExpression"
+                                },
+                                "start": 210,
+                                "type": "VariableDeclarator"
+                              }
+                            ],
+                            "end": 255,
+                            "kind": "const",
+                            "start": 204,
+                            "type": "VariableDeclaration"
+                          },
+                          {
+                            "body": {
+                              "body": [
+                                {
+                                  "declarations": [
+                                    {
+                                      "end": 377,
+                                      "id": {
+                                        "end": 355,
+                                        "name": "item",
+                                        "start": 351,
+                                        "type": "Identifier"
+                                      },
+                                      "init": {
+                                        "computed": true,
+                                        "end": 377,
+                                        "object": {
+                                          "end": 368,
+                                          "name": "each_array",
+                                          "start": 358,
+                                          "type": "Identifier"
+                                        },
+                                        "optional": false,
+                                        "property": {
+                                          "end": 376,
+                                          "name": "$$index",
+                                          "start": 369,
+                                          "type": "Identifier"
+                                        },
+                                        "start": 358,
+                                        "type": "MemberExpression"
+                                      },
+                                      "start": 351,
+                                      "type": "VariableDeclarator"
+                                    }
+                                  ],
+                                  "end": 378,
+                                  "kind": "let",
+                                  "start": 347,
+                                  "type": "VariableDeclaration"
+                                },
+                                {
+                                  "end": 435,
+                                  "expression": {
+                                    "arguments": [
+                                      {
+                                        "end": 433,
+                                        "expressions": [
+                                          {
+                                            "arguments": [
+                                              {
+                                                "computed": false,
+                                                "end": 425,
+                                                "object": {
+                                                  "end": 419,
+                                                  "name": "item",
+                                                  "start": 415,
+                                                  "type": "Identifier"
+                                                },
+                                                "optional": false,
+                                                "property": {
+                                                  "end": 425,
+                                                  "name": "title",
+                                                  "start": 420,
+                                                  "type": "Identifier"
+                                                },
+                                                "start": 415,
+                                                "type": "MemberExpression"
+                                              }
+                                            ],
+                                            "callee": {
+                                              "computed": false,
+                                              "end": 414,
+                                              "object": {
+                                                "end": 407,
+                                                "name": "$",
+                                                "start": 406,
+                                                "type": "Identifier"
+                                              },
+                                              "optional": false,
+                                              "property": {
+                                                "end": 414,
+                                                "name": "escape",
+                                                "start": 408,
+                                                "type": "Identifier"
+                                              },
+                                              "start": 406,
+                                              "type": "MemberExpression"
+                                            },
+                                            "end": 426,
+                                            "optional": false,
+                                            "start": 406,
+                                            "type": "CallExpression"
+                                          }
+                                        ],
+                                        "quasis": [
+                                          {
+                                            "end": 404,
+                                            "start": 400,
+                                            "tail": false,
+                                            "type": "TemplateElement",
+                                            "value": {
+                                              "cooked": "<li>",
+                                              "raw": "<li>"
+                                            }
+                                          },
+                                          {
+                                            "end": 432,
+                                            "start": 427,
+                                            "tail": true,
+                                            "type": "TemplateElement",
+                                            "value": {
+                                              "cooked": "</li>",
+                                              "raw": "</li>"
+                                            }
+                                          }
+                                        ],
+                                        "start": 399,
+                                        "type": "TemplateLiteral"
+                                      }
+                                    ],
+                                    "callee": {
+                                      "computed": false,
+                                      "end": 398,
+                                      "object": {
+                                        "end": 393,
+                                        "name": "$$renderer",
+                                        "start": 383,
+                                        "type": "Identifier"
+                                      },
+                                      "optional": false,
+                                      "property": {
+                                        "end": 398,
+                                        "name": "push",
+                                        "start": 394,
+                                        "type": "Identifier"
+                                      },
+                                      "start": 383,
+                                      "type": "MemberExpression"
+                                    },
+                                    "end": 434,
+                                    "optional": false,
+                                    "start": 383,
+                                    "type": "CallExpression"
+                                  },
+                                  "start": 383,
+                                  "type": "ExpressionStatement"
+                                }
+                              ],
+                              "end": 439,
+                              "start": 342,
+                              "type": "BlockStatement"
+                            },
+                            "end": 439,
+                            "init": {
+                              "declarations": [
+                                {
+                                  "end": 279,
+                                  "id": {
+                                    "end": 275,
+                                    "name": "$$index",
+                                    "start": 268,
+                                    "type": "Identifier"
+                                  },
+                                  "init": {
+                                    "end": 279,
+                                    "raw": "0",
+                                    "start": 278,
+                                    "type": "Literal",
+                                    "value": 0
+                                  },
+                                  "start": 268,
+                                  "type": "VariableDeclarator"
+                                },
+                                {
+                                  "end": 309,
+                                  "id": {
+                                    "end": 289,
+                                    "name": "$$length",
+                                    "start": 281,
+                                    "type": "Identifier"
+                                  },
+                                  "init": {
+                                    "computed": false,
+                                    "end": 309,
+                                    "object": {
+                                      "end": 302,
+                                      "name": "each_array",
+                                      "start": 292,
+                                      "type": "Identifier"
+                                    },
+                                    "optional": false,
+                                    "property": {
+                                      "end": 309,
+                                      "name": "length",
+                                      "start": 303,
+                                      "type": "Identifier"
+                                    },
+                                    "start": 292,
+                                    "type": "MemberExpression"
+                                  },
+                                  "start": 281,
+                                  "type": "VariableDeclarator"
+                                }
+                              ],
+                              "end": 309,
+                              "kind": "let",
+                              "start": 264,
+                              "type": "VariableDeclaration"
+                            },
+                            "start": 259,
+                            "test": {
+                              "end": 329,
+                              "left": {
+                                "end": 318,
+                                "name": "$$index",
+                                "start": 311,
+                                "type": "Identifier"
+                              },
+                              "operator": "<",
+                              "right": {
+                                "end": 329,
+                                "name": "$$length",
+                                "start": 321,
+                                "type": "Identifier"
+                              },
+                              "start": 311,
+                              "type": "BinaryExpression"
+                            },
+                            "type": "ForStatement",
+                            "update": {
+                              "argument": {
+                                "end": 338,
+                                "name": "$$index",
+                                "start": 331,
+                                "type": "Identifier"
+                              },
+                              "end": 340,
+                              "operator": "++",
+                              "prefix": false,
+                              "start": 331,
+                              "type": "UpdateExpression"
+                            }
+                          },
+                          {
+                            "end": 476,
+                            "expression": {
+                              "arguments": [
+                                {
+                                  "end": 474,
+                                  "expressions": [],
+                                  "quasis": [
+                                    {
+                                      "end": 473,
+                                      "start": 460,
+                                      "tail": true,
+                                      "type": "TemplateElement",
+                                      "value": {
+                                        "cooked": "<!--]--></ul>",
+                                        "raw": "<!--]--></ul>"
+                                      }
+                                    }
+                                  ],
+                                  "start": 459,
+                                  "type": "TemplateLiteral"
+                                }
+                              ],
+                              "callee": {
+                                "computed": false,
+                                "end": 458,
+                                "object": {
+                                  "end": 453,
+                                  "name": "$$renderer",
+                                  "start": 443,
+                                  "type": "Identifier"
+                                },
+                                "optional": false,
+                                "property": {
+                                  "end": 458,
+                                  "name": "push",
+                                  "start": 454,
+                                  "type": "Identifier"
+                                },
+                                "start": 443,
+                                "type": "MemberExpression"
+                              },
+                              "end": 475,
+                              "optional": false,
+                              "start": 443,
+                              "type": "CallExpression"
+                            },
+                            "start": 443,
+                            "type": "ExpressionStatement"
+                          }
+                        ],
+                        "end": 479,
+                        "start": 137,
+                        "type": "BlockStatement"
+                      },
+                      "end": 479,
+                      "expression": false,
+                      "generator": false,
+                      "id": null,
+                      "params": [
+                        {
+                          "end": 132,
+                          "name": "$$renderer",
+                          "start": 122,
+                          "type": "Identifier"
+                        }
+                      ],
+                      "start": 121,
+                      "type": "ArrowFunctionExpression"
+                    }
+                  ],
+                  "callee": {
+                    "computed": false,
+                    "end": 120,
+                    "object": {
+                      "end": 110,
+                      "name": "$$renderer",
+                      "start": 100,
+                      "type": "Identifier"
+                    },
+                    "optional": false,
+                    "property": {
+                      "end": 120,
+                      "name": "component",
+                      "start": 111,
+                      "type": "Identifier"
+                    },
+                    "start": 100,
+                    "type": "MemberExpression"
+                  },
+                  "end": 480,
+                  "optional": false,
+                  "start": 100,
+                  "type": "CallExpression"
+                },
+                "start": 100,
+                "type": "ExpressionStatement"
+              }
+            ],
+            "end": 483,
+            "start": 97,
+            "type": "BlockStatement"
+          },
+          "end": 483,
+          "expression": false,
+          "generator": false,
+          "id": {
+            "end": 75,
+            "name": "_page",
+            "start": 70,
+            "type": "Identifier"
+          },
+          "params": [
+            {
+              "end": 86,
+              "name": "$$renderer",
+              "start": 76,
+              "type": "Identifier"
+            },
+            {
+              "end": 95,
+              "name": "$$props",
+              "start": 88,
+              "type": "Identifier"
+            }
+          ],
+          "start": 61,
+          "type": "FunctionDeclaration"
+        },
+        "end": 483,
+        "start": 46,
+        "type": "ExportDefaultDeclaration"
+      }
+    ],
+    "end": 483,
+    "sourceType": "module",
+    "start": 0,
+    "type": "Program"
+  },
+  "route": "/each-list",
+  "schema": "ssr-json-ast/v1"
+}

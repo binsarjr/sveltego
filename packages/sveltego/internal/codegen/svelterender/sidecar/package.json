@@ -1,0 +1,19 @@
+{
+  "name": "@sveltego/svelterender-sidecar",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Build-time Node sidecar for sveltego: SSG prerender + SSR JSON-AST emission (ADR 0008, ADR 0009).",
+  "main": "index.mjs",
+  "scripts": {
+    "ssg": "node index.mjs --mode=ssg",
+    "ssr": "node index.mjs --mode=ssr"
+  },
+  "dependencies": {
+    "acorn": "8.16.0",
+    "svelte": "5.55.5"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
