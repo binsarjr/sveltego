@@ -1,34 +1,37 @@
-<script lang="go"></script>
+<script lang="ts">
+  import type { PageData } from './_page.svelte';
+  let { data }: { data: PageData } = $props();
+</script>
 
 <article class="prose dark:prose-invert max-w-none">
-  <h1 class="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">{data.Title}</h1>
-  <p class="text-sm text-gray-500 dark:text-gray-400 mb-6"><small>{data.Date}</small></p>
+  <h1 class="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">{data.title}</h1>
+  <p class="text-sm text-gray-500 dark:text-gray-400 mb-6"><small>{data.date}</small></p>
   <div class="text-gray-700 dark:text-gray-300 leading-relaxed">
-    {@html data.HTML}
+    {@html data.html}
   </div>
 </article>
 
 <section class="mt-12">
-  <h2 class="text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-6">Comments ({len(data.Comments)})</h2>
+  <h2 class="text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-6">Comments ({data.comments.length})</h2>
 
-  {#if len(data.Comments) == 0}
+  {#if data.comments.length === 0}
     <p class="text-gray-500 dark:text-gray-400 mb-6">No comments yet. Be the first.</p>
   {:else}
     <ul class="divide-y divide-gray-200 dark:divide-gray-700 mb-8">
-      {#each data.Comments as c}
+      {#each data.comments as c}
         <li class="py-4">
           <div class="flex items-baseline gap-2 mb-1">
-            <strong class="font-semibold text-gray-900 dark:text-gray-100">{c.Author}</strong>
-            <small class="text-xs text-gray-500 dark:text-gray-400"> — {c.Posted}</small>
+            <strong class="font-semibold text-gray-900 dark:text-gray-100">{c.author}</strong>
+            <small class="text-xs text-gray-500 dark:text-gray-400"> — {c.posted}</small>
           </div>
-          <p class="text-gray-700 dark:text-gray-300">{c.Body}</p>
+          <p class="text-gray-700 dark:text-gray-300">{c.body}</p>
         </li>
       {/each}
     </ul>
   {/if}
 
   <form method="post" class="mt-6 space-y-4">
-    {#if data.Form != nil}
+    {#if data.form != null}
       <p class="text-sm text-red-600 dark:text-red-400">comment was rejected — please fill in name and body.</p>
     {/if}
     <div>

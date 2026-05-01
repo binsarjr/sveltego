@@ -9,21 +9,24 @@ import (
 	"github.com/binsarjr/sveltego/playgrounds/dashboard/src/lib/store"
 )
 
+const Templates = "svelte"
+
 const (
 	flashErrorCookie = "flash_error"
 	flashUserCookie  = "flash_user"
 )
 
+type PageData struct {
+	LastUsername string `json:"lastUsername"`
+	LastError    string `json:"lastError"`
+	Form         any    `json:"form"`
+}
+
 // Load surfaces the last-typed username and the flash error message so
 // a failed login round-trip can re-render without forcing the user to
 // retype. The cookies are consumed-and-deleted so a refresh does not
 // resurface the stale error.
-func Load(ctx *kit.LoadCtx) (struct {
-	LastUsername string
-	LastError    string
-	Form         any
-}, error,
-) {
+func Load(ctx *kit.LoadCtx) (PageData, error) {
 	username := ""
 	errMsg := ""
 	if v, ok := ctx.Cookies.Get(flashErrorCookie); ok {
@@ -34,11 +37,7 @@ func Load(ctx *kit.LoadCtx) (struct {
 		username = v
 		ctx.Cookies.Delete(flashUserCookie, kit.CookieOpts{Path: "/"})
 	}
-	return struct {
-		LastUsername string
-		LastError    string
-		Form         any
-	}{
+	return PageData{
 		LastUsername: username,
 		LastError:    errMsg,
 	}, nil

@@ -822,7 +822,7 @@ jobs:
             port: 3000
             home_match: 'sveltego dashboard'
             extra_path: /login
-            extra_match: 'Sign in'
+            extra_match: '"routeId":"/login"'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
