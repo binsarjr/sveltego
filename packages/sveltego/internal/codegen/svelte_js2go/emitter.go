@@ -32,6 +32,25 @@ type Options struct {
 	// (#427) plugs property-access lowering here. The default
 	// implementation is identity.
 	Rewriter ExprRewriter
+
+	// TypedDataParam, when non-empty, switches the generated render
+	// function signature to `func Render(payload *<server>.Payload, data
+	// <TypedDataParam>)` and skips the `props["data"]` map cast that
+	// Phase 3 emits for the destructured root. Phase 6 (#428) sets this
+	// to the route's PageData / LayoutData type so Phase 5's lowered
+	// `data.User.Name` access lands on a typed Go struct field rather
+	// than `map[string]any`.
+	//
+	// Behavior when set:
+	//   - The emitted function signature uses `data <TypedDataParam>`
+	//     in place of `props map[string]any`.
+	//   - The walker still records the destructured prop name (so the
+	//     scope's data root is "data") but does not emit the
+	//     `props["data"]` map cast.
+	//
+	// Empty string preserves the legacy `props map[string]any` shape so
+	// the existing 30-shape priority goldens remain byte-identical.
+	TypedDataParam string
 }
 
 // ExprRewriter is the extension point Phase 5 uses to lower JS
@@ -252,7 +271,11 @@ func (e *emitter) run() ([]byte, error) {
 	out.Line("")
 	out.Line("// %s mirrors the Svelte component's compiled server output.", e.opts.FuncName)
 	out.Line("// Generated from route %s.", e.route)
-	out.Line("func %s(payload *%s.Payload, props map[string]any) {", e.opts.FuncName, e.opts.HelperAlias)
+	if e.opts.TypedDataParam != "" {
+		out.Line("func %s(payload *%s.Payload, data %s) {", e.opts.FuncName, e.opts.HelperAlias, e.opts.TypedDataParam)
+	} else {
+		out.Line("func %s(payload *%s.Payload, props map[string]any) {", e.opts.FuncName, e.opts.HelperAlias)
+	}
 	out.Write(body.Bytes())
 	out.Line("}")
 
@@ -634,6 +657,15 @@ func (e *emitter) emitPropsDestructure(b *Buf, pat *Node) error {
 		e.scope.declare(goName, LocalProp)
 		if e.scope.dataVar == "" {
 			e.scope.dataVar = goName
+		}
+		// Typed-data mode (Phase 6, #428): the function signature
+		// already binds `data` as a typed parameter, so emitting a
+		// map-cast here would shadow it with map[string]any and break
+		// the Lowerer's typed field-access output. Skip the cast for
+		// the data root only — auxiliary destructured props still need
+		// the map fallback because no typed parameter exists for them.
+		if e.opts.TypedDataParam != "" && jsName == "data" {
+			continue
 		}
 		b.Line(`%s, _ := props[%q].(map[string]any)`, goName, jsName)
 	}

@@ -51,6 +51,49 @@ func TestGenerateManifest_SvelteMode_NoRenderAdapter(t *testing.T) {
 	}
 }
 
+// TestGenerateManifest_SvelteMode_SSRRender verifies Phase 6 (#428):
+// when a Svelte-mode route is in SSRRenderRoutes, the manifest emits
+// the bridge adapter, wires Page to it, and pulls in the runtime
+// /svelte/server import.
+func TestGenerateManifest_SvelteMode_SSRRender(t *testing.T) {
+	t.Parallel()
+	scan := scanFixture(t, "simple")
+	pattern := scan.Routes[0].Pattern
+	pkgPath := scan.Routes[0].PackagePath
+
+	routeOpts := map[string]kit.PageOptions{
+		pattern: {SSR: true, CSR: true, CSRF: true, TrailingSlash: kit.TrailingSlashNever, Templates: kit.TemplatesSvelte},
+	}
+	out, err := GenerateManifest(scan, ManifestOptions{
+		PackageName:  "gen",
+		ModulePath:   "myapp",
+		GenRoot:      ".gen",
+		RouteOptions: routeOpts,
+		ClientKeys: map[string]string{
+			pkgPath: "routes/_page",
+		},
+		SSRRenderRoutes: map[string]string{
+			pattern: "routes",
+		},
+	})
+	if err != nil {
+		t.Fatalf("GenerateManifest: %v", err)
+	}
+	s := string(out)
+	if !bytes.Contains(out, []byte("server \"github.com/binsarjr/sveltego/packages/sveltego/runtime/svelte/server\"")) {
+		t.Errorf("expected runtime/svelte/server import:\n%s", s)
+	}
+	if !bytes.Contains(out, []byte(".RenderSSR(&payload, data)")) {
+		t.Errorf("expected RenderSSR call inside bridge:\n%s", s)
+	}
+	if !bytes.Contains(out, []byte("Page:")) || !bytes.Contains(out, []byte("render__page_routes,")) {
+		t.Errorf("expected Page wired for SSR-mode Svelte route:\n%s", s)
+	}
+	if !bytes.Contains(out, []byte("payload.Body()")) {
+		t.Errorf("expected bridge to copy payload.Body() into the writer:\n%s", s)
+	}
+}
+
 // TestNeedsNodeForSvelteSSG verifies the SSG sidecar trigger fires
 // only when at least one route combines Templates: "svelte" with
 // Prerender: true.

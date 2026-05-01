@@ -78,6 +78,13 @@ type ManifestOptions struct {
 	// false — the constant is still emitted so server code can read it
 	// unconditionally without a build-tag dance.
 	HasServiceWorker bool
+	// SSRRenderRoutes is the set of Svelte-mode route patterns that
+	// received a Phase 6 (#428) Render(payload, data) emit under
+	// .gen/usersrc/<encoded-pkg>/. Keys are route Pattern; values are
+	// the encoded package subpath (without the ".gen/" prefix) so the
+	// emitter can route the Page adapter through it. Routes absent
+	// from this map fall back to the legacy SPA shell.
+	SSRRenderRoutes map[string]string
 }
 
 // GenerateManifest emits a deterministic, gofmt-clean Go source file
@@ -204,13 +211,26 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 
 	// Adapter emission needs `fmt` for the type-mismatch error message
 	// only when at least one Mustache-Go Page or Layout adapter is
-	// present. Svelte-mode pages do not emit a render adapter so they
-	// do not contribute to the `hasPage` accounting.
-	var hasPage bool
+	// present. Svelte-mode pages with a Phase 6 SSR Render emit also
+	// emit an adapter (bridging RenderSSR → PageHandler) so they DO
+	// contribute to the hasPage accounting.
+	var (
+		hasPage   bool
+		hasSvelte bool
+		ssrRoutes = opts.SSRRenderRoutes
+	)
 	for _, e := range entries {
-		if e.route.HasPage && !isSvelteRoute(e.route.Pattern, opts.RouteOptions) {
+		if !e.route.HasPage {
+			continue
+		}
+		svelteMode := isSvelteRoute(e.route.Pattern, opts.RouteOptions)
+		_, hasSSR := ssrRoutes[e.route.Pattern]
+		switch {
+		case svelteMode && hasSSR:
 			hasPage = true
-			break
+			hasSvelte = true
+		case !svelteMode:
+			hasPage = true
 		}
 	}
 	hasLayout := len(layoutImports) > 0
@@ -279,6 +299,9 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 	case hasNonDefaultOptions:
 		b.Line(`"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"`)
 	}
+	if hasSvelte {
+		b.Line(`server "github.com/binsarjr/sveltego/packages/sveltego/runtime/svelte/server"`)
+	}
 	b.Line(`"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"`)
 	if len(imports) > 0 {
 		b.Line("")
@@ -310,7 +333,7 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 	// parameter to the `any`-shaped router.PageHandler. Type assertion
 	// happens inside the adapter so a dispatcher mismatch fails fast
 	// with a descriptive error instead of a panic.
-	emitRenderAdapters(&b, entries, opts.RouteOptions)
+	emitRenderAdapters(&b, entries, opts.RouteOptions, ssrRoutes)
 	emitHeadAdapters(&b, entries, opts.PageHeads, opts.RouteOptions)
 	emitLayoutAdapters(&b, layoutImports)
 	emitLayoutHeadAdapters(&b, layoutImports)
@@ -333,7 +356,7 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 			errorAliasByPath[ei.pkgPath] = ei.alias
 		}
 		for _, e := range entries {
-			emitRouteEntry(&b, e.route, e.alias, layoutByPath, errorAliasByPath, opts.RouteOptions, opts.PageHeads, opts.ClientKeys)
+			emitRouteEntry(&b, e.route, e.alias, layoutByPath, errorAliasByPath, opts.RouteOptions, opts.PageHeads, opts.ClientKeys, ssrRoutes)
 		}
 		b.Dedent()
 		b.Line("}")
@@ -406,14 +429,24 @@ func emitRouteIDConsts(b *Builder, entries []entry) error {
 // emitRenderAdapters writes one `render__<alias>` function per Page
 // route that wraps Page{}.Render into router.PageHandler shape. The
 // adapter zero-values PageData on a nil input so an empty Load() return
-// renders cleanly. Svelte-mode routes (RFC #379 phase 3) are skipped:
-// the .svelte body is owned by Vite and Svelte at runtime, so there is
-// no Go-side Page{}.Render to wrap.
-func emitRenderAdapters(b *Builder, entries []entry, routeOptions map[string]kit.PageOptions) {
+// renders cleanly. Svelte-mode routes with a Phase 6 (#428) SSR Render
+// emit go through ssr.RenderSSR(payload, data) and the result is
+// written into the page writer. Svelte-mode routes WITHOUT an SSR
+// emit are skipped — the runtime falls back to the SPA shell path.
+func emitRenderAdapters(b *Builder, entries []entry, routeOptions map[string]kit.PageOptions, ssrRoutes map[string]string) {
 	hasAny := false
 	for _, e := range entries {
-		if e.route.HasPage && !isSvelteRoute(e.route.Pattern, routeOptions) {
+		switch {
+		case !e.route.HasPage:
+			continue
+		case isSvelteRoute(e.route.Pattern, routeOptions):
+			if _, ok := ssrRoutes[e.route.Pattern]; ok {
+				hasAny = true
+			}
+		default:
 			hasAny = true
+		}
+		if hasAny {
 			break
 		}
 	}
@@ -421,7 +454,16 @@ func emitRenderAdapters(b *Builder, entries []entry, routeOptions map[string]kit
 		return
 	}
 	for _, e := range entries {
-		if !e.route.HasPage || isSvelteRoute(e.route.Pattern, routeOptions) {
+		if !e.route.HasPage {
+			continue
+		}
+		svelteMode := isSvelteRoute(e.route.Pattern, routeOptions)
+		_, hasSSR := ssrRoutes[e.route.Pattern]
+		if svelteMode && !hasSSR {
+			continue
+		}
+		if svelteMode {
+			emitSvelteRenderAdapter(b, e)
 			continue
 		}
 		b.Linef("// render__%s adapts %s.Page{}.Render to router.PageHandler.", e.alias, e.alias)
@@ -444,6 +486,38 @@ func emitRenderAdapters(b *Builder, entries []entry, routeOptions map[string]kit
 		b.Line("}")
 		b.Line("")
 	}
+}
+
+// emitSvelteRenderAdapter writes the Phase 6 (#428) bridge that calls
+// the wire-emitted RenderSSR (which dispatches to the typed
+// usersrc.Render(payload, PageData)), then copies the payload buffer
+// into the route's page writer. ctx is unused at the SSR layer for now
+// — request-scoped data lives on Payload extensions reserved for
+// future phases.
+func emitSvelteRenderAdapter(b *Builder, e entry) {
+	b.Linef("// render__%s bridges %s.RenderSSR (Svelte SSR Option B) into router.PageHandler.", e.alias, e.alias)
+	b.Linef("func render__%s(w *render.Writer, ctx *kit.RenderCtx, data any) error {", e.alias)
+	b.Indent()
+	b.Line("_ = ctx")
+	b.Line("var payload server.Payload")
+	b.Linef("if err := %s.RenderSSR(&payload, data); err != nil {", e.alias)
+	b.Indent()
+	b.Line("return err")
+	b.Dedent()
+	b.Line("}")
+	b.Line("if head := payload.HeadHTML(); head != \"\" {")
+	b.Indent()
+	b.Line("// Per ADR 0009 the head buffer is appended to the route's")
+	b.Line("// page writer; the server pipeline picks it up via the same")
+	b.Line("// shellHead injection point used for Mustache-Go pages.")
+	b.Line("w.WriteString(head)")
+	b.Dedent()
+	b.Line("}")
+	b.Line("w.WriteString(payload.Body())")
+	b.Line("return nil")
+	b.Dedent()
+	b.Line("}")
+	b.Line("")
 }
 
 // emitLayoutAdapters writes one `render__layout__<alias>` function per
@@ -575,21 +649,29 @@ func emitErrorAdapters(b *Builder, imports []errorImport) {
 	}
 }
 
-func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutByPath map[string]layoutImport, errorAliasByPath map[string]string, routeOptions map[string]kit.PageOptions, pageHeads map[string]bool, clientKeys map[string]string) {
+func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutByPath map[string]layoutImport, errorAliasByPath map[string]string, routeOptions map[string]kit.PageOptions, pageHeads map[string]bool, clientKeys map[string]string, ssrRoutes map[string]string) {
 	b.Line("{")
 	b.Indent()
 	b.Linef("Pattern: %s,", quoteGo(r.Pattern))
 	emitSegments(b, r.Segments)
 	svelteMode := isSvelteRoute(r.Pattern, routeOptions)
+	_, hasSSR := ssrRoutes[r.Pattern]
 	switch {
 	case r.HasServer:
 		b.Linef("Server: %s.Handlers,", alias)
 	case r.HasPage:
-		if !svelteMode {
+		switch {
+		case !svelteMode:
 			b.Linef("Page: render__%s,", alias)
 			if pageHeads[r.PackagePath] {
 				b.Linef("Head: head__%s,", alias)
 			}
+		case hasSSR:
+			// Phase 6 (#428): Svelte-mode route with a Render emit.
+			// The bridge adapter wraps the typed RenderSSR into the
+			// PageHandler shape so the existing renderPage path
+			// produces a full HTML body.
+			b.Linef("Page: render__%s,", alias)
 		}
 		if ck := clientKeys[r.PackagePath]; ck != "" {
 			b.Linef("ClientKey: %s,", quoteGo(ck))

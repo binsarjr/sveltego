@@ -277,7 +277,13 @@ func (s *Server) resolve(w http.ResponseWriter, r *http.Request, ev *kit.Request
 	if !optionsAllowSSR(route.Options) {
 		return s.renderEmptyShell(), nil
 	}
-	if isSvelteMode {
+	// ADR 0009 phase 6 (#428): Svelte-mode routes with a generated
+	// Render emit have route.Page wired to the bridge adapter that
+	// dispatches usersrc.Render(payload, data) and writes payload.Body
+	// into the page writer. Routes without a Render emit (no
+	// _page.server.go, build skipped, Node missing, etc.) keep the
+	// SPA shell fallback so the page still hydrates client-side.
+	if isSvelteMode && route.Page == nil {
 		return s.renderSvelteShell(r, ev, route, form)
 	}
 	return s.renderPage(w, r, ev, route, form, pageBuf)
