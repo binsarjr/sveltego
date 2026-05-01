@@ -1,10 +1,13 @@
 # ADR 0008 — Pivot to Pure-Svelte Templates
 
-- **Status:** Accepted
+> **Update 2026-05-02:** SSR-at-runtime is restored via [ADR 0009](0009-ssr-option-b.md) (Option B — mechanical transpile of `svelte/server` compiled JS to Go). The pure-Svelte template invariant in this ADR remains canonical; only the "all dynamic routes ship as SPA shell" framing in the runtime section below is superseded.
+
+- **Status:** Accepted (SSR-at-runtime portion superseded by [ADR 0009](0009-ssr-option-b.md), 2026-05-02)
 - **Date:** 2026-05-01
 - **Authors:** binsarjr, orchestrator
 - **Issue:** [binsarjr/sveltego#379](https://github.com/binsarjr/sveltego/issues/379)
 - **Supersedes:** [ADR 0007](0007-svelte-semantics-revisit.md) (Proposed); the "Mustache expressions are Go" half of [ADR 0001](0001-parser-strategy.md) and [ADR 0002](0002-expression-syntax.md). Codegen-shape and file-convention ADRs (0003, 0004) remain in force, with template-emit lowered to typegen + Vite passthrough.
+- **Superseded by:** [ADR 0009](0009-ssr-option-b.md) for the SSR-at-runtime piece only. Template invariant unchanged.
 - **Related:** [ADR 0005](0005-non-goals.md) (no JS runtime on the server — preserved), RFC #309 (Svelte semantics revisit), Spike #311 (JS runtime survey), Spike #313 (runes evaluation surface).
 
 ## Context
