@@ -3,6 +3,7 @@ package typegen
 import (
 	"fmt"
 	goast "go/ast"
+	"strings"
 )
 
 // mapType renders one Go AST type expression as its TypeScript
@@ -101,8 +102,7 @@ func mapSelector(t *goast.SelectorExpr) (string, []Diagnostic) {
 	if !ok || t.Sel == nil {
 		return "unknown", []Diagnostic{{Message: "selector with non-ident receiver mapped to unknown"}}
 	}
-	switch pkg.Name + "." + t.Sel.Name {
-	case "time.Time":
+	if pkg.Name == "time" && t.Sel.Name == "Time" {
 		return "string", nil
 	}
 	return "unknown", []Diagnostic{{
@@ -147,13 +147,16 @@ func renderInlineObject(fields []Field) string {
 	if len(fields) == 0 {
 		return "{}"
 	}
-	out := "{ "
+	var b strings.Builder
+	b.WriteString("{ ")
 	for i, f := range fields {
 		if i > 0 {
-			out += "; "
+			b.WriteString("; ")
 		}
-		out += f.Name + ": " + f.TSType
+		b.WriteString(f.Name)
+		b.WriteString(": ")
+		b.WriteString(f.TSType)
 	}
-	out += " }"
-	return out
+	b.WriteString(" }")
+	return b.String()
 }
