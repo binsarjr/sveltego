@@ -18,9 +18,26 @@ Tiers per [RFC #97](https://github.com/binsarjr/sveltego/issues/97).
 
 ## Experimental
 
-Entire package. Treat every exported symbol as experimental until Phase 6
-([#428](https://github.com/binsarjr/sveltego/issues/428)) wires the helpers
-into the request pipeline and the surface stops shifting on landing.
+Entire package. The helpers are now wired into the request pipeline as of
+Phase 6 ([#428](https://github.com/binsarjr/sveltego/issues/428), merged
+2026-05-02) and exercised by the Phase 7 corpus + ssr-stress playground
+([#429](https://github.com/binsarjr/sveltego/issues/429), merged
+2026-05-02). The surface is stable in practice but stays Experimental
+until v1.0 RC for two reasons:
+
+1. **Open lowerer carryovers** — [#440](https://github.com/binsarjr/sveltego/issues/440)
+   (layout-chain children-callback ABI) and
+   [#443](https://github.com/binsarjr/sveltego/issues/443) (snippet
+   hoisting + `{@const}` non-bool lowering) may extend or refine helper
+   call patterns when they land.
+2. **Escape-table quirks intentionally mirror upstream Svelte.**
+   `EscapeHTML` (CONTENT_REGEX `/[&<]/g`) escapes only `&` and `<`;
+   `EscapeHTMLAttr` (ATTR_REGEX `/[&"<]/g`) adds `"`. Neither escapes
+   `>` or `'`. Anyone relying on `golang.org/x/text` or
+   `html/template` intuition would expect more — explicit Experimental
+   tier is the call-out until the documentation surface is mature.
+
+Promotion to `stable` is gated on v1.0 RC.
 
 - `server.Payload` — body/head buffers passed through compiled render functions
 - `server.EscapeHTML` / `EscapeHTMLAttr` — content/attribute HTML escape, mirrors `svelte/src/escaping.js`

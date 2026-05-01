@@ -14,7 +14,7 @@ To avoid hallucinating conventions, layout, or APIs, read **in this order** befo
 6. `AGENTS.md` — master AI rules synced to `.cursorrules` and copilot instructions per RFC #103.
 7. `CONTRIBUTING.md` — code style, error handling, logging, ctx propagation.
 8. `STABILITY.md` per package — what's safe to change (RFC #97).
-9. Any package-local `CLAUDE.md` for scope-specific patterns (e.g. `packages/sveltego/internal/codegen/CLAUDE.md` once it lands).
+9. Any package-local `CLAUDE.md` for scope-specific patterns (e.g. `packages/sveltego/internal/codegen/CLAUDE.md`, `packages/sveltego/internal/codegen/svelte_js2go/CLAUDE.md` for SSR transpiler patterns, `packages/sveltego/internal/codegen/svelterender/sidecar/CLAUDE.md` for the Node sidecar's two operating modes).
 
 If a doc is missing, check the corresponding issue body — body-files in `/tmp/setup-bodies/*.md` exist locally during the bootstrap phase.
 
@@ -33,12 +33,14 @@ If a doc is missing, check the corresponding issue body — body-files in `/tmp/
 | #103 | AGENTS.md + AI doc sync | Single source of truth for AI agent rules |
 | #104 | Codegen golden testing | `-update` flag flow, determinism rules, review discipline |
 | #105 | Bench regression gate | benchstat thresholds, CI integration, override mechanism |
+| #421 | RFC: Go-only SSR runtime for Svelte templates | Option A/B/C trade analysis; selected Option B (build-time JS-to-Go transpile) |
+| #422 | Tracking: SSR Option B implementation | 9-phase rollout (#423–#431); execution journey + cross-phase carryovers |
 
 When in doubt about a convention: open the relevant issue with `gh issue view <N> --repo binsarjr/sveltego`. Do not guess.
 
 ## Repository state
 
-Pre-alpha. MVP closed; v0.2, v0.4, and v1.1 shipped; v0.3, v0.5, v0.6, and v1.0 in flight. The Go workspace already hosts the core (`packages/sveltego`), auth (`packages/auth`), tooling (`packages/lsp`, `packages/mcp`, `packages/init`, `packages/enhanced-img`), six deploy adapters plus `adapter-auto`, the bench harness (`bench/`, `benchmarks/`), AI templates (`templates/ai/`), and end-to-end playgrounds. New work continues to flow through:
+Pre-alpha. MVP closed; v0.2, v0.4, and v1.1 shipped; v0.3, v0.5, v0.6, and v1.0 in flight. The SSR Option B track ([RFC #421](https://github.com/binsarjr/sveltego/issues/421); 9 phases #423–#431) shipped 2026-05-02 — SSR is live end-to-end via build-time JS-to-Go transpile (no JS engine on the request path). The Go workspace already hosts the core (`packages/sveltego` — including the `internal/codegen/svelte_js2go/` transpiler and `runtime/svelte/{server,fallback}` helpers), auth (`packages/auth`), tooling (`packages/lsp`, `packages/mcp`, `packages/init`, `packages/enhanced-img`), six deploy adapters plus `adapter-auto`, the bench harness (`bench/`, `benchmarks/`), AI templates (`templates/ai/`), and end-to-end playgrounds (`basic`, `blog`, `dashboard`, `ssr-stress`). New work continues to flow through:
 
 - `tasks/todo.md` — current execution plan, milestone scope, phase tracking
 - `tasks/lessons.md` — design decisions and self-rules captured per session (append-only journal)
@@ -50,7 +52,7 @@ Always read both `tasks/` files at session start before proposing changes.
 
 This is a **rewrite of SvelteKit's shape in pure Go**, not an embed of SvelteKit-the-JS-server. The earlier "embed JS runtime via goja/v8go/Bun" direction was rejected — see [`tasks/lessons/2026-04-29-pivot-to-go-native-rewrite.md`](tasks/lessons/2026-04-29-pivot-to-go-native-rewrite.md) for the chain of reasoning. Do not reopen that decision without new evidence.
 
-As of 2026-05-01, [ADR 0008](tasks/decisions/0008-pure-svelte-pivot.md) supersedes [ADR 0007](tasks/decisions/0007-svelte-semantics-revisit.md): templates pivot to **100% pure Svelte/JS/TS**. Go expressions in mustaches are out. Server-side Go files own data; codegen reads their Go AST and emits TypeScript declaration files for IDE autocompletion. As of 2026-05-02, [ADR 0009](tasks/decisions/0009-ssr-option-b.md) supersedes the SSR-at-runtime portion of ADR 0008: SSR returns via build-time mechanical transpile of `svelte/server` compiled JS to Go (Option B per [RFC #421](https://github.com/binsarjr/sveltego/issues/421)). Runtime is hybrid: build-time SSG sidecar for prerendered routes, build-time JS-to-Go transpile (via vendored Acorn in the same sidecar) for SSR routes, runtime SPA fallback only for routes opted in via `// sveltego:ssr-fallback`. Phases 2–6 of the pure-Svelte pivot land via [#381](https://github.com/binsarjr/sveltego/issues/381)–[#385](https://github.com/binsarjr/sveltego/issues/385); SSR phases 1–9 land via [#423](https://github.com/binsarjr/sveltego/issues/423)–[#431](https://github.com/binsarjr/sveltego/issues/431) under tracking [#422](https://github.com/binsarjr/sveltego/issues/422).
+As of 2026-05-01, [ADR 0008](tasks/decisions/0008-pure-svelte-pivot.md) supersedes [ADR 0007](tasks/decisions/0007-svelte-semantics-revisit.md): templates pivot to **100% pure Svelte/JS/TS**. Go expressions in mustaches are out. Server-side Go files own data; codegen reads their Go AST and emits TypeScript declaration files for IDE autocompletion. As of 2026-05-02, [ADR 0009](tasks/decisions/0009-ssr-option-b.md) supersedes the SSR-at-runtime portion of ADR 0008: SSR returns via build-time mechanical transpile of `svelte/server` compiled JS to Go (Option B per [RFC #421](https://github.com/binsarjr/sveltego/issues/421)). All 9 SSR phases (#423–#431) shipped 2026-05-02; pipeline is live end-to-end. Runtime is hybrid: build-time SSG sidecar for prerendered routes, build-time JS-to-Go transpile (via vendored Acorn in the same sidecar) emitting per-route `Render()` Go functions for the dominant SSR path, and a long-running Node sidecar at request time **only** for routes that opt in via the `<!-- sveltego:ssr-fallback -->` HTML comment in their `_page.svelte`. Hard-error-at-build is the default for non-annotated routes the lowerer cannot handle (ADR 0009 sub-decision 2). Phases 2–6 of the pure-Svelte pivot land via [#381](https://github.com/binsarjr/sveltego/issues/381)–[#385](https://github.com/binsarjr/sveltego/issues/385); SSR phases 1–9 closed via [#423](https://github.com/binsarjr/sveltego/issues/423)–[#431](https://github.com/binsarjr/sveltego/issues/431) under tracking [#422](https://github.com/binsarjr/sveltego/issues/422). Open SSR carryovers: [#440](https://github.com/binsarjr/sveltego/issues/440) (layout-chain children-callback ABI), [#443](https://github.com/binsarjr/sveltego/issues/443) (snippet hoisting + `{@const}` non-bool lowering), [#435](https://github.com/binsarjr/sveltego/issues/435) (pre-existing streaming flake).
 
 Key invariants (post-ADR 0008 + 0009):
 
@@ -214,7 +216,7 @@ If counts, file lists, or roadmap stages disagree across these, the doc set is b
 | v0.4 | 19 (#43–59, #86, #90) | Svelte 5 full coverage, a11y, `<svelte:options>` |
 | v0.5 | 23 (SvelteKit-parity catch-up + cookie-session core) | Upstream-tracked enhancements (`kit.After`, `HandleAction`, `RawParam`, `RouteID`, …) and the cookie-session auth core |
 | v0.6 | 40 (auth track) | `sveltego-auth` master plan (#155), storage adapters, sessions, password / magic-link / OTP / OAuth |
-| v1.0 | 28 (#60–69, #89, #91–93, plus post-merge code-quality follow-ups) | Bench, docs, streaming, SSG, CSP, sitemap, image opt, deploy adapters, post-Wave-1 hardening |
+| v1.0 | 41 (#60–69, #89, #91–93, post-merge code-quality follow-ups, SSR Option B track #421/#422 + #423–#431, carryovers #435 #440 #443) | Bench, docs, streaming, SSG, CSP, sitemap, image opt, deploy adapters, SSR Option B (RFC #421 + 9 phases) |
 | v1.1 | 6 (#70–75) | LLM tooling: `llms.txt`, MCP server, AI templates, provenance |
 
 Closed standalone issues (e.g. #94 non-goals RFC) live unmilestoned — search `gh issue list --search "no:milestone state:closed"` if needed.

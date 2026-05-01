@@ -1,29 +1,14 @@
 # basic
 
-Hello-world playground exercising the MVP pipeline end-to-end: parser →
-codegen → mirror tree → wire glue → manifest adapters → router → server.
+Hello-world playground exercising the post-pivot pipeline end-to-end:
+parser → typegen → svelte_js2go SSR transpile → manifest adapters →
+router → server → SSR `Render()` per request.
 
-## Status
-
-**Smoke blocked by two framework gaps:**
-
-- [#109](https://github.com/binsarjr/sveltego/issues/109) — runtime
-  PageData type-assertion mismatch. Codegen produces the expected `.gen/`
-  tree and `sveltego build` produces a binary, but every page route
-  returns HTTP 500 with `PageData type mismatch` because the manifest
-  adapter cannot type-assert an anonymous struct value against the gen
-  package's named `PageData` type.
-- [#110](https://github.com/binsarjr/sveltego/issues/110) — pre-commit
-  hook rejects user `.go` files. The hook does `go test` per staged-file
-  directory, which fails for `src/routes/[id]/` (Go rejects `[` in import
-  paths) and `src/routes/` (all `.go` files carry `//go:build sveltego`,
-  Go reports "build constraints exclude all Go files"). User `.go` files
-  for this playground are deferred to Phase 0j-fix.
-
-This commit lands the non-user-go portion of the playground (svelte
-templates, app.html, cmd/app, CI workflow). The user `.go` files
-(`page.server.go` under `src/routes/` and `[id]/`) land alongside the
-fix that closes #109 + #110.
+After the SSR Option B track ([RFC #421](https://github.com/binsarjr/sveltego/issues/421))
+shipped (2026-05-02), this playground returns full SSR HTML on
+`curl /` rather than the bare SPA shell that ADR 0008 originally
+targeted. No JS engine on the request path — Node only ran during
+`sveltego build` to produce the per-route `Render()` Go functions.
 
 ## Layout
 
@@ -32,34 +17,47 @@ playgrounds/basic/
 ├── go.mod                    # require + replace points at packages/sveltego
 ├── app.html                  # shell with %sveltego.head% / %sveltego.body%
 ├── src/routes/
-│   ├── _layout.svelte        # inert in MVP — layout chain is v0.2 (#24)
-│   ├── _page.svelte          # uses {data.Greeting} + {#each Posts}
-│   ├── page.server.go        # //go:build sveltego; inline-struct-literal Load
+│   ├── _layout.svelte        # layout chain (slot-only is fully supported;
+│   │                         #   children-callback ABI still tracked in #440)
+│   ├── _page.svelte          # pure Svelte/JS/TS — `let { data } = $props()`,
+│   │                         #   `{data.greeting}`, `{#each data.posts as post}`
+│   ├── _page.server.go       # //go:build sveltego; Load(ctx) returns PageData
 │   └── post/
 │       └── [id]/
 │           ├── _page.svelte
-│           └── page.server.go
+│           └── _page.server.go
 └── cmd/app/main.go           # boots server with gen.Routes()
 ```
 
 ## Conventions
 
-- User `.go` files under `src/routes/**` carry `//go:build sveltego` as
-  the first line so the default Go toolchain skips them. The codegen
-  pipeline reads them through `go/parser` directly and mirrors them into
-  `.gen/usersrc/<encoded>/` with the constraint stripped and the package
-  clause rewritten to the encoded directory name. See ADR 0003 amendment
-  (Phase 0i-fix).
-- `_page.svelte` files keep the `+` prefix; only user `.go` files dropped
-  it in Phase 0i-fix.
-- `Load()` returns an inline anonymous struct literal so PageData
-  inference (ADR 0004) extracts its fields into `type PageData struct{...}`
-  in the generated page package. Named-type returns are out of scope
-  until a future RFC.
-- The `_layout.svelte` is inert in the MVP. Layout chain rendering lands
-  in v0.2 (#24).
+- `_page.svelte` carries Svelte 5 runes only — `$props`, `$state`,
+  `$derived`. Lowercase props (`data.user.name`); zero Go syntax in
+  mustaches. ADR 0008 governs.
+- `_page.server.go` declares a typed `PageData` struct; codegen reads
+  the Go AST and emits a sibling `.svelte.d.ts` for IDE
+  autocompletion. Server-side fields lower into `data.User.Name` Go
+  field access in the SSR `Render()` via the JSON-tag map (Phase 5,
+  [#427](https://github.com/binsarjr/sveltego/issues/427)).
+- User `.go` files under `src/routes/**` use the `_` prefix
+  (`_page.server.go`) so the default Go toolchain skips them; codegen
+  reads them through `go/parser` directly. ADR 0003 amendment.
 
-## Run (once #109 ships)
+## SSR walkthrough (post-Option-B)
+
+1. `sveltego compile` walks `src/routes/`, runs the Node sidecar in
+   `--mode=ssr` once per route (compile via Svelte → Acorn → JSON AST
+   to `.gen/svelte_js2go/<route>/ast.json`), then runs the Go-side
+   `internal/codegen/svelte_js2go/` transpiler to emit
+   `.gen/<route>_render.go` functions. The manifest wires each route
+   through a `render__<alias>` adapter that calls into the generated
+   `Render()`.
+2. `sveltego build` chains compile → Vite (client bundle) →
+   `go build`. Output binary is self-contained.
+3. At request time the server runs `Load(ctx) → data → Render(payload, data)`
+   in pure Go. No Node, no JS engine.
+
+## Run
 
 ```bash
 cd playgrounds/basic
@@ -70,13 +68,39 @@ curl http://localhost:3000/
 curl http://localhost:3000/post/123
 ```
 
+`curl /` returns a populated HTML body (greeting + post list); `curl
+/post/123` returns the per-post view. The CI playground-smoke job
+asserts non-empty bodies on both paths.
+
+## SSR fallback (opt-in)
+
+Routes whose JS the build-time transpiler cannot lower may opt out of
+SSR-Go and route through the Node sidecar at request time by adding a
+single line to their `_page.svelte`:
+
+```svelte
+<!-- sveltego:ssr-fallback -->
+<script lang="ts">
+  let { data } = $props();
+</script>
+...
+```
+
+The build prints which routes are annotated; the supervisor in
+`runtime/svelte/fallback/` boots Node only if at least one is
+present. See
+[`runtime/svelte/fallback/STABILITY.md`](../../packages/sveltego/runtime/svelte/fallback/STABILITY.md)
+for the contract.
+
 ## References
 
 - [#23](https://github.com/binsarjr/sveltego/issues/23) — original
   hello-world spec.
-- [#109](https://github.com/binsarjr/sveltego/issues/109) — blocking
-  PageData type-assertion bug.
 - [ADR 0003](../../tasks/decisions/0003-file-convention.md) — file
   convention + Phase 0i-fix amendment.
-- [ADR 0004](../../tasks/decisions/0004-codegen-shape.md) — codegen
-  shape + PageData inference.
+- [ADR 0008](../../tasks/decisions/0008-pure-svelte-pivot.md) —
+  pure-Svelte template invariant.
+- [ADR 0009](../../tasks/decisions/0009-ssr-option-b.md) — SSR Option
+  B (build-time JS-to-Go transpile).
+- [#440](https://github.com/binsarjr/sveltego/issues/440) — open:
+  layout-chain children-callback ABI.
