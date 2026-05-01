@@ -37,24 +37,6 @@ func detectSnapshotExport(body string) bool {
 	return snapshotExportRegexp.MatchString(stripJSComments(body))
 }
 
-// detectFragmentSnapshot walks frag for a `<script module>` block and
-// reports whether it declares a `snapshot` export.
-func detectFragmentSnapshot(frag *ast.Fragment) bool {
-	if frag == nil {
-		return false
-	}
-	for _, n := range frag.Children {
-		s, ok := n.(*ast.Script)
-		if !ok || !s.Module {
-			continue
-		}
-		if detectSnapshotExport(s.Body) {
-			return true
-		}
-	}
-	return false
-}
-
 // scriptModuleBlockRegexp matches a `<script ... context="module">` or
 // `<script module ...>` opening tag and captures the body up to its
 // closing tag. The lazy match keeps adjacent <script> blocks in the
