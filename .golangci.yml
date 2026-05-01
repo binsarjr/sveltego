@@ -31,6 +31,7 @@ linters:
       exclude-functions:
         - (*os.File).Close
         - (io.Closer).Close
+        - (*database/sql.Rows).Close
         - (*github.com/fsnotify/fsnotify.Watcher).Close
         - fmt.Fprint
         - fmt.Fprintf
