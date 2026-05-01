@@ -97,7 +97,7 @@ Field names are PascalCase (Go exported). `nil` not `null`, `len(x)` not `x.leng
 | **v0.2** | 15 | Layouts, hooks (incl. `Reroute`/`Init`), error boundaries, form actions, cookies, route groups, page options, `$env` |
 | **v0.3** | 21 | Vite client bundle, hydration, SPA router, full `$app/navigation`, Snapshot, typed `kit.Link`, hashed `kit.Asset`, dev server |
 | **v0.4** | 19 | Svelte 5 runes, slots, snippets, special elements, `<svelte:options>`, scoped CSS, a11y warnings |
-| **v0.5** | 23 | SvelteKit-parity catch-up: upstream-tracked enhancements (`kit.After`, `HandleAction`, `RawParam`, `RouteID`, etc.) and the cookie-session auth core |
+| **v0.5** | 23 | SvelteKit-parity catch-up + `cookiesession` Handle[T] middleware, secret rotation, counter playground — see [docs/auth/cookiesession.md](docs/auth/cookiesession.md) |
 | **v0.6** | 40 | Authentication: `sveltego-auth` master plan (#155), storage adapters, sessions, password / magic-link / OTP / OAuth flows |
 | **v1.0** | 25 | Benchmarks, docs, examples, streaming/SSG/CSP, sitemap, image opt, deploy adapters, CI/release/LSP, service worker, post-merge code-quality follow-ups |
 | **v1.1** | 6 | LLM tooling: `llms.txt`, MCP server, copy-for-LLM, AI templates, provenance |
@@ -120,6 +120,8 @@ packages/
   adapter-static/       # SSG output (stub; tracks #65)
   adapter-cloudflare/   # Cloudflare Workers (stub; tracks Workers Go runtime)
   adapter-auto/         # Dispatch by env / target name + standalone CLI
+  auth/                 # Auth primitives (identity, storage adapters)
+  cookiesession/        # Encrypted cookie sessions (AES-256-GCM, chunked, rotation) — see [docs/auth/cookiesession.md](docs/auth/cookiesession.md)
 bench/                  # Benchmark harness vs adapter-bun (RFC #105)
 benchmarks/             # Per-package microbenchmarks
 playgrounds/            # End-to-end example apps (basic, blog, dashboard, …)
