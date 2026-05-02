@@ -83,7 +83,7 @@ Scenarios are tagged with a `Mode` (`ssr` / `ssg` / `spa` / `static`) so a CI ga
 | ssr-hello      | ssr    | `GET /`              | emitted Render simplest case: Push + EscapeHTML pair                 |
 | ssr-typical    | ssr    | `GET /page`          | mid-complexity SSR: header + conditional + 10-item list + footer     |
 | ssr-heavy      | ssr    | `GET /heavy`         | 100-item each-loop, stresses hot loop + per-iter EscapeHTML          |
-| ssg-serve      | ssg    | `GET /index.html`    | static handler serving prebuilt HTML — SSG cold-read floor (#448)    |
+| ssg-serve      | ssg    | `GET /`              | full server short-circuit via `servePrerendered` — real SSG path     |
 | spa-shell      | spa    | `GET /spa-shell`     | SSR=false short-circuit to renderEmptyShell + JSON payload (#448)    |
 | static-no-load | static | `GET /static`        | Templates="svelte", no Load — empty payload pipeline cost (#448)     |
 
@@ -131,7 +131,7 @@ Apple M1 Pro, darwin/arm64, `count=6`, 2026-05-02 (post #448 multi-mode bench):
 | ServeHTTP_SSRHello        |  ~1996 |  2864 |        32 |  501k   |
 | ServeHTTP_SSRTypical      |  ~2551 |  3776 |        49 |  392k   |
 | ServeHTTP_SSRHeavy        |  ~5893 | 11655 |       143 |  170k   |
-| ServeHTTP_SSGServe        | ~17460 |  2096 |        28 |   57k   |
+| ServeHTTP_SSGServe        | ~17560 |  2411 |        18 |   57k   |
 | ServeHTTP_SPAShell        |  ~1273 |  2352 |        28 |  786k   |
 | ServeHTTP_StaticNoLoad    |  ~1772 |  2896 |        31 |  564k   |
 | RouteResolution           |   ~134 |   336 |         2 | 7.5M    |
@@ -149,10 +149,13 @@ Numbers are single-thread, in-process, `httptest`. The "v1.0 budget" column is t
 | spa     | ServeHTTP_SPAShell     | JSON-payload   | 786k         | ~80×     |
 | static  | ServeHTTP_StaticNoLoad | static-payload | 564k         | ~14×     |
 
-The SSG scenario is dominated by `os.Open` + mtime stat + ETag derivation in
-`http.ServeContent`. Real production rps will exceed the in-process number once
-the OS page cache and ETag short-circuit kick in for repeat requests; the
-checked-in baseline measures cold-read every iteration.
+The SSG scenario drives the real `Server.ServeHTTP` → `servePrerendered`
+short-circuit (map lookup + `os.ReadFile`) — the production hot path.
+Build-time prerender output goes through `Server.Prerender` once at
+scenario construction, so the hot loop measures only the request-time
+work: lookup, file read, header write. The cold-read budget (no OS page
+cache) sets the floor; production traffic with warm-cache repeats will
+exceed it.
 
 Single-thread per-request floor for the hello scenario still translates to >500k rps; sveltego's 20–40k rps mid-complexity SSR target (CLAUDE.md) is comfortably exceeded under no contention. The pure-Svelte SPA hot path lands in the same band as the legacy hello scenario, confirming the JSON-payload pivot does not regress the hot path.
 

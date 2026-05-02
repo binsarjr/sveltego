@@ -12,11 +12,11 @@
 package scenarios
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
 	"strconv"
 
 	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
@@ -438,38 +438,67 @@ func SSRHeavyList() (Scenario, error) {
 	}, nil
 }
 
-// ssgPrebakedHTML is a representative prerendered document size: shell
-// boilerplate plus a small body. Matches the shape `Server.Prerender`
-// would emit for a static "/" route. Hardcoded so the scenario builder
-// is self-contained; drift from real prerender output is tracked in the
-// bench README.
-const ssgPrebakedHTML = "<!doctype html><html><head><title>ssg</title></head>" +
-	"<body><h1>hello world</h1><p>prerendered at build time.</p></body></html>"
-
-// SSGServe measures the SSG cold-read path: serving a prebuilt
-// `index.html` from disk via the static handler. There is no Load, no
-// Render, no shell merge — just an OS file read with cache headers. The
-// v1.0 budget for prerendered routes lives here (#421).
+// SSGServe measures the SSG hot path as production serves it: a request
+// against `Server.ServeHTTP` short-circuits to `servePrerendered`, which
+// looks up the URL in the prerender manifest and writes the on-disk file
+// to the response. No Load, no Render, no shell merge per request — just
+// a map lookup, an OS file read, and the response headers the runtime
+// emits (`Content-Type`, `Content-Length`, `X-Sveltego-Prerendered`).
 //
-// The handler-only path is wired through the Scenario.Handler field
-// rather than wrapping it in a full Server, so the measurement reflects
-// what production would actually do for SSG output (mount StaticHandler
-// at the prerender prefix).
+// The bench drives the full server (not the bare static handler) because
+// `servePrerendered` is the runtime path real users hit; static handler
+// is a different code path with different overhead. The v1.0 budget for
+// prerendered routes (#421) is measured against the path the server
+// actually serves.
+//
+// Setup runs `Server.Prerender` once against a Page that mirrors the
+// previous synthetic body so baseline-ssg.txt remains roughly comparable
+// (shell boilerplate + small body). The produced manifest is then loaded
+// and wired into a fresh server via `Config.Prerender`; the hot loop
+// hits that server.
 func SSGServe() (Scenario, error) {
-	dir, err := os.MkdirTemp("", "sveltego-bench-ssg-*")
+	root, err := os.MkdirTemp("", "sveltego-bench-ssg-*")
 	if err != nil {
 		return Scenario{}, fmt.Errorf("mkdir temp: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte(ssgPrebakedHTML), 0o600); err != nil {
-		return Scenario{}, fmt.Errorf("write prebaked html: %w", err)
+	routes := []router.Route{{
+		Pattern:  "/",
+		Segments: []router.Segment{},
+		Page: func(w *render.Writer, _ *kit.RenderCtx, _ any) error {
+			w.WriteString("<h1>hello world</h1><p>prerendered at build time.</p>")
+			return nil
+		},
+		Options: kit.PageOptions{Prerender: true, SSR: true, CSR: true, CSRF: true},
+	}}
+	prerSrv, err := newServer(routes)
+	if err != nil {
+		return Scenario{}, err
 	}
-	handler := server.StaticHandler(kit.StaticConfig{Dir: dir})
-	req := httptest.NewRequest(http.MethodGet, "/index.html", nil)
+	if _, err := prerSrv.Prerender(context.Background(), root, server.PrerenderOptions{}); err != nil {
+		return Scenario{}, fmt.Errorf("prerender: %w", err)
+	}
+
+	table, err := server.LoadPrerenderManifest(root, "")
+	if err != nil {
+		return Scenario{}, fmt.Errorf("load prerender manifest: %w", err)
+	}
+	if table == nil {
+		return Scenario{}, fmt.Errorf("prerender manifest missing under %s", root)
+	}
+	srv, err := server.New(server.Config{
+		Routes:    routes,
+		Shell:     shell,
+		Logger:    quietLogger(),
+		Prerender: table,
+	})
+	if err != nil {
+		return Scenario{}, fmt.Errorf("server.New: %w", err)
+	}
 	return Scenario{
 		Name:    "ssg-serve",
 		Mode:    ModeSSG,
-		Handler: handler,
-		Request: req,
+		Server:  srv,
+		Request: httptest.NewRequest(http.MethodGet, "/", nil),
 	}, nil
 }
 

@@ -2,11 +2,11 @@ goos: darwin
 goarch: arm64
 pkg: github.com/binsarjr/sveltego/bench
 cpu: Apple M1 Pro
-BenchmarkServeHTTP_SSGServe-10    	   63625	     17573 ns/op	    2096 B/op	      28 allocs/op
-BenchmarkServeHTTP_SSGServe-10    	   67155	     17379 ns/op	    2096 B/op	      28 allocs/op
-BenchmarkServeHTTP_SSGServe-10    	   67478	     17480 ns/op	    2096 B/op	      28 allocs/op
-BenchmarkServeHTTP_SSGServe-10    	   68170	     17439 ns/op	    2096 B/op	      28 allocs/op
-BenchmarkServeHTTP_SSGServe-10    	   65554	     17445 ns/op	    2096 B/op	      28 allocs/op
-BenchmarkServeHTTP_SSGServe-10    	   68599	     17681 ns/op	    2096 B/op	      28 allocs/op
+BenchmarkServeHTTP_SSGServe-10    	   68552	     18102 ns/op	    2411 B/op	      18 allocs/op
+BenchmarkServeHTTP_SSGServe-10    	   70724	     17032 ns/op	    2411 B/op	      18 allocs/op
+BenchmarkServeHTTP_SSGServe-10    	   71119	     17188 ns/op	    2411 B/op	      18 allocs/op
+BenchmarkServeHTTP_SSGServe-10    	   71006	     17014 ns/op	    2411 B/op	      18 allocs/op
+BenchmarkServeHTTP_SSGServe-10    	   71305	     16942 ns/op	    2411 B/op	      18 allocs/op
+BenchmarkServeHTTP_SSGServe-10    	   67606	     17318 ns/op	    2411 B/op	      18 allocs/op
 PASS
-ok  	github.com/binsarjr/sveltego/bench	8.398s
+ok  	github.com/binsarjr/sveltego/bench	8.664s
