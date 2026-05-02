@@ -460,7 +460,7 @@ func SSGServe() (Scenario, error) {
 	if err != nil {
 		return Scenario{}, fmt.Errorf("mkdir temp: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte(ssgPrebakedHTML), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte(ssgPrebakedHTML), 0o600); err != nil {
 		return Scenario{}, fmt.Errorf("write prebaked html: %w", err)
 	}
 	handler := server.StaticHandler(kit.StaticConfig{Dir: dir})
