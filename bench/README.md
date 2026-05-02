@@ -26,6 +26,11 @@ bench/
     YYYY-MM-DD/              # dated raw runs (e.g. pivot before/after)
   scripts/
     adapter-bun-compare.sh   # deferred adapter-bun harness (placeholder)
+  ssr-constrained/           # local-only constrained-resource SSR bench (#476)
+    Dockerfile               # distroless runtime, --cpus=0.5 --memory=1g
+    load.js                  # k6 constant-arrival-rate profile
+    run.sh                   # build + image + sweep + p99 breakpoint
+    RESULTS.md               # measured rps@p99=100ms ceiling
 ```
 
 ## Run
@@ -50,6 +55,19 @@ go run ./bench/cmd/sveltego-bench -mode static -duration 5s
 
 `-mode` accepts `ssr`, `ssg`, `spa`, `static`, or `all` (default).
 `-scenario` selects one scenario by name and overrides `-mode`.
+
+### Constrained-resource bench (local-only, #476)
+
+```sh
+bench/ssr-constrained/run.sh
+```
+
+Sweeps RPS against a Docker container locked to `--cpus=0.5 --memory=1g`
+using k6 + the `playgrounds/ssr-stress` `/longlist` route, then writes
+the rps@p99=100 ms breakpoint to `bench/ssr-constrained/last-run.txt`.
+See [`bench/ssr-constrained/RESULTS.md`](ssr-constrained/RESULTS.md) for
+the latest measurement and host/Docker provenance. CI does not run this
+suite (Docker-in-Docker + load-tool flake on shared runners).
 
 ## Scenarios
 
