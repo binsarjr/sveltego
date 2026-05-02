@@ -39,10 +39,18 @@ type ssrPlan struct {
 // the manifest can swap their adapter from the legacy
 // `Layout{}.Render(*render.Writer, ...)` form to the children-callback
 // payload bridge wired via #453 (issue #456).
+//
+// Errors holds error-boundary package paths (".gen/" prefix preserved)
+// that received an error_render.gen.go emit and a sibling
+// wire_error_render.gen.go (#412). The manifest swaps the legacy
+// `ErrorPage{}.Render(...)` adapter for the payload-bridge form that
+// dispatches `RenderErrorSSR(payload, safe)` so SSR error rendering
+// runs through Option B's transpile path instead of Mustache-Go.
 type SSRPlanResult struct {
 	Transpiled map[string]string
 	Fallback   []SSRFallbackRoute
 	Layouts    map[string]struct{}
+	Errors     map[string]struct{}
 }
 
 // SSRFallbackRoute names one route the runtime must dispatch to the
@@ -68,6 +76,22 @@ type layoutPlan struct {
 	shape      typegen.Shape
 }
 
+// errorPlan is the per-error-boundary work item for #412. dir is the
+// absolute directory containing `_error.svelte`; pkgPath is the encoded
+// gen package path (`.gen/routes/...` matching ErrorBoundaryPackagePath);
+// pkgName is the leaf-encoded package name. shape is always the
+// synthetic ErrorData alias (`type ErrorData = kit.SafeError`) — error
+// templates do not declare a server file; their data shape is fixed by
+// the framework, not user code. Strict-mode lowering against this shape
+// rewrites `data.code` → `data.Code`, `data.message` → `data.Message`,
+// `data.id` → `data.ID`.
+type errorPlan struct {
+	dir     string
+	pkgPath string
+	pkgName string
+	shape   typegen.Shape
+}
+
 // runSSRTranspile drives the Phase 6 (#428) + Phase 8 (#430) SSR codegen
 // pipeline:
 //
@@ -85,11 +109,12 @@ type layoutPlan struct {
 func runSSRTranspile(ctx context.Context, projectRoot, outDir, modulePath string, logger *slog.Logger, scan *routescan.ScanResult, routeOptions map[string]kit.PageOptions) (SSRPlanResult, error) {
 	transpilePlan, fallback := planSSR(scan, routeOptions)
 	layoutPlans := planSSRLayouts(scan, transpilePlan)
+	errorPlans := planSSRErrors(scan, transpilePlan)
 	result := SSRPlanResult{Fallback: fallback}
-	if len(transpilePlan) == 0 && len(fallback) == 0 && len(layoutPlans) == 0 {
+	if len(transpilePlan) == 0 && len(fallback) == 0 && len(layoutPlans) == 0 && len(errorPlans) == 0 {
 		return result, nil
 	}
-	if len(transpilePlan) == 0 && len(layoutPlans) == 0 {
+	if len(transpilePlan) == 0 && len(layoutPlans) == 0 && len(errorPlans) == 0 {
 		logger.Info("ssr fallback only: no routes transpiled to Go",
 			logKeyFallbackCount, len(fallback))
 		return result, nil
@@ -98,7 +123,7 @@ func runSSRTranspile(ctx context.Context, projectRoot, outDir, modulePath string
 		return result, fmt.Errorf("codegen: ssr requires node 18+ on $PATH (or annotate routes with <!-- sveltego:ssr-fallback --> if they intentionally bypass the transpiler): %w", err)
 	}
 
-	jobs := make([]svelterender.SSRJob, 0, len(transpilePlan)+len(layoutPlans))
+	jobs := make([]svelterender.SSRJob, 0, len(transpilePlan)+len(layoutPlans)+len(errorPlans))
 	for _, p := range transpilePlan {
 		rel, err := filepath.Rel(projectRoot, filepath.Join(p.route.Dir, "_page.svelte"))
 		if err != nil {
@@ -120,6 +145,16 @@ func runSSRTranspile(ctx context.Context, projectRoot, outDir, modulePath string
 		}
 		jobs = append(jobs, svelterender.SSRJob{
 			Route:  layoutJobKey(lp.pkgPath),
+			Source: filepath.ToSlash(rel),
+		})
+	}
+	for _, ep := range errorPlans {
+		rel, err := filepath.Rel(projectRoot, filepath.Join(ep.dir, "_error.svelte"))
+		if err != nil {
+			return result, fmt.Errorf("codegen: ssr error rel path: %w", err)
+		}
+		jobs = append(jobs, svelterender.SSRJob{
+			Route:  errorJobKey(ep.pkgPath),
 			Source: filepath.ToSlash(rel),
 		})
 	}
@@ -276,6 +311,77 @@ func runSSRTranspile(ctx context.Context, projectRoot, outDir, modulePath string
 		layoutsByPkg[lp.pkgPath] = struct{}{}
 	}
 	result.Layouts = layoutsByPkg
+
+	if len(errorPlans) == 0 {
+		return result, nil
+	}
+	errorsByPkg := make(map[string]struct{}, len(errorPlans))
+	for _, ep := range errorPlans {
+		jobKey := errorJobKey(ep.pkgPath)
+		astPath, ok := resultsByRoute[jobKey]
+		if !ok {
+			return result, fmt.Errorf("codegen: ssr ast missing for error %s", ep.pkgPath)
+		}
+		envelope, err := os.ReadFile(astPath) //nolint:gosec // path is sidecar-emitted under .gen
+		if err != nil {
+			return result, fmt.Errorf("codegen: read ssr ast %s: %w", astPath, err)
+		}
+
+		shape := ep.shape
+		lowerer := sveltejs2go.NewLowerer(&shape, sveltejs2go.LowererOptions{
+			Route:  ep.pkgPath,
+			Strict: true,
+		})
+
+		encodedSub := strings.TrimPrefix(ep.pkgPath, ".gen/")
+		pkgDir := filepath.Join(projectRoot, outDir, "errorsrc", filepath.FromSlash(encodedSub))
+		if err := os.MkdirAll(pkgDir, 0o755); err != nil {
+			return result, fmt.Errorf("codegen: mkdir %s: %w", pkgDir, err)
+		}
+
+		out, err := sveltejs2go.Transpile(envelope, sveltejs2go.Options{
+			PackageName:    ep.pkgName,
+			FuncName:       "Render",
+			Rewriter:       lowerer,
+			TypedDataParam: shape.RootType,
+		})
+		if err != nil {
+			return result, fmt.Errorf("codegen: ssr error transpile %s: %w", ep.pkgPath, err)
+		}
+		if lerr := lowerer.Err(); lerr != nil {
+			return result, fmt.Errorf("codegen: ssr error lowering %s: %w", ep.pkgPath, lerr)
+		}
+
+		target := filepath.Join(pkgDir, "error_render.gen.go")
+		if err := os.WriteFile(target, out, genFileMode); err != nil {
+			return result, fmt.Errorf("codegen: write %s: %w", target, err)
+		}
+
+		if _, done := companionDropped[pkgDir]; !done {
+			companion := sveltejs2go.CompanionFile(ep.pkgName)
+			compPath := filepath.Join(pkgDir, "ssr_companion.gen.go")
+			if err := os.WriteFile(compPath, companion, genFileMode); err != nil {
+				return result, fmt.Errorf("codegen: write %s: %w", compPath, err)
+			}
+			companionDropped[pkgDir] = struct{}{}
+		}
+
+		if err := emitSyntheticErrorData(pkgDir, ep.pkgName); err != nil {
+			return result, err
+		}
+
+		wireDir := filepath.Join(projectRoot, outDir, filepath.FromSlash(encodedSub))
+		if err := emitSSRErrorWire(outDir, modulePath, mirrorRoute{
+			encodedSubpath: encodedSub,
+			packageName:    ep.pkgName,
+			wireDir:        wireDir,
+		}); err != nil {
+			return result, err
+		}
+
+		errorsByPkg[ep.pkgPath] = struct{}{}
+	}
+	result.Errors = errorsByPkg
 	return result, nil
 }
 
@@ -289,6 +395,13 @@ func layoutJobKey(layoutPkgPath string) string {
 	return "/__layout__/" + strings.TrimPrefix(layoutPkgPath, ".gen/")
 }
 
+// errorJobKey derives the BuildSSRAST job key for an error-boundary
+// package path. Mirrors layoutJobKey but uses the disjoint `__error__`
+// namespace so a hypothetical `/error` page route never collides.
+func errorJobKey(errorPkgPath string) string {
+	return "/__error__/" + strings.TrimPrefix(errorPkgPath, ".gen/")
+}
+
 // emitSyntheticLayoutData drops a tiny `layout_synthetic.gen.go` into
 // pkgDir declaring `type LayoutData = struct{}`. The wire-emitted
 // `RenderLayoutSSR` references `usersrc.LayoutData` unconditionally;
@@ -298,6 +411,22 @@ func layoutJobKey(layoutPkgPath string) string {
 func emitSyntheticLayoutData(pkgDir, pkgName string) error {
 	src := "// Code generated by sveltego. DO NOT EDIT.\n\npackage " + pkgName + "\n\ntype LayoutData = struct{}\n"
 	target := filepath.Join(pkgDir, "layout_synthetic.gen.go")
+	if err := os.WriteFile(target, []byte(src), genFileMode); err != nil {
+		return fmt.Errorf("codegen: write %s: %w", target, err)
+	}
+	return nil
+}
+
+// emitSyntheticErrorData drops `error_synthetic.gen.go` into pkgDir
+// declaring `type ErrorData = kit.SafeError`. The transpiled
+// error_render.gen.go is emitted with `TypedDataParam: "ErrorData"` so
+// the lowered `data.<field>` chain resolves against this alias rather
+// than referencing kit directly (which would require importing kit
+// into a file the emitter does not own). The alias keeps the typed-data
+// ABI uniform with the page/layout SSR paths.
+func emitSyntheticErrorData(pkgDir, pkgName string) error {
+	src := "// Code generated by sveltego. DO NOT EDIT.\n\npackage " + pkgName + "\n\nimport \"github.com/binsarjr/sveltego/packages/sveltego/exports/kit\"\n\ntype ErrorData = kit.SafeError\n"
+	target := filepath.Join(pkgDir, "error_synthetic.gen.go")
 	if err := os.WriteFile(target, []byte(src), genFileMode); err != nil {
 		return fmt.Errorf("codegen: write %s: %w", target, err)
 	}
@@ -426,4 +555,71 @@ func planSSRLayouts(scan *routescan.ScanResult, pagePlans []ssrPlan) []layoutPla
 		}
 	}
 	return plans
+}
+
+// planSSRErrors collects every unique error-boundary package referenced
+// by a route that qualifies for the Phase 6 SSR transpile. Boundaries
+// shared between sibling routes are deduplicated by package path; only
+// boundaries reachable from a Svelte-SSR-eligible page route are
+// included so error rendering and page rendering travel the same
+// transpile pipeline (#412).
+//
+// All error templates receive the same synthetic ErrorData shape — an
+// alias to kit.SafeError — so the Lowerer rewrites `data.code` →
+// `data.Code`, `data.message` → `data.Message`, `data.id` → `data.ID`.
+// The shape's field names mirror typegen's lowerFirst-of-Go-field
+// convention so user templates stay JS-camelCase as expected.
+func planSSRErrors(scan *routescan.ScanResult, pagePlans []ssrPlan) []errorPlan {
+	if scan == nil {
+		return nil
+	}
+	pageRoutes := make(map[string]struct{}, len(pagePlans))
+	for _, p := range pagePlans {
+		pageRoutes[p.route.Pattern] = struct{}{}
+	}
+	shape := errorDataShape()
+	seen := make(map[string]struct{})
+	plans := make([]errorPlan, 0)
+	for _, r := range scan.Routes {
+		if _, ok := pageRoutes[r.Pattern]; !ok {
+			continue
+		}
+		if r.ErrorBoundaryPackagePath == "" || r.ErrorBoundaryDir == "" {
+			continue
+		}
+		if _, done := seen[r.ErrorBoundaryPackagePath]; done {
+			continue
+		}
+		seen[r.ErrorBoundaryPackagePath] = struct{}{}
+		plans = append(plans, errorPlan{
+			dir:     r.ErrorBoundaryDir,
+			pkgPath: r.ErrorBoundaryPackagePath,
+			pkgName: layoutPackageName(r.ErrorBoundaryPackagePath),
+			shape:   shape,
+		})
+	}
+	return plans
+}
+
+// errorDataShape returns the synthetic typegen Shape used by the
+// Lowerer when it walks `_error.svelte` member chains. The shape
+// describes ErrorData (alias to kit.SafeError) so JS-camelCase access
+// `data.code` / `data.message` / `data.id` lowers onto the Go-side
+// fields `Code` / `Message` / `ID`. Field.Name is the JSON-tag-style
+// identifier the lowerer matches; GoName is the Go field identifier
+// the rewriter substitutes.
+func errorDataShape() typegen.Shape {
+	return typegen.Shape{
+		RootType: "ErrorData",
+		Types: map[string]typegen.ShapeType{
+			"ErrorData": {
+				Name: "ErrorData",
+				Fields: []typegen.Field{
+					{Name: "code", GoName: "Code", GoType: "int", TSType: "number"},
+					{Name: "message", GoName: "Message", GoType: "string", TSType: "string"},
+					{Name: "id", GoName: "ID", GoType: "string", TSType: "string"},
+				},
+			},
+		},
+	}
 }

@@ -191,11 +191,32 @@ func Build(ctx context.Context, opts BuildOptions) (*BuildResult, error) {
 	// `<script module>` so vite.GenerateRouter wires the snapshot capture
 	// + restore hooks (#84). Empty when no route opts in.
 	clientSnapshotRoutes := make(map[string]bool)
+	// Pre-compute which error boundaries will be SSR-transpiled (#412)
+	// so we can skip the legacy Mustache-Go emit for those packages.
+	// Mustache-Go's `data.code` lowering does not align with the SSR
+	// transpile path's `data.code` → `data.Code` rewrite, so emitting
+	// both side-by-side breaks compilation when templates use lowercase
+	// JS-camelCase fields.
+	ssrPagePlans, _ := planSSR(scan, routeOptions)
+	ssrErrorPlans := planSSRErrors(scan, ssrPagePlans)
+	ssrErrorPkgs := make(map[string]struct{}, len(ssrErrorPlans))
+	for _, ep := range ssrErrorPlans {
+		ssrErrorPkgs[ep.pkgPath] = struct{}{}
+	}
+
 	for _, route := range scan.Routes {
 		if route.HasError {
 			if _, done := emittedErrors[route.Dir]; !done {
-				if err := emitErrorPage(opts.ProjectRoot, outDir, route.Dir, route.PackagePath, route.PackageName, opts.Provenance, start); err != nil {
-					return nil, err
+				// Skip Mustache-Go error.gen.go emit when the boundary
+				// will be SSR-transpiled via #412. Mustache-Go and the
+				// SSR transpile path lower `data.<field>` differently
+				// (literal vs JSON-tag-mapped), so emitting both for the
+				// same template breaks compilation when authors use
+				// JS-camelCase access.
+				if _, isSSRError := ssrErrorPkgs[route.PackagePath]; !isSSRError {
+					if err := emitErrorPage(opts.ProjectRoot, outDir, route.Dir, route.PackagePath, route.PackageName, opts.Provenance, start); err != nil {
+						return nil, err
+					}
 				}
 				emittedErrors[route.Dir] = struct{}{}
 			}
@@ -331,6 +352,7 @@ func Build(ctx context.Context, opts BuildOptions) (*BuildResult, error) {
 		SSRRenderRoutes:   ssrPlan.Transpiled,
 		SSRFallbackRoutes: ssrPlan.Fallback,
 		SSRRenderLayouts:  ssrPlan.Layouts,
+		SSRRenderErrors:   ssrPlan.Errors,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("codegen: generate manifest: %w", err)

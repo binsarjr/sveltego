@@ -155,3 +155,111 @@ func layoutPlanPaths(ps []layoutPlan) []string {
 	}
 	return out
 }
+
+// TestPlanSSRErrors_DedupesAndSynthesisesShape verifies #412: the
+// error planner enumerates every error-boundary dir reachable from a
+// Svelte-SSR-eligible page route, deduplicates boundaries shared
+// between sibling routes, and binds the synthetic ErrorData shape so
+// the Lowerer can rewrite `data.code` → `data.Code` etc. against
+// kit.SafeError.
+func TestPlanSSRErrors_DedupesAndSynthesisesShape(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	mustWrite := func(path, body string) {
+		t.Helper()
+		full := filepath.Join(root, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustWrite("src/routes/_error.svelte", "<h1>root error</h1>")
+	mustWrite("src/routes/foo/_page.svelte", "<h1>foo</h1>")
+	mustWrite("src/routes/foo/_page.server.go", `package foo
+
+type PageData struct{ Name string `+"`json:\"name\"`"+` }
+
+func Load(ctx any) (PageData, error) { return PageData{}, nil }
+`)
+	mustWrite("src/routes/foo/bar/_page.svelte", "<h1>bar</h1>")
+	mustWrite("src/routes/foo/bar/_page.server.go", `package bar
+
+type PageData struct{ Slug string `+"`json:\"slug\"`"+` }
+
+func Load(ctx any) (PageData, error) { return PageData{}, nil }
+`)
+
+	scan, err := routescan.Scan(routescan.ScanInput{RoutesDir: filepath.Join(root, "src", "routes")})
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	routeOptions := map[string]kit.PageOptions{
+		"/foo":     mkSvelteOpts(),
+		"/foo/bar": mkSvelteOpts(),
+	}
+	pagePlans, _ := planSSR(scan, routeOptions)
+	errorPlans := planSSRErrors(scan, pagePlans)
+
+	// Both /foo and /foo/bar resolve to the root _error.svelte boundary;
+	// planSSRErrors dedupes by package path.
+	if got, want := len(errorPlans), 1; got != want {
+		t.Fatalf("errorPlans count = %d, want %d", got, want)
+	}
+	ep := errorPlans[0]
+	if ep.shape.RootType != "ErrorData" {
+		t.Fatalf("error shape RootType = %q, want ErrorData", ep.shape.RootType)
+	}
+	root_t, ok := ep.shape.Types["ErrorData"]
+	if !ok {
+		t.Fatalf("error shape.Types missing ErrorData entry")
+	}
+	wantFields := map[string]string{"code": "Code", "message": "Message", "id": "ID"}
+	for jsonName, goName := range wantFields {
+		f, found := root_t.Lookup(jsonName)
+		if !found {
+			t.Fatalf("ErrorData missing field %q", jsonName)
+		}
+		if f.GoName != goName {
+			t.Fatalf("ErrorData[%q].GoName = %q, want %q", jsonName, f.GoName, goName)
+		}
+	}
+}
+
+// TestPlanSSRErrors_SkipsNonSvelteRoutes verifies that the error
+// planner walks only error boundaries reachable from a Svelte-SSR-
+// eligible page; routes that are pure-Svelte but lack a server-file
+// (so they fall out of planSSR) carry no error transpile.
+func TestPlanSSRErrors_SkipsNonSvelteRoutes(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	mustWrite := func(path, body string) {
+		t.Helper()
+		full := filepath.Join(root, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustWrite("src/routes/_error.svelte", "<h1>root error</h1>")
+	mustWrite("src/routes/_page.svelte", "<h1>home</h1>")
+	// no _page.server.go; planSSR drops the route, so planSSRErrors
+	// should also drop the boundary.
+
+	scan, err := routescan.Scan(routescan.ScanInput{RoutesDir: filepath.Join(root, "src", "routes")})
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	routeOptions := map[string]kit.PageOptions{"/": mkSvelteOpts()}
+	pagePlans, _ := planSSR(scan, routeOptions)
+	if len(pagePlans) != 0 {
+		t.Fatalf("pagePlans count = %d, want 0 (no server file → planSSR drops)", len(pagePlans))
+	}
+	errorPlans := planSSRErrors(scan, pagePlans)
+	if len(errorPlans) != 0 {
+		t.Fatalf("errorPlans count = %d, want 0 (no eligible page route)", len(errorPlans))
+	}
+}
