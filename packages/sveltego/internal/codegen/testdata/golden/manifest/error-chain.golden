@@ -7,6 +7,7 @@ import (
 	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 	"github.com/binsarjr/sveltego/packages/sveltego/render"
 	"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
+	server "github.com/binsarjr/sveltego/packages/sveltego/runtime/svelte/server"
 
 	page_routes "myapp/.gen/routes"
 	page_routes_admin "myapp/.gen/routes/admin"
@@ -66,7 +67,12 @@ func render__page_routes_admin_users(w *render.Writer, ctx *kit.RenderCtx, data 
 }
 
 // render__layout__page_routes adapts page_routes.Layout{}.Render to router.LayoutHandler.
-func render__layout__page_routes(w *render.Writer, ctx *kit.RenderCtx, data any, children func(*render.Writer) error) error {
+// The trailing pageState parameter is the $app/state surface (#466);
+// legacy Mustache-Go layouts ignore it but accept the trailing arg so
+// the per-route renderChain__<routeIdent> emit can pass pageState
+// uniformly across SSR-bridged and Mustache-Go layouts.
+func render__layout__page_routes(w *render.Writer, ctx *kit.RenderCtx, data any, children func(*render.Writer) error, pageState server.PageState) error {
+	_ = pageState
 	var typed page_routes.LayoutData
 	if data != nil {
 		v, ok := data.(page_routes.LayoutData)
@@ -79,7 +85,12 @@ func render__layout__page_routes(w *render.Writer, ctx *kit.RenderCtx, data any,
 }
 
 // render__layout__page_routes_admin adapts page_routes_admin.Layout{}.Render to router.LayoutHandler.
-func render__layout__page_routes_admin(w *render.Writer, ctx *kit.RenderCtx, data any, children func(*render.Writer) error) error {
+// The trailing pageState parameter is the $app/state surface (#466);
+// legacy Mustache-Go layouts ignore it but accept the trailing arg so
+// the per-route renderChain__<routeIdent> emit can pass pageState
+// uniformly across SSR-bridged and Mustache-Go layouts.
+func render__layout__page_routes_admin(w *render.Writer, ctx *kit.RenderCtx, data any, children func(*render.Writer) error, pageState server.PageState) error {
+	_ = pageState
 	var typed page_routes_admin.LayoutData
 	if data != nil {
 		v, ok := data.(page_routes_admin.LayoutData)
@@ -115,9 +126,16 @@ func layoutDataAt(layoutDatas []any, i int) any {
 // around the page handler. Generated per-route so the pipeline does not
 // rebuild a closure stack on every request.
 func renderChain__Index(w *render.Writer, ctx *kit.RenderCtx, page router.PageHandler, pageData any, layoutDatas []any) error {
+	pageState := server.PageState{
+		URL:    ctx.URL,
+		Params: ctx.Params,
+		Route:  server.PageRoute{ID: `/`},
+		Status: 200,
+		Data:   pageData,
+	}
 	return render__layout__page_routes(w, ctx, layoutDataAt(layoutDatas, 0), func(w *render.Writer) error {
 		return page(w, ctx, pageData)
-	})
+	}, pageState)
 }
 
 // renderErrorChain__Index composes the surviving outer-layout prefix
@@ -125,20 +143,28 @@ func renderChain__Index(w *render.Writer, ctx *kit.RenderCtx, page router.PageHa
 // is baked in; layoutData is intentionally nil per legacy behavior.
 func renderErrorChain__Index(w *render.Writer, ctx *kit.RenderCtx, safe kit.SafeError, layoutDatas []any) error {
 	_ = layoutDatas
+	pageState := server.PageState{URL: ctx.URL, Params: ctx.Params, Route: server.PageRoute{ID: `/`}, Status: safe.HTTPStatus(), Error: &server.PageError{Message: safe.Error(), Status: safe.HTTPStatus()}}
 	return render__layout__page_routes(w, ctx, nil, func(w *render.Writer) error {
 		return renderError__page_routes(w, ctx, safe)
-	})
+	}, pageState)
 }
 
 // renderChain__Admin composes the route's layout chain (outer→inner)
 // around the page handler. Generated per-route so the pipeline does not
 // rebuild a closure stack on every request.
 func renderChain__Admin(w *render.Writer, ctx *kit.RenderCtx, page router.PageHandler, pageData any, layoutDatas []any) error {
+	pageState := server.PageState{
+		URL:    ctx.URL,
+		Params: ctx.Params,
+		Route:  server.PageRoute{ID: `/admin`},
+		Status: 200,
+		Data:   pageData,
+	}
 	return render__layout__page_routes(w, ctx, layoutDataAt(layoutDatas, 0), func(w *render.Writer) error {
 		return render__layout__page_routes_admin(w, ctx, layoutDataAt(layoutDatas, 1), func(w *render.Writer) error {
 			return page(w, ctx, pageData)
-		})
-	})
+		}, pageState)
+	}, pageState)
 }
 
 // renderErrorChain__Admin composes the surviving outer-layout prefix
@@ -146,22 +172,30 @@ func renderChain__Admin(w *render.Writer, ctx *kit.RenderCtx, page router.PageHa
 // is baked in; layoutData is intentionally nil per legacy behavior.
 func renderErrorChain__Admin(w *render.Writer, ctx *kit.RenderCtx, safe kit.SafeError, layoutDatas []any) error {
 	_ = layoutDatas
+	pageState := server.PageState{URL: ctx.URL, Params: ctx.Params, Route: server.PageRoute{ID: `/admin`}, Status: safe.HTTPStatus(), Error: &server.PageError{Message: safe.Error(), Status: safe.HTTPStatus()}}
 	return render__layout__page_routes(w, ctx, nil, func(w *render.Writer) error {
 		return render__layout__page_routes_admin(w, ctx, nil, func(w *render.Writer) error {
 			return renderError__page_routes_admin(w, ctx, safe)
-		})
-	})
+		}, pageState)
+	}, pageState)
 }
 
 // renderChain__AdminUsers composes the route's layout chain (outer→inner)
 // around the page handler. Generated per-route so the pipeline does not
 // rebuild a closure stack on every request.
 func renderChain__AdminUsers(w *render.Writer, ctx *kit.RenderCtx, page router.PageHandler, pageData any, layoutDatas []any) error {
+	pageState := server.PageState{
+		URL:    ctx.URL,
+		Params: ctx.Params,
+		Route:  server.PageRoute{ID: `/admin/users`},
+		Status: 200,
+		Data:   pageData,
+	}
 	return render__layout__page_routes(w, ctx, layoutDataAt(layoutDatas, 0), func(w *render.Writer) error {
 		return render__layout__page_routes_admin(w, ctx, layoutDataAt(layoutDatas, 1), func(w *render.Writer) error {
 			return page(w, ctx, pageData)
-		})
-	})
+		}, pageState)
+	}, pageState)
 }
 
 // renderErrorChain__AdminUsers composes the surviving outer-layout prefix
@@ -169,11 +203,12 @@ func renderChain__AdminUsers(w *render.Writer, ctx *kit.RenderCtx, page router.P
 // is baked in; layoutData is intentionally nil per legacy behavior.
 func renderErrorChain__AdminUsers(w *render.Writer, ctx *kit.RenderCtx, safe kit.SafeError, layoutDatas []any) error {
 	_ = layoutDatas
+	pageState := server.PageState{URL: ctx.URL, Params: ctx.Params, Route: server.PageRoute{ID: `/admin/users`}, Status: safe.HTTPStatus(), Error: &server.PageError{Message: safe.Error(), Status: safe.HTTPStatus()}}
 	return render__layout__page_routes(w, ctx, nil, func(w *render.Writer) error {
 		return render__layout__page_routes_admin(w, ctx, nil, func(w *render.Writer) error {
 			return renderError__page_routes_admin(w, ctx, safe)
-		})
-	})
+		}, pageState)
+	}, pageState)
 }
 
 // Routes returns the route table consumed by router.NewTree.

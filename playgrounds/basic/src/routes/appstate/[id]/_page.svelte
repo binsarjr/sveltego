@@ -1,11 +1,9 @@
-<!-- sveltego:ssr-fallback -->
 <script lang="ts">
   import { page, navigating, updated } from '$app/state';
   import type { PageData } from './_page.svelte';
   let { data }: { data: PageData } = $props();
   const errorMessage = page.error ? page.error.message : 'null';
   const navigatingType = navigating.current ? navigating.current.type : 'idle';
-  const stateKeys = Object.keys(page.state).join(',') || 'none';
   const formLabel = page.form === null ? 'null' : 'set';
   const routeId = page.route.id ?? 'null';
   const paramId = page.params.id ?? 'null';
@@ -21,7 +19,6 @@
   <p data-field="error">error: {errorMessage}</p>
   <p data-field="data-greeting">data.greeting: {data.greeting}</p>
   <p data-field="form">form: {formLabel}</p>
-  <p data-field="state-keys">state keys: {stateKeys}</p>
 </section>
 
 <section data-testid="nav-state">

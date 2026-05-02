@@ -303,6 +303,15 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 			}
 		}
 	}
+	// $app/state lowering (#466) plumbs server.PageState through every
+	// renderChain__<routeIdent> and renderError__<alias> emit, including
+	// the Mustache-Go legacy adapters. The server import must be present
+	// whenever there's at least one layout (renderChain emit) or one
+	// error boundary (renderErrorChain emit), even on otherwise-pure-
+	// Mustache-Go playgrounds.
+	if !hasSvelte && (hasLayout || hasError) {
+		hasSvelte = true
+	}
 	// usesFmt reports whether any emitted adapter actually references
 	// fmt.Errorf. Only the legacy Mustache-Go page+layout adapters
 	// (typed-data type-assert error path) use it; the SSR payload-bridge
@@ -600,17 +609,18 @@ func emitRenderAdapters(b *Builder, entries []entry, routeOptions map[string]kit
 
 // emitSvelteRenderAdapter writes the Phase 6 (#428) bridge that calls
 // the wire-emitted RenderSSR (which dispatches to the typed
-// usersrc.Render(payload, PageData)), then copies the payload buffer
-// into the route's page writer. ctx is unused at the SSR layer for now
-// — request-scoped data lives on Payload extensions reserved for
-// future phases.
+// usersrc.Render(payload, PageData, pageState)), then copies the
+// payload buffer into the route's page writer. The PageState is built
+// per-request from kit.RenderCtx so templates that read $app/state
+// runes (`page.url`, `page.params`, …) see the live snapshot
+// (issue #466).
 func emitSvelteRenderAdapter(b *Builder, e entry) {
 	b.Linef("// render__%s bridges %s.RenderSSR (Svelte SSR Option B) into router.PageHandler.", e.alias, e.alias)
 	b.Linef("func render__%s(w *render.Writer, ctx *kit.RenderCtx, data any) error {", e.alias)
 	b.Indent()
-	b.Line("_ = ctx")
 	b.Line("var payload server.Payload")
-	b.Linef("if err := %s.RenderSSR(&payload, data); err != nil {", e.alias)
+	emitPageStateBuild(b, e.route.Pattern, "data")
+	b.Linef("if err := %s.RenderSSR(&payload, data, pageState); err != nil {", e.alias)
 	b.Indent()
 	b.Line("return err")
 	b.Dedent()
@@ -628,6 +638,29 @@ func emitSvelteRenderAdapter(b *Builder, e entry) {
 	b.Dedent()
 	b.Line("}")
 	b.Line("")
+}
+
+// emitPageStateBuild writes the canonical block that constructs a
+// server.PageState from the in-flight kit.RenderCtx for the page-render
+// adapters to forward into RenderSSR / RenderLayoutSSR / RenderErrorSSR
+// (issue #466). pattern is the route's canonical Pattern (e.g.
+// `/post/[id]`) — Svelte exposes it as `page.route.id`. dataIdent is
+// the local-binding name the caller's scope holds the typed PageData
+// under — `data` for the page bridge, `pageData` for the chain
+// composer — and lands on `page.data` reads.
+//
+// Server-side, navigating and updated stay at their idle defaults;
+// they're client-driven signals.
+func emitPageStateBuild(b *Builder, pattern, dataIdent string) {
+	b.Line("pageState := server.PageState{")
+	b.Indent()
+	b.Line("URL:    ctx.URL,")
+	b.Line("Params: ctx.Params,")
+	b.Linef("Route:  server.PageRoute{ID: %s},", quoteGo(pattern))
+	b.Line("Status: 200,")
+	b.Linef("Data:   %s,", dataIdent)
+	b.Dedent()
+	b.Line("}")
 }
 
 // emitFallbackAdapters writes one `renderFallback__<routeIdent>` Page
@@ -711,8 +744,13 @@ func emitLayoutAdapters(b *Builder, imports []layoutImport) {
 			emitSSRLayoutAdapter(b, li)
 		} else {
 			b.Linef("// render__layout__%s adapts %s.Layout{}.Render to router.LayoutHandler.", li.alias, li.alias)
-			b.Linef("func render__layout__%s(w *render.Writer, ctx *kit.RenderCtx, data any, children func(*render.Writer) error) error {", li.alias)
+			b.Linef("// The trailing pageState parameter is the $app/state surface (#466);")
+			b.Linef("// legacy Mustache-Go layouts ignore it but accept the trailing arg so")
+			b.Linef("// the per-route renderChain__<routeIdent> emit can pass pageState")
+			b.Linef("// uniformly across SSR-bridged and Mustache-Go layouts.")
+			b.Linef("func render__layout__%s(w *render.Writer, ctx *kit.RenderCtx, data any, children func(*render.Writer) error, pageState server.PageState) error {", li.alias)
 			b.Indent()
+			b.Line("_ = pageState")
 			b.Linef("var typed %s.LayoutData", li.alias)
 			b.Line("if data != nil {")
 			b.Indent()
@@ -745,11 +783,14 @@ func emitLayoutAdapters(b *Builder, imports []layoutImport) {
 // RenderLayoutSSR (which calls the typed Render(payload, data, inner)
 // from the layoutsrc package), bridges the writer-shape `children`
 // callback into the payload via a temporary render.Writer, and copies
-// the rendered head + body into the outer writer.
+// the rendered head + body into the outer writer. pageState is built
+// per-route by the renderChain__<routeIdent> caller and forwarded
+// through every layer so layout templates that read $app/state runes
+// see the same snapshot the page handler does (issue #466).
 func emitSSRLayoutAdapter(b *Builder, li layoutImport) {
 	b.Linef("// render__layout__%s bridges %s.RenderLayoutSSR (Svelte SSR Option B,", li.alias, li.alias)
 	b.Linef("// children-callback ABI from #453) into router.LayoutHandler.")
-	b.Linef("func render__layout__%s(w *render.Writer, ctx *kit.RenderCtx, data any, children func(*render.Writer) error) error {", li.alias)
+	b.Linef("func render__layout__%s(w *render.Writer, ctx *kit.RenderCtx, data any, children func(*render.Writer) error, pageState server.PageState) error {", li.alias)
 	b.Indent()
 	b.Line("_ = ctx")
 	b.Line("var payload server.Payload")
@@ -772,7 +813,7 @@ func emitSSRLayoutAdapter(b *Builder, li layoutImport) {
 	b.Line("p.Push(string(buf.Bytes()))")
 	b.Dedent()
 	b.Line("}")
-	b.Linef("if err := %s.RenderLayoutSSR(&payload, data, inner); err != nil {", li.alias)
+	b.Linef("if err := %s.RenderLayoutSSR(&payload, data, inner, pageState); err != nil {", li.alias)
 	b.Indent()
 	b.Line("return err")
 	b.Dedent()
@@ -898,19 +939,28 @@ func emitErrorAdapters(b *Builder, imports []errorImport) {
 // emitSSRErrorAdapter writes the payload-bridge form of
 // renderError__<alias> introduced by #412. The emitted adapter
 // allocates a fresh server.Payload, dispatches to the wire-emitted
-// RenderErrorSSR (which calls the typed Render(payload, kit.SafeError)
-// from the errorsrc package), and copies the rendered head + body into
-// the outer writer. The shape mirrors emitSSRLayoutAdapter so the SSR
-// pipeline composes consistently across page, layout, and error
-// rendering paths.
+// RenderErrorSSR (which calls the typed Render(payload, kit.SafeError,
+// pageState) from the errorsrc package), and copies the rendered head
+// + body into the outer writer. The shape mirrors emitSSRLayoutAdapter
+// so the SSR pipeline composes consistently across page, layout, and
+// error rendering paths. PageState is built inline from ctx and the
+// SafeError so error templates that read $app/state runes see a
+// snapshot tagged with the error's HTTP status (issue #466).
 func emitSSRErrorAdapter(b *Builder, ei errorImport) {
 	b.Linef("// renderError__%s bridges %s.RenderErrorSSR (Svelte SSR Option B,", ei.alias, ei.alias)
 	b.Linef("// payload-bridge from #412) into router.ErrorHandler.")
 	b.Linef("func renderError__%s(w *render.Writer, ctx *kit.RenderCtx, safe kit.SafeError) error {", ei.alias)
 	b.Indent()
-	b.Line("_ = ctx")
 	b.Line("var payload server.Payload")
-	b.Linef("%s.RenderErrorSSR(&payload, safe)", ei.alias)
+	b.Line("pageState := server.PageState{")
+	b.Indent()
+	b.Line("URL:    ctx.URL,")
+	b.Line("Params: ctx.Params,")
+	b.Line("Status: safe.HTTPStatus(),")
+	b.Line("Error:  &server.PageError{Message: safe.Error(), Status: safe.HTTPStatus()},")
+	b.Dedent()
+	b.Line("}")
+	b.Linef("%s.RenderErrorSSR(&payload, safe, pageState)", ei.alias)
 	b.Line("if head := payload.HeadHTML(); head != \"\" {")
 	b.Indent()
 	b.Line("w.WriteString(head)")
@@ -991,6 +1041,7 @@ func emitRouteRenderChain(b *Builder, r routescan.ScannedRoute, layoutByPath map
 	b.Linef("// rebuild a closure stack on every request.")
 	b.Linef("func renderChain__%s(w *render.Writer, ctx *kit.RenderCtx, page router.PageHandler, pageData any, layoutDatas []any) error {", ident)
 	b.Indent()
+	emitPageStateBuild(b, r.Pattern, "pageData")
 	emitChainBody(b, r.LayoutPackagePaths, layoutByPath, "page(w, ctx, pageData)")
 	b.Dedent()
 	b.Line("}")
@@ -1027,6 +1078,13 @@ func emitRouteRenderErrorChain(b *Builder, r routescan.ScannedRoute, layoutByPat
 	b.Linef("func renderErrorChain__%s(w *render.Writer, ctx *kit.RenderCtx, safe kit.SafeError, layoutDatas []any) error {", ident)
 	b.Indent()
 	b.Line("_ = layoutDatas")
+	if len(survivingLayouts) > 0 {
+		// pageState gets threaded into the surviving outer layouts so
+		// their templates (nav bars, breadcrumbs) can read $app/state.
+		// The error path overrides Status from safe.HTTPStatus() and
+		// populates page.error so `{#if page.error}` branches activate.
+		b.Linef("pageState := server.PageState{URL: ctx.URL, Params: ctx.Params, Route: server.PageRoute{ID: %s}, Status: safe.HTTPStatus(), Error: &server.PageError{Message: safe.Error(), Status: safe.HTTPStatus()}}", quoteGo(r.Pattern))
+	}
 	innerCall := fmt.Sprintf("renderError__%s(w, ctx, safe)", errAlias)
 	emitErrorChainBody(b, survivingLayouts, layoutByPath, innerCall)
 	b.Dedent()
@@ -1059,16 +1117,19 @@ func emitErrorChainBody(b *Builder, layoutPaths []string, layoutByPath map[strin
 // openLayoutCalls emits the outer→inner layout-composition Go code as a
 // single `return render__layout__<l0>(...)` expression. nilData=true
 // passes a nil layoutData to every wrapper (error path); nilData=false
-// reads from layoutDatas[i] (success path).
+// reads from layoutDatas[i] (success path). pageState is forwarded
+// verbatim to every layout call so layout templates that read
+// $app/state runes see the same snapshot the page handler does
+// (issue #466).
 func openLayoutCalls(b *Builder, layoutPaths []string, layoutByPath map[string]layoutImport, innerCall string, nilData bool) {
 	// Build the nested expression depth-first. For three layouts l0,l1,l2:
 	//   return render__layout__<l0>(w, ctx, d0, func(w) error {
 	//     return render__layout__<l1>(w, ctx, d1, func(w) error {
 	//       return render__layout__<l2>(w, ctx, d2, func(w) error {
 	//         return <innerCall>
-	//       })
-	//     })
-	//   })
+	//       }, pageState)
+	//     }, pageState)
+	//   }, pageState)
 	for i, path := range layoutPaths {
 		li, ok := layoutByPath[path]
 		if !ok {
@@ -1089,7 +1150,7 @@ func openLayoutCalls(b *Builder, layoutPaths []string, layoutByPath map[string]l
 	b.Linef("return %s", innerCall)
 	for range layoutPaths {
 		b.Dedent()
-		b.Line("})")
+		b.Line("}, pageState)")
 	}
 }
 

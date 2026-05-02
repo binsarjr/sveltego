@@ -29,7 +29,8 @@ type Node struct {
 
 	Specifiers []*Node // ImportDeclaration.specifiers
 	Source     *Node   // ImportDeclaration.source (Literal)
-	Local      *Node   // ImportNamespaceSpecifier.local
+	Local      *Node   // Import*Specifier.local
+	Imported   *Node   // ImportSpecifier.imported (source-side name)
 
 	Declaration  *Node   // ExportDefaultDeclaration.declaration
 	Declarations []*Node // VariableDeclaration.declarations
@@ -183,8 +184,12 @@ func (n *Node) UnmarshalJSON(b []byte) error {
 		n.Specifiers = decodeNodeList("specifiers")
 		n.Source = decodeNode("source")
 
-	case "ImportNamespaceSpecifier", "ImportDefaultSpecifier", "ImportSpecifier":
+	case "ImportNamespaceSpecifier", "ImportDefaultSpecifier":
 		n.Local = decodeNode("local")
+
+	case "ImportSpecifier":
+		n.Local = decodeNode("local")
+		n.Imported = decodeNode("imported")
 
 	case "ExportDefaultDeclaration", "ExportNamedDeclaration":
 		n.Declaration = decodeNode("declaration")

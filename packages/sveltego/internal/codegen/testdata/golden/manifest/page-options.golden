@@ -7,6 +7,7 @@ import (
 	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 	"github.com/binsarjr/sveltego/packages/sveltego/render"
 	"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
+	server "github.com/binsarjr/sveltego/packages/sveltego/runtime/svelte/server"
 
 	page_routes "myapp/.gen/routes"
 	page_routes_dash_billing "myapp/.gen/routes/dash/billing"
@@ -25,7 +26,12 @@ const (
 )
 
 // render__layout__page_routes adapts page_routes.Layout{}.Render to router.LayoutHandler.
-func render__layout__page_routes(w *render.Writer, ctx *kit.RenderCtx, data any, children func(*render.Writer) error) error {
+// The trailing pageState parameter is the $app/state surface (#466);
+// legacy Mustache-Go layouts ignore it but accept the trailing arg so
+// the per-route renderChain__<routeIdent> emit can pass pageState
+// uniformly across SSR-bridged and Mustache-Go layouts.
+func render__layout__page_routes(w *render.Writer, ctx *kit.RenderCtx, data any, children func(*render.Writer) error, pageState server.PageState) error {
+	_ = pageState
 	var typed page_routes.LayoutData
 	if data != nil {
 		v, ok := data.(page_routes.LayoutData)
@@ -54,18 +60,32 @@ func layoutDataAt(layoutDatas []any, i int) any {
 // around the page handler. Generated per-route so the pipeline does not
 // rebuild a closure stack on every request.
 func renderChain__Index(w *render.Writer, ctx *kit.RenderCtx, page router.PageHandler, pageData any, layoutDatas []any) error {
+	pageState := server.PageState{
+		URL:    ctx.URL,
+		Params: ctx.Params,
+		Route:  server.PageRoute{ID: `/`},
+		Status: 200,
+		Data:   pageData,
+	}
 	return render__layout__page_routes(w, ctx, layoutDataAt(layoutDatas, 0), func(w *render.Writer) error {
 		return page(w, ctx, pageData)
-	})
+	}, pageState)
 }
 
 // renderChain__DashBilling composes the route's layout chain (outer→inner)
 // around the page handler. Generated per-route so the pipeline does not
 // rebuild a closure stack on every request.
 func renderChain__DashBilling(w *render.Writer, ctx *kit.RenderCtx, page router.PageHandler, pageData any, layoutDatas []any) error {
+	pageState := server.PageState{
+		URL:    ctx.URL,
+		Params: ctx.Params,
+		Route:  server.PageRoute{ID: `/dash/billing`},
+		Status: 200,
+		Data:   pageData,
+	}
 	return render__layout__page_routes(w, ctx, layoutDataAt(layoutDatas, 0), func(w *render.Writer) error {
 		return page(w, ctx, pageData)
-	})
+	}, pageState)
 }
 
 // Routes returns the route table consumed by router.NewTree.

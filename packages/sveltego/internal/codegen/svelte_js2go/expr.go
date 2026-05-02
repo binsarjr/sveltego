@@ -234,7 +234,11 @@ func (e *emitter) formatUpdate(n *Node) (string, error) {
 }
 
 func (e *emitter) formatConditional(n *Node) (string, error) {
-	test, err := e.formatExpression(n.Test)
+	// Use formatTruthy so non-bool tests (member-access on a pointer,
+	// bare identifier reads on `any`-typed values) wrap with
+	// server.Truthy. Issue #443 introduced the helper for {#if} blocks;
+	// ternary expressions need the same treatment so Go compiles them.
+	test, err := e.formatTruthy(n.Test)
 	if err != nil {
 		return "", err
 	}

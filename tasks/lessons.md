@@ -6,6 +6,7 @@ To add a new entry, create a new `YYYY-MM-DD-<topic>.md` file there — **do not
 
 Entries newest-first:
 
+- [2026-05-02: formatConditional must route ternary tests through formatTruthy so non-bool refs compile (#466)](lessons/2026-05-02-conditional-truthy-wrap.md)
 - [2026-05-02: Reproduce both halves before assuming bug coupling (PR #470, #460 → #467 split)](lessons/2026-05-02-bug-conflation-decoupling.md)
 - [2026-05-01: SSR Option B execution journey — 9 phases shipped end-to-end (RFC #421 closed via #422)](lessons/2026-05-01-ssr-option-b-execution.md)
 - [2026-05-02: SSR Option B decision (RFC #421 → ADR 0009; vendored Acorn, hard-error fallback, lock-one-minor)](lessons/2026-05-02-ssr-option-b-decision.md)

@@ -130,6 +130,14 @@ func (l *Lowerer) rewriteMember(scope *Scope, n *Node, def string) string {
 		return ""
 	}
 
+	// $app/state runes (`page`, `navigating`, `updated`) lower against
+	// the static framework field map — they're not user-data. Issue
+	// #466. Checked before the local-skip branch so the LocalAppState
+	// scope kind doesn't collapse into the generic local-skip path.
+	if scope != nil && scope.Lookup(root.Name) == LocalAppState {
+		return l.lowerAppStateChain(root, chain, n, def)
+	}
+
 	// Locals (each-loop alias, snippet param, @const, function param,
 	// hoisted for-init scratch) skip lowering. Their default rendering
 	// (mangled identifier dotted into raw JS member names) is what we
@@ -301,6 +309,303 @@ func (l *Lowerer) lowerDataChain(_ *Scope, root *Node, segs []chainSegment, n *N
 		return l.lowerOptionalChain(parts, segs)
 	}
 	return strings.Join(parts, ".")
+}
+
+// appStateField describes one segment in a `page.*` /
+// `navigating.*` / `updated.*` chain after lowering. emit is the Go
+// expression to splice in for the *full prefix up to and including
+// this segment*; computed indicates the segment uses bracket access on
+// the Go side (e.g. `Params["id"]` for `page.params.id`); terminal is
+// true when no further chain segment is allowed (helper-form fields
+// like `URL.String()` cannot be dotted into).
+type appStateField struct {
+	emit     string
+	computed bool
+	terminal bool
+}
+
+// lowerAppStateChain rewrites a chain rooted at one of the
+// `$app/state` runes (`page`, `navigating`, `updated`) against the
+// static framework field map. Issue #466. The map is hand-coded
+// because these structures are framework-defined; the typegen Shape
+// only knows user-data.
+//
+// Returned string is the full Go expression (including the root
+// `pageState` segment); an empty return signals the lowerer recorded
+// an error and the emitter should fall back to the default rendering
+// (which will fail to compile, surfacing the gap loudly at build time).
+func (l *Lowerer) lowerAppStateChain(root *Node, segs []chainSegment, n *Node, def string) string {
+	// All three roots feed off pageState — the framework param the
+	// emitter binds when EmitPageStateParam is set.
+	prefix := "pageState"
+	switch root.Name {
+	case "page":
+		// fall through
+	case "navigating":
+		// `navigating.<x>` chain rebases on pageState.Navigating; the
+		// only meaningful field is `current` which collapses to the
+		// pageState's Navigating pointer (always nil server-side).
+		return l.lowerNavigatingChain(prefix, segs, n, def)
+	case "updated":
+		return l.lowerUpdatedChain(prefix, segs, n, def)
+	default:
+		// Should not be reachable because LocalAppState is only
+		// declared for the three roots.
+		if l.strict {
+			l.recordUnknownRoot(root, n, def)
+		}
+		return ""
+	}
+
+	// `page` chain: walk the static field map.
+	current := prefix
+	for i, seg := range segs {
+		f, ok := pageFieldMap(seg.name, current)
+		if !ok {
+			if l.strict {
+				l.recordUnknownAppStateField("page", seg.name, n, def)
+			}
+			return ""
+		}
+		current = f.emit
+		if f.terminal && i < len(segs)-1 {
+			if l.strict {
+				l.recordTerminalAppStateField("page."+seg.name, n, def)
+			}
+			return ""
+		}
+	}
+	if hasAnyOptional(segs) {
+		return l.guardAppStateOptional(prefix, segs, current)
+	}
+	return current
+}
+
+// lowerNavigatingChain handles `navigating.current` and any sub-chain
+// rooted under it. Server-side the Navigating pointer is always nil;
+// the chain lowers to `pageState.Navigating` so `{#if navigating.current}`
+// branches resolve the truthy-check against the pointer. Sub-fields
+// of a non-nil Navigation (`type`, `from`, `to`) lower against the
+// typed struct.
+func (l *Lowerer) lowerNavigatingChain(prefix string, segs []chainSegment, n *Node, def string) string {
+	if len(segs) == 0 {
+		return prefix + ".Navigating"
+	}
+	if segs[0].name != "current" {
+		if l.strict {
+			l.recordUnknownAppStateField("navigating", segs[0].name, n, def)
+		}
+		return ""
+	}
+	current := prefix + ".Navigating"
+	for i := 1; i < len(segs); i++ {
+		seg := segs[i]
+		f, ok := navigationFieldMap(seg.name, current)
+		if !ok {
+			if l.strict {
+				l.recordUnknownAppStateField("navigating.current", seg.name, n, def)
+			}
+			return ""
+		}
+		current = f.emit
+		if f.terminal && i < len(segs)-1 {
+			if l.strict {
+				l.recordTerminalAppStateField("navigating.current."+seg.name, n, def)
+			}
+			return ""
+		}
+	}
+	if hasAnyOptional(segs) {
+		return l.guardAppStateOptional(prefix+".Navigating", segs[1:], current)
+	}
+	return current
+}
+
+// lowerUpdatedChain handles `updated.current`. Always renders the
+// pageState.Updated boolean; server-side it's always false.
+func (l *Lowerer) lowerUpdatedChain(prefix string, segs []chainSegment, n *Node, def string) string {
+	if len(segs) == 0 {
+		// Bare `updated` — odd but lower to the struct itself so the
+		// caller's truthy wrap behaves.
+		return prefix + ".Updated"
+	}
+	if segs[0].name != "current" || len(segs) > 1 {
+		if l.strict {
+			l.recordUnknownAppStateField("updated", segs[0].name, n, def)
+		}
+		return ""
+	}
+	return prefix + ".Updated"
+}
+
+// pageFieldMap lowers one segment of a chain rooted at the `page` rune.
+// current is the Go expression already rendered for the chain prefix
+// (e.g. `pageState` on the first call, `pageState.URL` on the second).
+//
+// The map is intentionally narrow: only fields the framework exposes
+// land here. Anything else surfaces as a hard build error pointing at
+// the SSR fallback annotation.
+func pageFieldMap(name, current string) (appStateField, bool) {
+	switch name {
+	case "url":
+		return appStateField{emit: current + ".URL"}, true
+	case "params":
+		return appStateField{emit: current + ".Params"}, true
+	case "route":
+		return appStateField{emit: current + ".Route"}, true
+	case "status":
+		return appStateField{emit: current + ".Status", terminal: true}, true
+	case "error":
+		return appStateField{emit: current + ".Error"}, true
+	case "data":
+		return appStateField{emit: current + ".Data", terminal: true}, true
+	case "form":
+		return appStateField{emit: current + ".Form", terminal: true}, true
+	case "state":
+		return appStateField{emit: current + ".State"}, true
+	}
+	// After the first segment, dispatch to per-subtype maps.
+	switch {
+	case strings.HasSuffix(current, ".URL"):
+		return urlFieldMap(name, current)
+	case strings.HasSuffix(current, ".Route"):
+		return routeFieldMap(name, current)
+	case strings.HasSuffix(current, ".Error"):
+		return errorFieldMap(name, current)
+	case strings.HasSuffix(current, ".Params"), strings.HasSuffix(current, ".State"):
+		return appStateField{emit: fmt.Sprintf("%s[%q]", current, name), computed: true, terminal: true}, true
+	}
+	return appStateField{}, false
+}
+
+// urlFieldMap lowers `page.url.<field>` segments. v1 covers the
+// high-value subset that maps to net/url getters without helper
+// indirection: pathname, host, hostname, port, href. Less-common
+// fields (search, hash, origin, protocol, searchParams) are deferred —
+// they require small string-shaping helpers we haven't added yet.
+// Routes that read them surface a hard build error pointing at the
+// SSR fallback annotation.
+func urlFieldMap(name, current string) (appStateField, bool) {
+	switch name {
+	case "pathname":
+		return appStateField{emit: current + ".Path", terminal: true}, true
+	case "host":
+		return appStateField{emit: current + ".Host", terminal: true}, true
+	case "hostname":
+		return appStateField{emit: current + ".Hostname()", terminal: true}, true
+	case "port":
+		return appStateField{emit: current + ".Port()", terminal: true}, true
+	case "href":
+		return appStateField{emit: current + ".String()", terminal: true}, true
+	}
+	return appStateField{}, false
+}
+
+// routeFieldMap lowers `page.route.<field>` segments. Only `id` is
+// recognised today — Svelte's route surface adds nothing else.
+func routeFieldMap(name, current string) (appStateField, bool) {
+	if name == "id" {
+		return appStateField{emit: current + ".ID", terminal: true}, true
+	}
+	return appStateField{}, false
+}
+
+// errorFieldMap lowers `page.error.<field>` segments. The Error pointer
+// may be nil; chain-walk lifts that into an optional guard.
+func errorFieldMap(name, current string) (appStateField, bool) {
+	switch name {
+	case "message":
+		return appStateField{emit: current + ".Message", terminal: true}, true
+	case "status":
+		return appStateField{emit: current + ".Status", terminal: true}, true
+	}
+	return appStateField{}, false
+}
+
+// navigationFieldMap lowers `navigating.current.<field>` segments. All
+// sub-fields are terminal because the Navigation struct's nested types
+// are pointers/slices/maps the lowerer doesn't traverse further at v1.
+func navigationFieldMap(name, current string) (appStateField, bool) {
+	switch name {
+	case "type":
+		return appStateField{emit: current + ".Type", terminal: true}, true
+	case "from":
+		return appStateField{emit: current + ".From", terminal: true}, true
+	case "to":
+		return appStateField{emit: current + ".To", terminal: true}, true
+	case "complete":
+		return appStateField{emit: current + ".Complete", terminal: true}, true
+	}
+	return appStateField{}, false
+}
+
+// hasAnyOptional reports whether any segment in the chain uses `?.`.
+// Used to decide whether to wrap the lowered expression in an inline
+// nil guard.
+func hasAnyOptional(segs []chainSegment) bool {
+	for _, s := range segs {
+		if s.optional {
+			return true
+		}
+	}
+	return false
+}
+
+// guardAppStateOptional wraps an app-state chain in an inline IIFE
+// nil-guard mirroring the strategy lowerOptionalChain uses for
+// data-root chains. The guard checks each prefix that precedes an
+// optional segment; the final return is the full expression.
+//
+// Optional chains on app-state are dominated by `page.error?.message`
+// — Error is the only nilable framework field. We keep the same IIFE
+// shape for consistency.
+func (l *Lowerer) guardAppStateOptional(prefix string, segs []chainSegment, finalExpr string) string {
+	var b strings.Builder
+	b.WriteString("func() any { ")
+	current := prefix
+	for _, seg := range segs {
+		// Re-walk to find the cumulative Go expression for each prefix
+		// boundary. We can't reuse the field map here because urlFieldMap
+		// etc. produce *terminal* expressions that don't compose; for
+		// the guard we only need the prefix chain, which always uses the
+		// raw `current.<GoName>` shape.
+		nextField, ok := pageFieldMap(seg.name, current)
+		if !ok {
+			break
+		}
+		current = nextField.emit
+		if seg.optional {
+			fmt.Fprintf(&b, "if %s == nil { return nil }; ", current)
+		}
+	}
+	fmt.Fprintf(&b, "return %s }()", finalExpr)
+	return b.String()
+}
+
+// recordUnknownAppStateField surfaces a $app/state surface read the
+// lowerer does not recognise. The error message points at the SSR
+// fallback annotation as the explicit opt-out.
+func (l *Lowerer) recordUnknownAppStateField(parent, field string, n *Node, def string) {
+	l.errs = append(l.errs, fmt.Errorf(
+		"ssr transpile: cannot lower $app/state field at %s\n"+
+			"  expression: %s\n"+
+			"  reason: %q is not a recognised field of `%s`\n"+
+			"  suggestion: drop the read or annotate route // sveltego:ssr-fallback",
+		l.formatPos(n), def, field, parent,
+	))
+}
+
+// recordTerminalAppStateField surfaces an attempt to dot past a
+// terminal app-state field (e.g. `page.url.href.toLowerCase()`).
+// Terminal fields are scalar Go expressions with no further chain.
+func (l *Lowerer) recordTerminalAppStateField(field string, n *Node, def string) {
+	l.errs = append(l.errs, fmt.Errorf(
+		"ssr transpile: cannot dot-access terminal $app/state field %q at %s\n"+
+			"  expression: %s\n"+
+			"  reason: the lowered Go expression is scalar; further dot-access has no equivalent\n"+
+			"  suggestion: stop the chain at %s, or annotate route // sveltego:ssr-fallback",
+		field, l.formatPos(n), def, field,
+	))
 }
 
 // lowerOptionalChain renders an optional chain as an inline IIFE
