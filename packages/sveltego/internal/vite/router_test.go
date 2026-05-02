@@ -493,6 +493,8 @@ func TestGenerateStateModule_emitsSurface(t *testing.T) {
 		"export function _setPage",
 		"export function _setNavigating",
 		"export function _setUpdated",
+		"export function _startVersionPoller",
+		"VERSION_ENDPOINT = '/_app/version.json'",
 		"get url()",
 		"get params()",
 		"get route()",
@@ -540,8 +542,9 @@ func TestGenerateClientEntry_seedsState(t *testing.T) {
 		RelRouterPath: "../__router/router",
 	})
 	for _, want := range []string{
-		`import { _setPage } from "../__router/state.svelte"`,
+		`import { _setPage, _startVersionPoller } from "../__router/state.svelte"`,
 		"_setPage(payload);",
+		"_startVersionPoller(payload.appVersion, payload.versionPoll)",
 	} {
 		if !strings.Contains(src, want) {
 			t.Errorf("entry missing %q:\n%s", want, src)

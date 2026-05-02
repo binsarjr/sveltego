@@ -353,16 +353,29 @@ func (s *Server) renderEmptyShell() *kit.Response {
 // navigations; __data.json fetches omit it because the client already
 // has it from the first paint.
 type clientPayload struct {
-	RouteID    string                `json:"routeId"`
-	Data       any                   `json:"data"`
-	LayoutData []any                 `json:"layoutData,omitempty"`
-	Form       any                   `json:"form"`
-	URL        string                `json:"url"`
-	Params     map[string]string     `json:"params"`
-	Status     int                   `json:"status"`
-	PageError  *clientPageError      `json:"error"`
-	Manifest   []clientManifestEntry `json:"manifest,omitempty"`
-	Deps       []string              `json:"deps,omitempty"`
+	RouteID     string                `json:"routeId"`
+	Data        any                   `json:"data"`
+	LayoutData  []any                 `json:"layoutData,omitempty"`
+	Form        any                   `json:"form"`
+	URL         string                `json:"url"`
+	Params      map[string]string     `json:"params"`
+	Status      int                   `json:"status"`
+	PageError   *clientPageError      `json:"error"`
+	Manifest    []clientManifestEntry `json:"manifest,omitempty"`
+	Deps        []string              `json:"deps,omitempty"`
+	AppVersion  string                `json:"appVersion,omitempty"`
+	VersionPoll *clientVersionPoll    `json:"versionPoll,omitempty"`
+}
+
+// clientVersionPoll mirrors kit.VersionPollConfig on the wire. Emitted
+// only when an AppVersion is known (ViteManifest supplied) so the
+// client never spins a poller against a 404 endpoint. IntervalMS is
+// the resolved cadence in milliseconds — matches the typed primitive
+// JS expects from setTimeout/setInterval without a unit conversion on
+// the client.
+type clientVersionPoll struct {
+	IntervalMS int64 `json:"intervalMs"`
+	Disabled   bool  `json:"disabled,omitempty"`
 }
 
 // clientPageError mirrors SvelteKit's App.Error wire shape — a safe
@@ -484,6 +497,23 @@ func buildClientPayload(r *http.Request, route *router.Route, data any, layoutDa
 		}
 	}
 	return p
+}
+
+// applyInitialPayloadFields stamps the per-build SPA manifest, the
+// build-version digest, and the resolved version-poll config onto an
+// initial-render hydration payload. These fields belong on the very
+// first paint only; subsequent __data.json fetches reuse the values
+// already cached by the running client. Callers populate p.Deps
+// separately because Deps comes from the per-request load context.
+func (s *Server) applyInitialPayloadFields(p *clientPayload) {
+	p.Manifest = s.clientManifest
+	if s.appVersion != "" {
+		p.AppVersion = s.appVersion
+		p.VersionPoll = &clientVersionPoll{
+			IntervalMS: s.versionPoll.PollInterval.Milliseconds(),
+			Disabled:   s.versionPoll.Disabled,
+		}
+	}
 }
 
 // emitPayloadScriptTag writes the hydration payload as a JSON <script>
@@ -673,7 +703,7 @@ func (s *Server) renderSvelteShell(r *http.Request, ev *kit.RequestEvent, route 
 	buf.WriteString(s.shellMid)
 	buf.WriteString(`<div id="app"></div>`)
 	payload := buildClientPayload(r, route, data, layoutDatas, ev.Params, form)
-	payload.Manifest = s.clientManifest
+	s.applyInitialPayloadFields(&payload)
 	if lctx != nil {
 		payload.Deps = lctx.CollectDeps()
 	}
@@ -803,7 +833,7 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 			}
 		}
 		payload := buildClientPayload(r, route, data, layoutDatas, ev.Params, form)
-		payload.Manifest = s.clientManifest
+		s.applyInitialPayloadFields(&payload)
 		if lctx != nil {
 			payload.Deps = lctx.CollectDeps()
 		}
@@ -847,7 +877,7 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 		return nil, err
 	}
 	payload := buildClientPayload(r, route, data, layoutDatas, ev.Params, form)
-	payload.Manifest = s.clientManifest
+	s.applyInitialPayloadFields(&payload)
 	if lctx != nil {
 		payload.Deps = lctx.CollectDeps()
 	}
