@@ -343,18 +343,35 @@ func (s *Server) renderEmptyShell() *kit.Response {
 // outer→inner order when LayoutData is non-nil). Form carries ActionData
 // from a POST action on the same request. RouteID is the canonical route
 // pattern used by the client router to look up the component. URL is the
-// full request URL string. Manifest is non-empty only on the initial
-// SSR render so the SPA router (#37) can match link URLs and pick the
-// right route module on subsequent navigations; __data.json fetches omit
-// it because the client already has it from the first paint.
+// full request URL string. Params is the route param map (decoded). Status
+// is the HTTP status (200 on the success path, form.code when a form
+// action overrode it, or the SafeError code on error renders). PageError
+// is non-nil only when the server is rendering the error boundary; it
+// carries the safe public-facing message exposed to the page. Manifest
+// is non-empty only on the initial SSR render so the SPA router (#37)
+// can match link URLs and pick the right route module on subsequent
+// navigations; __data.json fetches omit it because the client already
+// has it from the first paint.
 type clientPayload struct {
 	RouteID    string                `json:"routeId"`
 	Data       any                   `json:"data"`
 	LayoutData []any                 `json:"layoutData,omitempty"`
 	Form       any                   `json:"form"`
 	URL        string                `json:"url"`
+	Params     map[string]string     `json:"params"`
+	Status     int                   `json:"status"`
+	PageError  *clientPageError      `json:"error"`
 	Manifest   []clientManifestEntry `json:"manifest,omitempty"`
 	Deps       []string              `json:"deps,omitempty"`
+}
+
+// clientPageError mirrors SvelteKit's App.Error wire shape — a safe
+// public-facing message paired with the HTTP status. Populated only on
+// error-boundary renders; the success path emits PageError = nil so the
+// client-side `page.error` reads as null.
+type clientPageError struct {
+	Message string `json:"message"`
+	Status  int    `json:"status"`
 }
 
 // clientManifestEntry is one route descriptor shipped to the client SPA
@@ -436,12 +453,21 @@ func marshalPayload(p clientPayload) ([]byte, error) {
 
 // buildClientPayload assembles a clientPayload from the data gathered
 // during the load chain. formData is nil unless the request was a POST
-// that ran an action. route.Pattern is used as RouteID.
-func buildClientPayload(r *http.Request, route *router.Route, data any, layoutDatas []any, form *formData) clientPayload {
+// that ran an action. route.Pattern is used as RouteID. params is the
+// decoded route-param map; it is always emitted (empty object when the
+// route has no captures) so client code can iterate without nil checks.
+// Status defaults to 200 on the success path; the caller swaps it for
+// form.code when a form action overrode the status.
+func buildClientPayload(r *http.Request, route *router.Route, data any, layoutDatas []any, params map[string]string, form *formData) clientPayload {
 	p := clientPayload{
 		RouteID: route.Pattern,
 		Data:    data,
 		URL:     r.URL.String(),
+		Params:  params,
+		Status:  http.StatusOK,
+	}
+	if p.Params == nil {
+		p.Params = map[string]string{}
 	}
 	if len(layoutDatas) > 0 {
 		// Copy only non-nil entries so the client doesn't receive sparse nils.
@@ -453,6 +479,9 @@ func buildClientPayload(r *http.Request, route *router.Route, data any, layoutDa
 	}
 	if form != nil {
 		p.Form = form.data
+		if form.code != 0 {
+			p.Status = form.code
+		}
 	}
 	return p
 }
@@ -518,7 +547,7 @@ func (s *Server) renderDataJSON(r *http.Request, ev *kit.RequestEvent, route *ro
 	if form != nil {
 		data = injectFormField(data, form.data)
 	}
-	payload := buildClientPayload(r, route, data, layoutDatas, form)
+	payload := buildClientPayload(r, route, data, layoutDatas, ev.Params, form)
 	if lctx != nil {
 		payload.Deps = lctx.CollectDeps()
 	}
@@ -643,7 +672,7 @@ func (s *Server) renderSvelteShell(r *http.Request, ev *kit.RequestEvent, route 
 	}
 	buf.WriteString(s.shellMid)
 	buf.WriteString(`<div id="app"></div>`)
-	payload := buildClientPayload(r, route, data, layoutDatas, form)
+	payload := buildClientPayload(r, route, data, layoutDatas, ev.Params, form)
 	payload.Manifest = s.clientManifest
 	if lctx != nil {
 		payload.Deps = lctx.CollectDeps()
@@ -774,7 +803,7 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 				w.Header()[k] = vs
 			}
 		}
-		payload := buildClientPayload(r, route, data, layoutDatas, form)
+		payload := buildClientPayload(r, route, data, layoutDatas, ev.Params, form)
 		payload.Manifest = s.clientManifest
 		if lctx != nil {
 			payload.Deps = lctx.CollectDeps()
@@ -818,7 +847,7 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 	if err := inner(buf); err != nil {
 		return nil, err
 	}
-	payload := buildClientPayload(r, route, data, layoutDatas, form)
+	payload := buildClientPayload(r, route, data, layoutDatas, ev.Params, form)
 	payload.Manifest = s.clientManifest
 	if lctx != nil {
 		payload.Deps = lctx.CollectDeps()
