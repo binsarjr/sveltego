@@ -723,6 +723,18 @@ func (e *emitter) emitStatement(b *Buf, stmt *Node) error {
 		return e.emitForOf(b, stmt)
 	case "BlockStatement":
 		return e.emitBlock(b, stmt, false)
+	case "FunctionDeclaration":
+		// User-authored `<script>` helpers (DOM event handlers,
+		// computed-value functions, etc.) appear as nested
+		// FunctionDeclarations in Svelte's server output. The
+		// server-mode compiler never *calls* them — DOM event
+		// handlers wire up client-side at hydration; the SSR HTML
+		// just emits the static markup. Treat the declaration as a
+		// no-op so layouts and pages with `<script>` helpers
+		// transpile cleanly. If the declaration is later referenced
+		// from a render-body expression the unknown-shape dispatch
+		// will surface that on the call site, not here.
+		return nil
 	case "ReturnStatement":
 		// ReturnStatement inside helper closures (slot fragments).
 		// At the top level the render function has no return; treat

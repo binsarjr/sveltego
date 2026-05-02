@@ -191,17 +191,24 @@ func Build(ctx context.Context, opts BuildOptions) (*BuildResult, error) {
 	// `<script module>` so vite.GenerateRouter wires the snapshot capture
 	// + restore hooks (#84). Empty when no route opts in.
 	clientSnapshotRoutes := make(map[string]bool)
-	// Pre-compute which error boundaries will be SSR-transpiled (#412)
-	// so we can skip the legacy Mustache-Go emit for those packages.
-	// Mustache-Go's `data.code` lowering does not align with the SSR
-	// transpile path's `data.code` → `data.Code` rewrite, so emitting
-	// both side-by-side breaks compilation when templates use lowercase
-	// JS-camelCase fields.
-	ssrPagePlans, _ := planSSR(scan, routeOptions)
-	ssrErrorPlans := planSSRErrors(scan, ssrPagePlans)
+	// Pre-compute which error boundaries and layouts will be
+	// SSR-transpiled (#412, #456, #478) so we can skip the legacy
+	// Mustache-Go emit for those packages. Mustache-Go's literal
+	// expression substitution does not align with pure-Svelte sources:
+	// `data.code` lowering differs (literal vs JSON-tag-mapped), and
+	// inline JS handlers like `onclick={toggleDark}` reference
+	// identifiers that exist only in the .svelte source — Mustache-Go
+	// would emit `WriteEscapeAttr(toggleDark)` against a missing Go
+	// symbol. Emitting both side-by-side breaks compilation.
+	ssrErrorPlans := planSSRErrors(scan, routeOptions)
 	ssrErrorPkgs := make(map[string]struct{}, len(ssrErrorPlans))
 	for _, ep := range ssrErrorPlans {
 		ssrErrorPkgs[ep.pkgPath] = struct{}{}
+	}
+	ssrLayoutPlans := planSSRLayouts(scan, routeOptions)
+	ssrLayoutPkgs := make(map[string]struct{}, len(ssrLayoutPlans))
+	for _, lp := range ssrLayoutPlans {
+		ssrLayoutPkgs[lp.pkgPath] = struct{}{}
 	}
 
 	for _, route := range scan.Routes {
@@ -276,12 +283,20 @@ func Build(ctx context.Context, opts BuildOptions) (*BuildResult, error) {
 			if i < len(route.LayoutServerFiles) {
 				serverFile = route.LayoutServerFiles[i]
 			}
-			hasHead, err := emitLayout(opts.ProjectRoot, outDir, modulePath, layoutDir, pkgPath, pkgName, serverFile, opts.Release, opts.EnvLookup, opts.Provenance, start, imageVariants)
-			if err != nil {
-				return nil, err
-			}
-			if hasHead {
-				layoutHeads[pkgPath] = true
+			// Skip Mustache-Go layout.gen.go emit when the layout will
+			// be SSR-transpiled via #456/#478. The SSR Option B path
+			// emits `.gen/layoutsrc/<pkg>/layout_render.gen.go` and a
+			// `<svelte:head>` is folded into the Render adapter via
+			// `payload.HeadHTML()`; the legacy `Layout{}.Head` adapter
+			// is not needed.
+			if _, isSSRLayout := ssrLayoutPkgs[pkgPath]; !isSSRLayout {
+				hasHead, err := emitLayout(opts.ProjectRoot, outDir, modulePath, layoutDir, pkgPath, pkgName, serverFile, opts.Release, opts.EnvLookup, opts.Provenance, start, imageVariants)
+				if err != nil {
+					return nil, err
+				}
+				if hasHead {
+					layoutHeads[pkgPath] = true
+				}
 			}
 			if serverFile != "" {
 				if err := emitLayoutMirrorAndWire(opts.ProjectRoot, outDir, modulePath, pkgPath, pkgName, serverFile); err != nil {

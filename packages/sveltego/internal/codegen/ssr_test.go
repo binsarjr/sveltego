@@ -127,8 +127,7 @@ func Load(ctx any) (PageData, error) { return PageData{}, nil }
 		"/foo":     mkSvelteOpts(),
 		"/foo/bar": mkSvelteOpts(),
 	}
-	pagePlans, _ := planSSR(scan, routeOptions)
-	layoutPlans := planSSRLayouts(scan, pagePlans)
+	layoutPlans := planSSRLayouts(scan, routeOptions)
 
 	// /foo and /foo/bar share two layouts (root + /foo); planSSRLayouts
 	// dedupes by package path.
@@ -199,8 +198,7 @@ func Load(ctx any) (PageData, error) { return PageData{}, nil }
 		"/foo":     mkSvelteOpts(),
 		"/foo/bar": mkSvelteOpts(),
 	}
-	pagePlans, _ := planSSR(scan, routeOptions)
-	errorPlans := planSSRErrors(scan, pagePlans)
+	errorPlans := planSSRErrors(scan, routeOptions)
 
 	// Both /foo and /foo/bar resolve to the root _error.svelte boundary;
 	// planSSRErrors dedupes by package path.
@@ -348,11 +346,13 @@ func TestPlanSSR_NonPrerenderNoServerFileSkipped(t *testing.T) {
 	}
 }
 
-// TestPlanSSRErrors_SkipsNonSvelteRoutes verifies that the error
-// planner walks only error boundaries reachable from a Svelte-SSR-
-// eligible page; routes that are pure-Svelte but lack a server-file
-// (so they fall out of planSSR) carry no error transpile.
-func TestPlanSSRErrors_SkipsNonSvelteRoutes(t *testing.T) {
+// TestPlanSSRErrors_CoversRoutesWithoutServerFile verifies #478: the
+// error planner enumerates from the Templates+SSR predicate, NOT from
+// page-transpile eligibility. A pure-Svelte SSR route without a
+// `_page.server.go` still needs its error boundary SSR-transpiled —
+// error templates render against the synthetic `kit.SafeError` shape,
+// so they don't depend on user-authored PageData.
+func TestPlanSSRErrors_CoversRoutesWithoutServerFile(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	mustWrite := func(path, body string) {
@@ -367,8 +367,6 @@ func TestPlanSSRErrors_SkipsNonSvelteRoutes(t *testing.T) {
 	}
 	mustWrite("src/routes/_error.svelte", "<h1>root error</h1>")
 	mustWrite("src/routes/_page.svelte", "<h1>home</h1>")
-	// no _page.server.go; planSSR drops the route, so planSSRErrors
-	// should also drop the boundary.
 
 	scan, err := routescan.Scan(routescan.ScanInput{RoutesDir: filepath.Join(root, "src", "routes")})
 	if err != nil {
@@ -379,8 +377,140 @@ func TestPlanSSRErrors_SkipsNonSvelteRoutes(t *testing.T) {
 	if len(pagePlans) != 0 {
 		t.Fatalf("pagePlans count = %d, want 0 (no server file → planSSR drops)", len(pagePlans))
 	}
-	errorPlans := planSSRErrors(scan, pagePlans)
+	errorPlans := planSSRErrors(scan, routeOptions)
+	if len(errorPlans) != 1 {
+		t.Fatalf("errorPlans count = %d, want 1 (Svelte+SSR route covers boundary regardless of server file)", len(errorPlans))
+	}
+}
+
+// TestPlanSSRErrors_SkipsNonSvelteRoute verifies the predicate filters
+// out Mustache-template routes: planSSRErrors should only emit
+// boundaries reachable from a pure-Svelte SSR-eligible route.
+func TestPlanSSRErrors_SkipsNonSvelteRoute(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	mustWrite := func(path, body string) {
+		t.Helper()
+		full := filepath.Join(root, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustWrite("src/routes/_error.svelte", "<h1>root error</h1>")
+	mustWrite("src/routes/_page.svelte", "<h1>home</h1>")
+
+	scan, err := routescan.Scan(routescan.ScanInput{RoutesDir: filepath.Join(root, "src", "routes")})
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	nonSvelteOpts := kit.DefaultPageOptions()
+	nonSvelteOpts.Templates = "go-mustache"
+	routeOptions := map[string]kit.PageOptions{"/": nonSvelteOpts}
+
+	errorPlans := planSSRErrors(scan, routeOptions)
 	if len(errorPlans) != 0 {
-		t.Fatalf("errorPlans count = %d, want 0 (no eligible page route)", len(errorPlans))
+		t.Fatalf("errorPlans count = %d, want 0 (Mustache-template route should not enter SSR plan)", len(errorPlans))
+	}
+}
+
+// TestPlanSSRLayouts_CoversFallbackAnnotatedRoute verifies the #478
+// fix: a route whose `_page.svelte` carries the
+// `<!-- sveltego:ssr-fallback -->` annotation still pulls its layout
+// chain through the SSR transpile path. Fallback opts the page body
+// out of build-time transpile (Phase 8 sidecar at request time), but
+// chain-mate layouts and errors render Go-side regardless. Without
+// this fix, blog — where every page is fallback-annotated — would
+// keep its root layout on the legacy Mustache-Go path.
+func TestPlanSSRLayouts_CoversFallbackAnnotatedRoute(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	mustWrite := func(path, body string) {
+		t.Helper()
+		full := filepath.Join(root, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustWrite("src/routes/_layout.svelte", "{@render children()}")
+	mustWrite("src/routes/_page.svelte", `<!-- sveltego:ssr-fallback -->
+<h1>home</h1>`)
+	mustWrite("src/routes/_page.server.go", `package routes
+
+type PageData struct{ Name string `+"`json:\"name\"`"+` }
+
+func Load(ctx any) (PageData, error) { return PageData{}, nil }
+`)
+
+	scan, err := routescan.Scan(routescan.ScanInput{RoutesDir: filepath.Join(root, "src", "routes")})
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	routeOptions := map[string]kit.PageOptions{"/": mkSvelteOpts()}
+
+	pagePlans, fallback := planSSR(scan, routeOptions)
+	if len(pagePlans) != 0 {
+		t.Fatalf("pagePlans count = %d, want 0 (annotated route → fallback)", len(pagePlans))
+	}
+	if len(fallback) != 1 {
+		t.Fatalf("fallback count = %d, want 1", len(fallback))
+	}
+
+	layoutPlans := planSSRLayouts(scan, routeOptions)
+	if len(layoutPlans) != 1 {
+		t.Fatalf("layoutPlans count = %d, want 1 (fallback annotation must NOT cascade to layouts)", len(layoutPlans))
+	}
+}
+
+// TestPlanSSRErrors_CoversFallbackAnnotatedRoute is the boundary mirror
+// of TestPlanSSRLayouts_CoversFallbackAnnotatedRoute. A fallback-
+// annotated page must still surface its error boundary through the SSR
+// transpile path because the boundary renders Go-side at request time
+// in both Phase 6 (transpile) and Phase 8 (sidecar) execution paths.
+func TestPlanSSRErrors_CoversFallbackAnnotatedRoute(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	mustWrite := func(path, body string) {
+		t.Helper()
+		full := filepath.Join(root, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustWrite("src/routes/_error.svelte", "<h1>error</h1>")
+	mustWrite("src/routes/_page.svelte", `<!-- sveltego:ssr-fallback -->
+<h1>home</h1>`)
+	mustWrite("src/routes/_page.server.go", `package routes
+
+type PageData struct{ Name string `+"`json:\"name\"`"+` }
+
+func Load(ctx any) (PageData, error) { return PageData{}, nil }
+`)
+
+	scan, err := routescan.Scan(routescan.ScanInput{RoutesDir: filepath.Join(root, "src", "routes")})
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	routeOptions := map[string]kit.PageOptions{"/": mkSvelteOpts()}
+
+	pagePlans, fallback := planSSR(scan, routeOptions)
+	if len(pagePlans) != 0 {
+		t.Fatalf("pagePlans count = %d, want 0 (annotated → fallback)", len(pagePlans))
+	}
+	if len(fallback) != 1 {
+		t.Fatalf("fallback count = %d, want 1", len(fallback))
+	}
+
+	errorPlans := planSSRErrors(scan, routeOptions)
+	if len(errorPlans) != 1 {
+		t.Fatalf("errorPlans count = %d, want 1 (fallback annotation must NOT cascade to errors)", len(errorPlans))
 	}
 }

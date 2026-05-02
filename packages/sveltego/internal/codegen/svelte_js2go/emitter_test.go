@@ -151,6 +151,47 @@ func TestTranspile_Determinism(t *testing.T) {
 	}
 }
 
+// TestTranspile_NestedFunctionDeclaration verifies the #478 fix: a
+// user-authored `<script>` helper that Svelte's server-mode compiler
+// hoists into the render function body must transpile cleanly. The
+// declaration is dropped (server output never calls it — DOM event
+// handlers wire up client-side at hydration), and downstream markup
+// emits as normal. Surfaced when blog playground's _layout.svelte
+// declared `function toggleDark()` for a button onclick handler.
+func TestTranspile_NestedFunctionDeclaration(t *testing.T) {
+	t.Parallel()
+	fnDecl := &Node{
+		Type:   "FunctionDeclaration",
+		ID:     ident("toggleDark"),
+		Params: []*Node{},
+		FuncBody: buildBlock(
+			callStmt(
+				memExpr(memExpr(ident("document"), ident("documentElement")), ident("classList")),
+				strLit("dark"),
+			),
+		),
+	}
+	body := buildBlock(
+		propsDestructure("children"),
+		fnDecl,
+		pushString("<button>toggle</button>"),
+	)
+	got, err := TranspileNode(buildProgram(body), "/test", Options{PackageName: "gen"})
+	if err != nil {
+		t.Fatalf("TranspileNode: %v", err)
+	}
+	if _, ferr := format.Source(got); ferr != nil {
+		t.Fatalf("not parseable Go: %v\n%s", ferr, got)
+	}
+	src := string(got)
+	if strings.Contains(src, "toggleDark") {
+		t.Fatalf("nested FunctionDeclaration should not be emitted (would call into JS-only DOM APIs); got:\n%s", src)
+	}
+	if !strings.Contains(src, "<button>toggle</button>") {
+		t.Fatalf("markup downstream of FunctionDeclaration must still emit:\n%s", src)
+	}
+}
+
 func TestTranspile_UnknownShape(t *testing.T) {
 	t.Parallel()
 	// LabeledStatement at top level — outside the v1 closed set.

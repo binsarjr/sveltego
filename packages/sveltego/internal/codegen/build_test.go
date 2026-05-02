@@ -6,9 +6,12 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/codegen/svelterender"
 )
 
 func writeFile(t *testing.T, path, content string) {
@@ -18,6 +21,26 @@ func writeFile(t *testing.T, path, content string) {
 	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
+// requireSSRSidecar skips the test when Node or the svelterender
+// sidecar's node_modules are unavailable. CI workflows that run the
+// SSR pipeline install both before the gate; the lint-and-test job
+// installs nothing JS-side, so codegen tests that drive a live
+// _layout.svelte / _page.svelte through the SSR transpile must skip
+// rather than fail. Mirrors svelterender.requireSidecarReady.
+func requireSSRSidecar(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not on PATH; skipping SSR-transpile codegen test")
+	}
+	dir, err := svelterender.SidecarRoot()
+	if err != nil {
+		t.Skipf("sidecar tree not found: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "node_modules", "acorn")); err != nil {
+		t.Skipf("sidecar node_modules missing; run `npm install` in %s", dir)
 	}
 }
 
@@ -292,12 +315,18 @@ func TestBuild_EmitsLayoutChain(t *testing.T) {
 // adjacent to _layout.svelte produces a layoutsrc mirror, a sibling
 // wire_layout.gen.go in the gen package, a typed LayoutData alias from
 // the inferred Load() return, and a manifest LayoutLoaders entry.
+//
+// Post-#478: layouts SSR-transpile via Option B, so the legacy
+// `.gen/routes/layout.gen.go` Mustache-Go body is no longer emitted.
+// The data-flow contract — typed LayoutData, server-source mirror,
+// wire wrapper, manifest LayoutLoaders entry — is unchanged.
 func TestBuild_EmitsLayoutServer(t *testing.T) {
 	t.Parallel()
+	requireSSRSidecar(t)
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/app\n\ngo 1.22\n")
 	writeFile(t, filepath.Join(root, "src", "routes", "_layout.svelte"),
-		`<header>root</header><slot />`+"\n")
+		"<header>root</header>{@render children()}\n")
 	writeFile(t, filepath.Join(root, "src", "routes", "_layout.server.go"),
 		`//go:build sveltego
 
@@ -313,7 +342,7 @@ func Load(ctx *kit.LoadCtx) (LayoutData, error) {
 }
 `)
 	writeFile(t, filepath.Join(root, "src", "routes", "dash", "_layout.svelte"),
-		`<nav>dash</nav><slot />`+"\n")
+		"<nav>dash</nav>{@render children()}\n")
 	writeFile(t, filepath.Join(root, "src", "routes", "dash", "_page.svelte"),
 		`<h1>Dash</h1>`+"\n")
 
@@ -321,27 +350,19 @@ func Load(ctx *kit.LoadCtx) (LayoutData, error) {
 		t.Fatalf("Build: %v", err)
 	}
 
-	rootLayout := filepath.Join(root, ".gen", "routes", "layout.gen.go")
 	mirror := filepath.Join(root, ".gen", "layoutsrc", "routes", "layout_server.go")
 	wire := filepath.Join(root, ".gen", "routes", "wire_layout.gen.go")
 	manifest := filepath.Join(root, ".gen", "manifest.gen.go")
-	for _, p := range []string{rootLayout, mirror, wire, manifest} {
+	for _, p := range []string{mirror, wire, manifest} {
 		if _, err := os.Stat(p); err != nil {
 			t.Errorf("expected %s to exist: %v", p, err)
 		}
 	}
 
-	rootBytes, err := os.ReadFile(rootLayout)
-	if err != nil {
-		t.Fatalf("read root layout: %v", err)
-	}
-	for _, want := range []string{
-		"type LayoutData = struct {",
-		"User string",
-	} {
-		if !bytes.Contains(rootBytes, []byte(want)) {
-			t.Errorf("root layout missing %q:\n%s", want, rootBytes)
-		}
+	// The Mustache-Go layout.gen.go is no longer emitted for
+	// SSR-transpiled layouts (#478). Verify it stays out of .gen.
+	if _, err := os.Stat(filepath.Join(root, ".gen", "routes", "layout.gen.go")); err == nil {
+		t.Errorf("legacy layout.gen.go must not be emitted alongside SSR-transpiled layouts")
 	}
 
 	mirrorBytes, err := os.ReadFile(mirror)
@@ -380,7 +401,7 @@ func Load(ctx *kit.LoadCtx) (LayoutData, error) {
 		}
 	}
 
-	for _, p := range []string{rootLayout, mirror, wire, manifest} {
+	for _, p := range []string{mirror, wire, manifest} {
 		assertParsesAsGo(t, p)
 	}
 }
@@ -777,13 +798,19 @@ func Load(ctx *kit.LoadCtx) (PageData, error) {
 
 // TestBuild_LayoutDataNamedType mirrors TestBuild_PageDataNamedType for
 // layouts. A layout.server.go declaring `type LayoutData struct{...}`
-// produces `type LayoutData = usersrc.LayoutData` in layout.gen.go.
+// flows the named type through the SSR layout wire so the manifest
+// bridge can type-assert against `usersrc.LayoutData`. Post-#478 the
+// type lives in the layoutsrc mirror (which is the user's source file
+// with the build tag stripped) and is referenced from the wire's
+// dispatch.
 func TestBuild_LayoutDataNamedType(t *testing.T) {
 	t.Parallel()
+	requireSSRSidecar(t)
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/lyt\n\ngo 1.23\n")
 	writeFile(t, filepath.Join(root, "src", "routes", "_layout.svelte"),
-		"<header>{data.Title}</header><slot />\n")
+		"<script lang=\"ts\">let { data, children } = $props();</script>\n"+
+			"<header>{data.title}</header>{@render children()}\n")
 	writeFile(t, filepath.Join(root, "src", "routes", "_layout.server.go"),
 		`//go:build sveltego
 
@@ -795,7 +822,7 @@ import (
 )
 
 type LayoutData struct {
-	Title string
+	Title string `+"`json:\"title\"`"+`
 }
 
 func Load(ctx *kit.LoadCtx) (LayoutData, error) {
@@ -810,22 +837,33 @@ func Load(ctx *kit.LoadCtx) (LayoutData, error) {
 		t.Fatalf("Build: %v", err)
 	}
 
-	layoutGen := filepath.Join(root, ".gen", "routes", "layout.gen.go")
-	body, err := os.ReadFile(layoutGen)
+	mirror := filepath.Join(root, ".gen", "layoutsrc", "routes", "layout_server.go")
+	mirrorBytes, err := os.ReadFile(mirror)
 	if err != nil {
-		t.Fatalf("read layout.gen.go: %v", err)
+		t.Fatalf("read layout mirror: %v", err)
 	}
-	got := string(body)
-	const wantAlias = "type LayoutData = usersrc.LayoutData"
-	if !strings.Contains(got, wantAlias) {
-		t.Errorf("expected %q in layout.gen.go, got:\n%s", wantAlias, got)
+	mirrorSrc := string(mirrorBytes)
+	if !strings.Contains(mirrorSrc, "type LayoutData struct {") {
+		t.Errorf("mirror missing named LayoutData declaration; got:\n%s", mirrorSrc)
 	}
-	if strings.Contains(got, "type LayoutData = struct{}") {
-		t.Errorf("empty alias leaked into named-type branch:\n%s", got)
+	if !strings.Contains(mirrorSrc, "Title string") {
+		t.Errorf("mirror missing Title field; got:\n%s", mirrorSrc)
 	}
-	const wantImport = `usersrc "example.com/lyt/.gen/layoutsrc/routes"`
-	if !strings.Contains(got, wantImport) {
-		t.Errorf("expected import %q, got:\n%s", wantImport, got)
+
+	wire := filepath.Join(root, ".gen", "routes", "wire_layout_render.gen.go")
+	wireBytes, err := os.ReadFile(wire)
+	if err != nil {
+		t.Fatalf("read SSR layout wire: %v", err)
 	}
-	assertParsesAsGo(t, layoutGen)
+	wireSrc := string(wireBytes)
+	const wantWireType = "usersrc.LayoutData"
+	if !strings.Contains(wireSrc, wantWireType) {
+		t.Errorf("expected %q in wire; got:\n%s", wantWireType, wireSrc)
+	}
+	const wantWireImport = `usersrc "example.com/lyt/.gen/layoutsrc/routes"`
+	if !strings.Contains(wireSrc, wantWireImport) {
+		t.Errorf("expected import %q in wire; got:\n%s", wantWireImport, wireSrc)
+	}
+	assertParsesAsGo(t, mirror)
+	assertParsesAsGo(t, wire)
 }
