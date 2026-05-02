@@ -275,6 +275,16 @@ func (s *Server) resolve(w http.ResponseWriter, r *http.Request, ev *kit.Request
 		form = fd
 	}
 	if !optionsAllowSSR(route.Options) {
+		// Svelte-mode SPA routes (Templates=svelte, SSR=false) need
+		// the Vite client bundle <script> tag and the JSON hydration
+		// payload — without them the empty shell stays blank because
+		// the browser has nothing to mount. renderSvelteShell already
+		// runs the load chain, builds the payload, and injects asset
+		// tags; reuse it here so SPA mode actually hydrates instead
+		// of shipping the bare shell from renderEmptyShell.
+		if isSvelteMode {
+			return s.renderSvelteShell(r, ev, route, form)
+		}
 		return s.renderEmptyShell(), nil
 	}
 	// ADR 0009 phase 6 (#428): Svelte-mode routes with a generated
