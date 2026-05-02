@@ -64,6 +64,21 @@ type Options struct {
 	// Defaults to false — page Render() emits stay byte-identical for
 	// the 30 priority + 50+ extended goldens that pre-date this issue.
 	EmitChildrenParam bool
+
+	// EmitPageStateParam, when true, appends a `pageState
+	// <server>.PageState` parameter to the generated render function.
+	// Issue #466 ($app/state lowering) sets this for SSR emit so the
+	// manifest's per-route bridge can pass URL, params, route, status,
+	// form, etc. into Render. The emitter additionally pre-declares
+	// `page`, `navigating`, and `updated` in the render-function scope
+	// as [LocalAppState] so [Lowerer] rewrites `page.<field>` chains
+	// against the static framework field map instead of the typegen
+	// Shape (which only knows user-data).
+	//
+	// Defaults to false — non-SSR call sites (legacy goldens, the
+	// tests that drive the priority + extended corpora directly) keep
+	// their existing parameter list.
+	EmitPageStateParam bool
 }
 
 // ExprRewriter is the extension point Phase 5 uses to lower JS
@@ -120,6 +135,12 @@ const (
 	// named-snippet prop). Phase 5 leaves these alone because they
 	// dispatch to a Go func value, not a user-data subtree.
 	LocalCallback
+	// LocalAppState marks a `$app/state` rune root (`page`,
+	// `navigating`, `updated`). Issue #466. Phase 5 lowers chains rooted
+	// at these names against a static framework field map instead of
+	// the user-data typegen Shape — they're framework-defined surfaces,
+	// not destructured props.
+	LocalAppState
 )
 
 func newScope(parent *Scope) *Scope {
@@ -289,16 +310,7 @@ func (e *emitter) run() ([]byte, error) {
 	out.Line("")
 	out.Line("// %s mirrors the Svelte component's compiled server output.", e.opts.FuncName)
 	out.Line("// Generated from route %s.", e.route)
-	switch {
-	case e.opts.TypedDataParam != "" && e.opts.EmitChildrenParam:
-		out.Line("func %s(payload *%s.Payload, data %s, children func(*%s.Payload)) {", e.opts.FuncName, e.opts.HelperAlias, e.opts.TypedDataParam, e.opts.HelperAlias)
-	case e.opts.TypedDataParam != "":
-		out.Line("func %s(payload *%s.Payload, data %s) {", e.opts.FuncName, e.opts.HelperAlias, e.opts.TypedDataParam)
-	case e.opts.EmitChildrenParam:
-		out.Line("func %s(payload *%s.Payload, props map[string]any, children func(*%s.Payload)) {", e.opts.FuncName, e.opts.HelperAlias, e.opts.HelperAlias)
-	default:
-		out.Line("func %s(payload *%s.Payload, props map[string]any) {", e.opts.FuncName, e.opts.HelperAlias)
-	}
+	out.Line("%s", e.renderSignature())
 	out.Write(body.Bytes())
 	out.Line("}")
 
@@ -311,6 +323,33 @@ func (e *emitter) run() ([]byte, error) {
 		return nil, fmt.Errorf("svelte_js2go: format generated source: %w\n--- source:\n%s", err, out.Bytes())
 	}
 	return formatted, nil
+}
+
+// renderSignature builds the generated Render function header line.
+// The parameter list is composed positionally from the active option
+// flags so callers can mix data-typing, children-callback, and
+// page-state plumbing without an N-way switch.
+//
+// Order is fixed for ABI stability across emits:
+//
+//	payload *<server>.Payload
+//	data <PageData> | props map[string]any
+//	children func(*<server>.Payload)        // EmitChildrenParam
+//	pageState <server>.PageState             // EmitPageStateParam
+func (e *emitter) renderSignature() string {
+	params := []string{fmt.Sprintf("payload *%s.Payload", e.opts.HelperAlias)}
+	if e.opts.TypedDataParam != "" {
+		params = append(params, fmt.Sprintf("data %s", e.opts.TypedDataParam))
+	} else {
+		params = append(params, "props map[string]any")
+	}
+	if e.opts.EmitChildrenParam {
+		params = append(params, fmt.Sprintf("children func(*%s.Payload)", e.opts.HelperAlias))
+	}
+	if e.opts.EmitPageStateParam {
+		params = append(params, fmt.Sprintf("pageState %s.PageState", e.opts.HelperAlias))
+	}
+	return fmt.Sprintf("func %s(%s) {", e.opts.FuncName, strings.Join(params, ", "))
 }
 
 // emitProgram walks the Program body. Only ImportDeclaration and the
@@ -346,10 +385,60 @@ func (e *emitter) emitProgram(b *Buf, prog *Node) error {
 	return e.emitRenderFunction(b, renderFn)
 }
 
+// appStateRoots is the closed set of identifiers `$app/state` exports.
+// Specifiers outside this set are an unknown shape — Svelte's compiled
+// server output never re-exports anything else, so a stray name almost
+// certainly means the pinned Svelte minor moved or the user's import
+// list has a typo the build should reject.
+var appStateRoots = map[string]struct{}{
+	"page":       {},
+	"navigating": {},
+	"updated":    {},
+}
+
+// appNavigationRoots is the closed set of identifiers `$app/navigation`
+// exports. v1 ($app/state lowering, #466) accepts the import but does
+// not lower call sites — these are client-only APIs (goto, invalidate,
+// pushState, …). Server-side function declarations referring to them
+// stay declarable; render-body call sites surface as unknownShape via
+// the bare-call dispatch.
+var appNavigationRoots = map[string]struct{}{
+	"goto":                    {},
+	"invalidate":              {},
+	"invalidateAll":           {},
+	"preloadCode":             {},
+	"preloadData":             {},
+	"pushState":               {},
+	"replaceState":            {},
+	"disableScrollHandling":   {},
+	"afterNavigate":           {},
+	"beforeNavigate":          {},
+	"onNavigate":              {},
+	"setStaticAssetMimeTypes": {},
+}
+
 func (e *emitter) recordImport(decl *Node) error {
-	if decl.Source == nil || decl.Source.LitStr != "svelte/internal/server" {
+	if decl.Source == nil {
 		return unknownShape(decl, "import:"+litStr(decl.Source))
 	}
+	switch decl.Source.LitStr {
+	case "svelte/internal/server":
+		return e.recordHelperImport(decl)
+	case "$app/state":
+		return e.recordAppStateImport(decl)
+	case "$app/navigation":
+		return e.recordAppNavigationImport(decl)
+	default:
+		return unknownShape(decl, "import:"+litStr(decl.Source))
+	}
+}
+
+// recordHelperImport handles the `import * as $ from
+// "svelte/internal/server"` shape Svelte's compiled server output emits
+// once per render module. The local namespace identifier is captured so
+// the helper-call dispatch in patterns.go can recognise `$.foo(...)`
+// invocations against the right alias.
+func (e *emitter) recordHelperImport(decl *Node) error {
 	for _, sp := range decl.Specifiers {
 		if sp.Type == "ImportNamespaceSpecifier" && sp.Local != nil {
 			e.helperNS = sp.Local.Name
@@ -359,6 +448,82 @@ func (e *emitter) recordImport(decl *Node) error {
 		return unknownShape(decl, "import:no namespace specifier")
 	}
 	return nil
+}
+
+// recordAppStateImport recognises `import { page, navigating, updated }
+// from "$app/state"` (any subset). Each accepted specifier is
+// pre-registered in the render-function scope as [LocalAppState] when
+// EmitPageStateParam is set so [Lowerer] rewrites chains rooted at
+// these names against the static framework field map (see
+// lowering.go's lowerAppStateChain).
+//
+// When EmitPageStateParam is not set the import is still accepted but
+// the names are not registered; the lowerer's strict-mode "unknown
+// root" error then surfaces if the route actually reads the runes,
+// pointing the user at the SSR fallback annotation. This keeps
+// existing test sites that drive Transpile directly from breaking.
+func (e *emitter) recordAppStateImport(decl *Node) error {
+	for _, sp := range decl.Specifiers {
+		if sp.Type != "ImportSpecifier" {
+			return unknownShape(sp, "import-spec:"+sp.Type)
+		}
+		if sp.Local == nil || sp.Local.Type != "Identifier" {
+			return unknownShape(sp, "import-spec-local")
+		}
+		imported := importedName(sp)
+		if _, ok := appStateRoots[imported]; !ok {
+			return unknownShape(sp, "import:$app/state:"+imported)
+		}
+		if e.opts.EmitPageStateParam {
+			e.scope.declare(sp.Local.Name, LocalAppState)
+		}
+	}
+	return nil
+}
+
+// recordAppNavigationImport recognises imports from `$app/navigation`.
+// The names are accepted (not unknownShape) but tracked as
+// LocalCallback so any render-body call site lowers through the bare-
+// identifier dispatch as `name(...)`. v1 of the appstate lowering
+// (#466) does not provide Go-side implementations for these; routes
+// that actually invoke them at render time surface a build error
+// downstream when the call expression evaluates the un-emitted
+// identifier. Function-declaration bodies (event handlers) that
+// reference them are fine because they are not invoked from Render.
+func (e *emitter) recordAppNavigationImport(decl *Node) error {
+	for _, sp := range decl.Specifiers {
+		if sp.Type != "ImportSpecifier" {
+			return unknownShape(sp, "import-spec:"+sp.Type)
+		}
+		if sp.Local == nil || sp.Local.Type != "Identifier" {
+			return unknownShape(sp, "import-spec-local")
+		}
+		imported := importedName(sp)
+		if _, ok := appNavigationRoots[imported]; !ok {
+			return unknownShape(sp, "import:$app/navigation:"+imported)
+		}
+		// LocalScratch keeps the Lowerer from rewriting the bare name
+		// through the data-root chain walker. It does NOT promise the
+		// identifier resolves to anything in the emitted Go file —
+		// references at render time will fail to compile, surfacing the
+		// gap loudly at build time.
+		e.scope.declare(sp.Local.Name, LocalScratch)
+	}
+	return nil
+}
+
+// importedName returns the source-side name for an ImportSpecifier
+// (the part before `as` in `import { x as y }`). Falls back to the
+// local name when imported is missing — non-aliased shorthand sets
+// only the local name in some Acorn shapes.
+func importedName(sp *Node) string {
+	if sp.Imported != nil && sp.Imported.Type == "Identifier" {
+		return sp.Imported.Name
+	}
+	if sp.Local != nil && sp.Local.Type == "Identifier" {
+		return sp.Local.Name
+	}
+	return ""
 }
 
 func (e *emitter) emitRenderFunction(b *Buf, fn *Node) error {

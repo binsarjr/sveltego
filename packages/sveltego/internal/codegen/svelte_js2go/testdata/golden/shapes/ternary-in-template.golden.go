@@ -13,7 +13,7 @@ func Render(payload *server.Payload, props map[string]any) {
 	data, _ := props["data"].(map[string]any)
 	payload.Push("<span class=\"")
 	payload.Push(func() any {
-		if data.active {
+		if server.Truthy(data.active) {
 			return "on"
 		}
 		return "off"

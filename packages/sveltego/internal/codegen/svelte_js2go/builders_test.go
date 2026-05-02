@@ -6,7 +6,17 @@ package sveltejs2go
 // shapes without forking a JS toolchain into the test path.
 
 func buildProgram(renderBody *Node) *Node {
-	importDecl := &Node{
+	return buildProgramWithImports(renderBody)
+}
+
+// buildProgramWithImports synthesises a Program that mirrors Svelte 5's
+// compiled server output and additionally carries the supplied import
+// declarations (e.g. `import { page } from "$app/state"`). The
+// canonical helper namespace (`import * as $ from
+// "svelte/internal/server"`) is always emitted first so call-site
+// dispatch in patterns.go keeps recognising `$.foo(...)` invocations.
+func buildProgramWithImports(renderBody *Node, extras ...*Node) *Node {
+	helperImport := &Node{
 		Type: "ImportDeclaration",
 		Source: &Node{
 			Type:    "Literal",
@@ -29,10 +39,37 @@ func buildProgram(renderBody *Node) *Node {
 			FuncBody: renderBody,
 		},
 	}
+	body := make([]*Node, 0, len(extras)+2)
+	body = append(body, helperImport)
+	body = append(body, extras...)
+	body = append(body, exportDefault)
 	return &Node{
 		Type:       "Program",
 		SourceType: "module",
-		Body:       []*Node{importDecl, exportDefault},
+		Body:       body,
+	}
+}
+
+// importFrom builds an `import { name1, name2 } from "<source>"` AST
+// node. Each name maps to an ImportSpecifier with imported and local
+// identifiers set to the same name (no aliasing).
+func importFrom(source string, names ...string) *Node {
+	specs := make([]*Node, 0, len(names))
+	for _, n := range names {
+		specs = append(specs, &Node{
+			Type:     "ImportSpecifier",
+			Imported: ident(n),
+			Local:    ident(n),
+		})
+	}
+	return &Node{
+		Type: "ImportDeclaration",
+		Source: &Node{
+			Type:    "Literal",
+			LitKind: litString,
+			LitStr:  source,
+		},
+		Specifiers: specs,
 	}
 }
 

@@ -1,5 +1,7 @@
 package server
 
+import "reflect"
+
 // WriteRaw appends v to the payload body buffer without HTML escape.
 // It is the codegen target for `{@html expr}` (issue #445): mirrors
 // Svelte 5's compiled-server behavior where `$.html(value)` bypasses
@@ -79,6 +81,16 @@ func Truthy(v any) bool {
 		return len(x) > 0
 	case map[string]any:
 		return len(x) > 0
+	}
+	// Typed-nil pointers/maps/slices/chans/funcs widened to `any` carry
+	// a non-nil interface header but a nil concrete value. The plain
+	// `v == nil` check above misses these — reflect lifts the curtain
+	// so JS-truthy semantics match (`null` and pointer-to-nothing both
+	// short-circuit `{#if value}` blocks).
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Ptr, reflect.Map, reflect.Slice, reflect.Chan, reflect.Func, reflect.Interface:
+		return !rv.IsNil()
 	}
 	return true
 }

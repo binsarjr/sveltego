@@ -209,10 +209,11 @@ func runSSRTranspile(ctx context.Context, projectRoot, outDir, modulePath string
 		}
 
 		out, err := sveltejs2go.Transpile(envelope, sveltejs2go.Options{
-			PackageName:    p.route.PackageName,
-			FuncName:       "Render",
-			Rewriter:       lowerer,
-			TypedDataParam: typedParam,
+			PackageName:        p.route.PackageName,
+			FuncName:           "Render",
+			Rewriter:           lowerer,
+			TypedDataParam:     typedParam,
+			EmitPageStateParam: true,
 		})
 		if err != nil {
 			return result, fmt.Errorf("codegen: ssr transpile %s: %w (annotate the route with <!-- sveltego:ssr-fallback --> to opt into the sidecar fallback)", p.route.Pattern, err)
@@ -283,11 +284,12 @@ func runSSRTranspile(ctx context.Context, projectRoot, outDir, modulePath string
 		}
 
 		out, err := sveltejs2go.Transpile(envelope, sveltejs2go.Options{
-			PackageName:       lp.pkgName,
-			FuncName:          "Render",
-			Rewriter:          lowerer,
-			TypedDataParam:    shape.RootType,
-			EmitChildrenParam: true,
+			PackageName:        lp.pkgName,
+			FuncName:           "Render",
+			Rewriter:           lowerer,
+			TypedDataParam:     shape.RootType,
+			EmitChildrenParam:  true,
+			EmitPageStateParam: true,
 		})
 		if err != nil {
 			return result, fmt.Errorf("codegen: ssr layout transpile %s: %w", lp.pkgPath, err)
@@ -357,10 +359,11 @@ func runSSRTranspile(ctx context.Context, projectRoot, outDir, modulePath string
 		}
 
 		out, err := sveltejs2go.Transpile(envelope, sveltejs2go.Options{
-			PackageName:    ep.pkgName,
-			FuncName:       "Render",
-			Rewriter:       lowerer,
-			TypedDataParam: shape.RootType,
+			PackageName:        ep.pkgName,
+			FuncName:           "Render",
+			Rewriter:           lowerer,
+			TypedDataParam:     shape.RootType,
+			EmitPageStateParam: true,
 		})
 		if err != nil {
 			return result, fmt.Errorf("codegen: ssr error transpile %s: %w", ep.pkgPath, err)

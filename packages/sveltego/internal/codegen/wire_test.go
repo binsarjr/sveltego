@@ -183,11 +183,11 @@ func TestEmitSSRLayoutWire(t *testing.T) {
 	if !strings.Contains(got, `usersrc "example.com/app/.gen/layoutsrc/routes/_layout"`) {
 		t.Errorf("missing layoutsrc import:\n%s", got)
 	}
-	if !strings.Contains(got, "func RenderLayoutSSR(payload *server.Payload, data any, inner func(*server.Payload)) error {") {
+	if !strings.Contains(got, "func RenderLayoutSSR(payload *server.Payload, data any, inner func(*server.Payload), pageState server.PageState) error {") {
 		t.Errorf("missing RenderLayoutSSR signature:\n%s", got)
 	}
-	if !strings.Contains(got, "usersrc.Render(payload, typed, inner)") {
-		t.Errorf("expected typed Render dispatch with inner callback:\n%s", got)
+	if !strings.Contains(got, "usersrc.Render(payload, typed, inner, pageState)") {
+		t.Errorf("expected typed Render dispatch with inner callback + pageState:\n%s", got)
 	}
 	assertParsesAsGo(t, target)
 }
@@ -227,10 +227,10 @@ func TestEmitSSRErrorWire(t *testing.T) {
 	if !strings.Contains(got, `server "github.com/binsarjr/sveltego/packages/sveltego/runtime/svelte/server"`) {
 		t.Errorf("missing server import:\n%s", got)
 	}
-	if !strings.Contains(got, "func RenderErrorSSR(payload *server.Payload, safe kit.SafeError) {") {
+	if !strings.Contains(got, "func RenderErrorSSR(payload *server.Payload, safe kit.SafeError, pageState server.PageState) {") {
 		t.Errorf("missing RenderErrorSSR signature:\n%s", got)
 	}
-	if !strings.Contains(got, "errorsrc.Render(payload, safe)") {
+	if !strings.Contains(got, "errorsrc.Render(payload, safe, pageState)") {
 		t.Errorf("expected typed Render dispatch:\n%s", got)
 	}
 	assertParsesAsGo(t, target)

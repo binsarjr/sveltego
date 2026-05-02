@@ -13,7 +13,7 @@ func Render(payload *server.Payload, props map[string]any) {
 	data, _ := props["data"].(map[string]any)
 	payload.Push("<p>")
 	payload.Push(server.EscapeHTML(func() any {
-		if data.loggedIn {
+		if server.Truthy(data.loggedIn) {
 			return "welcome"
 		}
 		return "guest"

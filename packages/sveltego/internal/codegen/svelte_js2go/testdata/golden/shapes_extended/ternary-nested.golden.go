@@ -13,11 +13,11 @@ func Render(payload *server.Payload, props map[string]any) {
 	data, _ := props["data"].(map[string]any)
 	payload.Push("<span>")
 	payload.Push(func() any {
-		if data.a {
+		if server.Truthy(data.a) {
 			return "x"
 		}
 		return func() any {
-			if data.b {
+			if server.Truthy(data.b) {
 				return "y"
 			}
 			return "z"

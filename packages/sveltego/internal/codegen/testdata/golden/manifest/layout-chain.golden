@@ -91,13 +91,20 @@ func layoutDataAt(layoutDatas []any, i int) any {
 // around the page handler. Generated per-route so the pipeline does not
 // rebuild a closure stack on every request.
 func renderChain__DashTeamBilling(w *render.Writer, ctx *kit.RenderCtx, page router.PageHandler, pageData any, layoutDatas []any) error {
+	pageState := server.PageState{
+		URL:    ctx.URL,
+		Params: ctx.Params,
+		Route:  server.PageRoute{ID: `/dash/team/billing`},
+		Status: 200,
+		Data:   pageData,
+	}
 	return render__layout__page_routes(w, ctx, layoutDataAt(layoutDatas, 0), func(w *render.Writer) error {
 		return render__layout__page_routes_dash(w, ctx, layoutDataAt(layoutDatas, 1), func(w *render.Writer) error {
 			return render__layout__page_routes_dash_team(w, ctx, layoutDataAt(layoutDatas, 2), func(w *render.Writer) error {
 				return page(w, ctx, pageData)
-			})
-		})
-	})
+			}, pageState)
+		}, pageState)
+	}, pageState)
 }
 
 // Routes returns the route table consumed by router.NewTree.

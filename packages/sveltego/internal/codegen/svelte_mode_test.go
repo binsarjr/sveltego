@@ -83,8 +83,8 @@ func TestGenerateManifest_SvelteMode_SSRRender(t *testing.T) {
 	if !bytes.Contains(out, []byte("server \"github.com/binsarjr/sveltego/packages/sveltego/runtime/svelte/server\"")) {
 		t.Errorf("expected runtime/svelte/server import:\n%s", s)
 	}
-	if !bytes.Contains(out, []byte(".RenderSSR(&payload, data)")) {
-		t.Errorf("expected RenderSSR call inside bridge:\n%s", s)
+	if !bytes.Contains(out, []byte(".RenderSSR(&payload, data, pageState)")) {
+		t.Errorf("expected RenderSSR call inside bridge with pageState:\n%s", s)
 	}
 	if !bytes.Contains(out, []byte("Page:")) || !bytes.Contains(out, []byte("render__page_routes,")) {
 		t.Errorf("expected Page wired for SSR-mode Svelte route:\n%s", s)
@@ -140,8 +140,8 @@ func TestGenerateManifest_SvelteMode_SSRLayout(t *testing.T) {
 		t.Fatalf("GenerateManifest: %v", err)
 	}
 	s := string(out)
-	if !bytes.Contains(out, []byte(".RenderLayoutSSR(&payload, data, inner)")) {
-		t.Errorf("expected RenderLayoutSSR call inside layout bridge:\n%s", s)
+	if !bytes.Contains(out, []byte(".RenderLayoutSSR(&payload, data, inner, pageState)")) {
+		t.Errorf("expected RenderLayoutSSR call inside layout bridge with pageState:\n%s", s)
 	}
 	if bytes.Contains(out, []byte(".Layout{}.Render(w, ctx, typed, children)")) {
 		t.Errorf("legacy Layout{}.Render call should not appear when layout is SSR-bridged:\n%s", s)
@@ -200,8 +200,8 @@ func TestGenerateManifest_SvelteMode_SSRError(t *testing.T) {
 		t.Fatalf("GenerateManifest: %v", err)
 	}
 	s := string(out)
-	if !bytes.Contains(out, []byte(".RenderErrorSSR(&payload, safe)")) {
-		t.Errorf("expected RenderErrorSSR call inside error bridge:\n%s", s)
+	if !bytes.Contains(out, []byte(".RenderErrorSSR(&payload, safe, pageState)")) {
+		t.Errorf("expected RenderErrorSSR call inside error bridge with pageState:\n%s", s)
 	}
 	if bytes.Contains(out, []byte(".ErrorPage{}.Render(w, ctx, safe)")) {
 		t.Errorf("legacy ErrorPage{}.Render call should not appear when boundary is SSR-bridged:\n%s", s)
