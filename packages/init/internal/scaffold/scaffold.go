@@ -402,7 +402,11 @@ func Load(ctx *kit.LoadCtx) (PageData, error) {
 }
 `
 
-const layoutSvelteBody = `<slot />
+const layoutSvelteBody = `<script lang="ts">
+  let { children } = $props();
+</script>
+
+{@render children()}
 `
 
 // serviceWorkerStarter is the opt-in Service Worker scaffold written when

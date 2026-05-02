@@ -115,8 +115,10 @@ func renderLayoutSvelte(flavor TailwindFlavor) string {
 	var b strings.Builder
 	b.WriteString("<script lang=\"ts\">\n")
 	b.WriteString("  import './app.css';\n")
+	b.WriteString("\n")
+	b.WriteString("  let { children } = $props();\n")
 	b.WriteString("</script>\n\n")
-	b.WriteString("<slot />\n")
+	b.WriteString("{@render children()}\n")
 	return b.String()
 }
 

@@ -1,3 +1,7 @@
+<script lang="ts">
+  let { children } = $props();
+</script>
+
 <!--
   Root layout for the blog. Provides shared chrome (header + nav) so
   pages render inside one consistent shell. Layout chain rendering
@@ -21,7 +25,7 @@
 </header>
 
 <main class="mx-auto max-w-3xl px-4 py-8">
-  <slot />
+  {@render children()}
 </main>
 
 <footer class="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 mt-12">
