@@ -32,6 +32,10 @@ type layoutImport struct {
 	alias     string
 	hasServer bool
 	hasHead   bool
+	// hasSSR is set for layouts in SSRRenderLayouts: the manifest emits
+	// the payload-bridge form of render__layout__<alias> that dispatches
+	// to <alias>.RenderLayoutSSR (children-callback ABI from #453).
+	hasSSR bool
 }
 
 // errorImport pairs an error-page package path with the import alias
@@ -91,6 +95,15 @@ type ManifestOptions struct {
 	// that proxies the request to the long-running Node sidecar via the
 	// runtime/svelte/fallback registry.
 	SSRFallbackRoutes []SSRFallbackRoute
+	// SSRRenderLayouts is the set of layout package paths (".gen/..."
+	// prefix preserved) whose `_layout.svelte` received a children-
+	// callback ABI emit under `.gen/layoutsrc/<encoded>/` plus a
+	// `wire_layout_render.gen.go` per route dir (#456). For these
+	// layouts the manifest emits the payload-bridge form of
+	// `render__layout__<alias>` — calling the typed
+	// `RenderLayoutSSR(payload, data, inner)` from the wire — instead of
+	// the legacy `Layout{}.Render(*render.Writer, ..., children)` shape.
+	SSRRenderLayouts map[string]struct{}
 }
 
 // GenerateManifest emits a deterministic, gofmt-clean Go source file
@@ -174,6 +187,10 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 	for i := range layoutImports {
 		layoutImports[i].hasServer = layoutHasServer[layoutImports[i].pkgPath]
 		layoutImports[i].hasHead = opts.LayoutHeads[layoutImports[i].pkgPath]
+		if opts.SSRRenderLayouts != nil {
+			_, ok := opts.SSRRenderLayouts[layoutImports[i].pkgPath]
+			layoutImports[i].hasSSR = ok
+		}
 	}
 	sort.Slice(layoutImports, func(i, j int) bool {
 		return layoutImports[i].pkgPath < layoutImports[j].pkgPath
@@ -249,6 +266,36 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 	}
 	hasLayout := len(layoutImports) > 0
 	hasError := len(errorImports) > 0
+	if !hasSvelte {
+		for _, li := range layoutImports {
+			if li.hasSSR {
+				hasSvelte = true
+				break
+			}
+		}
+	}
+	// usesFmt reports whether any emitted adapter actually references
+	// fmt.Errorf. Only the legacy Mustache-Go page+layout adapters
+	// (typed-data type-assert error path) use it; the SSR payload-bridge
+	// adapters introduced in Phase 6 (#428) and #456 do not.
+	usesFmt := false
+	for _, e := range entries {
+		if !e.route.HasPage {
+			continue
+		}
+		if !isSvelteRoute(e.route.Pattern, opts.RouteOptions) {
+			usesFmt = true
+			break
+		}
+	}
+	if !usesFmt {
+		for _, li := range layoutImports {
+			if !li.hasSSR {
+				usesFmt = true
+				break
+			}
+		}
+	}
 
 	// Build a deduplicated set of (alias, packagePath) pairs across page
 	// entries, layout-only imports, and error-only imports.
@@ -303,8 +350,10 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 	b.Indent()
 	switch {
 	case hasPage || hasLayout:
-		b.Line(`"fmt"`)
-		b.Line("")
+		if usesFmt {
+			b.Line(`"fmt"`)
+			b.Line("")
+		}
 		b.Line(`"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"`)
 		b.Line(`"github.com/binsarjr/sveltego/packages/sveltego/render"`)
 	case hasError:
@@ -605,32 +654,40 @@ func emitFallbackInit(b *Builder, fallback []SSRFallbackRoute) {
 }
 
 // emitLayoutAdapters writes one `render__layout__<alias>` function per
-// unique layout package. Each adapter widens Layout{}.Render's typed
-// LayoutData to the `any`-shaped router.LayoutHandler. Layout packages
-// with a sibling layout.server.go additionally receive a load adapter
-// `loadLayout__<alias>` that wraps the wire-emitted LayoutLoad to
-// satisfy router.LayoutLoadHandler.
+// unique layout package. The default form widens Layout{}.Render's typed
+// LayoutData to the `any`-shaped router.LayoutHandler (legacy mustache
+// path). Layouts in SSRRenderLayouts swap to the payload-bridge form
+// from #456: dispatch to the wire-emitted RenderLayoutSSR through a
+// fresh server.Payload, bridge the writer-shape `children` callback
+// into the payload, and copy payload.Body() into the outer writer at
+// the end. Layout packages with a sibling layout.server.go additionally
+// receive a load adapter `loadLayout__<alias>` that wraps the wire-
+// emitted LayoutLoad to satisfy router.LayoutLoadHandler.
 func emitLayoutAdapters(b *Builder, imports []layoutImport) {
 	for _, li := range imports {
-		b.Linef("// render__layout__%s adapts %s.Layout{}.Render to router.LayoutHandler.", li.alias, li.alias)
-		b.Linef("func render__layout__%s(w *render.Writer, ctx *kit.RenderCtx, data any, children func(*render.Writer) error) error {", li.alias)
-		b.Indent()
-		b.Linef("var typed %s.LayoutData", li.alias)
-		b.Line("if data != nil {")
-		b.Indent()
-		b.Linef("v, ok := data.(%s.LayoutData)", li.alias)
-		b.Line("if !ok {")
-		b.Indent()
-		b.Linef(`return fmt.Errorf("sveltego: layout %%q: LayoutData type mismatch (got %%T, want %s.LayoutData)", %s, data)`, li.alias, quoteGo(li.pkgPath))
-		b.Dedent()
-		b.Line("}")
-		b.Line("typed = v")
-		b.Dedent()
-		b.Line("}")
-		b.Linef("return %s.Layout{}.Render(w, ctx, typed, children)", li.alias)
-		b.Dedent()
-		b.Line("}")
-		b.Line("")
+		if li.hasSSR {
+			emitSSRLayoutAdapter(b, li)
+		} else {
+			b.Linef("// render__layout__%s adapts %s.Layout{}.Render to router.LayoutHandler.", li.alias, li.alias)
+			b.Linef("func render__layout__%s(w *render.Writer, ctx *kit.RenderCtx, data any, children func(*render.Writer) error) error {", li.alias)
+			b.Indent()
+			b.Linef("var typed %s.LayoutData", li.alias)
+			b.Line("if data != nil {")
+			b.Indent()
+			b.Linef("v, ok := data.(%s.LayoutData)", li.alias)
+			b.Line("if !ok {")
+			b.Indent()
+			b.Linef(`return fmt.Errorf("sveltego: layout %%q: LayoutData type mismatch (got %%T, want %s.LayoutData)", %s, data)`, li.alias, quoteGo(li.pkgPath))
+			b.Dedent()
+			b.Line("}")
+			b.Line("typed = v")
+			b.Dedent()
+			b.Line("}")
+			b.Linef("return %s.Layout{}.Render(w, ctx, typed, children)", li.alias)
+			b.Dedent()
+			b.Line("}")
+			b.Line("")
+		}
 
 		if li.hasServer {
 			b.Linef("// loadLayout__%s adapts %s.LayoutLoad to router.LayoutLoadHandler.", li.alias, li.alias)
@@ -638,6 +695,61 @@ func emitLayoutAdapters(b *Builder, imports []layoutImport) {
 			b.Line("")
 		}
 	}
+}
+
+// emitSSRLayoutAdapter writes the children-callback payload-bridge form
+// of render__layout__<alias> introduced by #456. The emitted adapter
+// allocates a fresh server.Payload, dispatches to the wire-emitted
+// RenderLayoutSSR (which calls the typed Render(payload, data, inner)
+// from the layoutsrc package), bridges the writer-shape `children`
+// callback into the payload via a temporary render.Writer, and copies
+// the rendered head + body into the outer writer.
+func emitSSRLayoutAdapter(b *Builder, li layoutImport) {
+	b.Linef("// render__layout__%s bridges %s.RenderLayoutSSR (Svelte SSR Option B,", li.alias, li.alias)
+	b.Linef("// children-callback ABI from #453) into router.LayoutHandler.")
+	b.Linef("func render__layout__%s(w *render.Writer, ctx *kit.RenderCtx, data any, children func(*render.Writer) error) error {", li.alias)
+	b.Indent()
+	b.Line("_ = ctx")
+	b.Line("var payload server.Payload")
+	b.Line("var childErr error")
+	b.Line("inner := func(p *server.Payload) {")
+	b.Indent()
+	b.Line("if childErr != nil {")
+	b.Indent()
+	b.Line("return")
+	b.Dedent()
+	b.Line("}")
+	b.Line("buf := render.Acquire()")
+	b.Line("defer render.Release(buf)")
+	b.Line("if err := children(buf); err != nil {")
+	b.Indent()
+	b.Line("childErr = err")
+	b.Line("return")
+	b.Dedent()
+	b.Line("}")
+	b.Line("p.Push(string(buf.Bytes()))")
+	b.Dedent()
+	b.Line("}")
+	b.Linef("if err := %s.RenderLayoutSSR(&payload, data, inner); err != nil {", li.alias)
+	b.Indent()
+	b.Line("return err")
+	b.Dedent()
+	b.Line("}")
+	b.Line("if childErr != nil {")
+	b.Indent()
+	b.Line("return childErr")
+	b.Dedent()
+	b.Line("}")
+	b.Line("if head := payload.HeadHTML(); head != \"\" {")
+	b.Indent()
+	b.Line("w.WriteString(head)")
+	b.Dedent()
+	b.Line("}")
+	b.Line("w.WriteString(payload.Body())")
+	b.Line("return nil")
+	b.Dedent()
+	b.Line("}")
+	b.Line("")
 }
 
 // isSvelteRoute reports whether the route's resolved page options

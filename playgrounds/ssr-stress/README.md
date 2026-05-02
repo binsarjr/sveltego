@@ -28,11 +28,13 @@ Tracked together in [#443](https://github.com/binsarjr/sveltego/issues/443):
   non-boolean in Go. Awaiting a lowerer guard for truthy-struct
   conditions.
 
-[#440](https://github.com/binsarjr/sveltego/issues/440) tracks the
-deeper layout-chain carryover (children-callback ABI) — the
-`/layoutdeep/...` route is the test fixture for that work; today the
-slot-only path renders, but per-level body content beyond the first
-level depends on #440.
+[#456](https://github.com/binsarjr/sveltego/issues/456) wired the
+deep layout chain into the children-callback ABI shipped in
+[#440](https://github.com/binsarjr/sveltego/issues/440) /
+[PR #453](https://github.com/binsarjr/sveltego/pull/453). The
+`/layoutdeep/level2/level3` route is the end-to-end fixture: every
+level emits non-trivial chrome (`<header>`, `<section>`, `<aside>`)
+that wraps the inner page output in `curl` against the SSR'd HTML.
 
 ## Snapshots
 
