@@ -66,7 +66,12 @@ func render__page_routes_admin_users(w *render.Writer, ctx *kit.RenderCtx, data 
 }
 
 // render__layout__page_routes adapts page_routes.Layout{}.Render to router.LayoutHandler.
-func render__layout__page_routes(w *render.Writer, ctx *kit.RenderCtx, data any, children func(*render.Writer) error) error {
+// The trailing pageState parameter is the $app/state surface (#466);
+// legacy Mustache-Go layouts ignore it but accept the trailing arg so
+// the per-route renderChain__<routeIdent> emit can pass pageState
+// uniformly across SSR-bridged and Mustache-Go layouts.
+func render__layout__page_routes(w *render.Writer, ctx *kit.RenderCtx, data any, children func(*render.Writer) error, pageState server.PageState) error {
+	_ = pageState
 	var typed page_routes.LayoutData
 	if data != nil {
 		v, ok := data.(page_routes.LayoutData)
@@ -79,7 +84,12 @@ func render__layout__page_routes(w *render.Writer, ctx *kit.RenderCtx, data any,
 }
 
 // render__layout__page_routes_admin adapts page_routes_admin.Layout{}.Render to router.LayoutHandler.
-func render__layout__page_routes_admin(w *render.Writer, ctx *kit.RenderCtx, data any, children func(*render.Writer) error) error {
+// The trailing pageState parameter is the $app/state surface (#466);
+// legacy Mustache-Go layouts ignore it but accept the trailing arg so
+// the per-route renderChain__<routeIdent> emit can pass pageState
+// uniformly across SSR-bridged and Mustache-Go layouts.
+func render__layout__page_routes_admin(w *render.Writer, ctx *kit.RenderCtx, data any, children func(*render.Writer) error, pageState server.PageState) error {
+	_ = pageState
 	var typed page_routes_admin.LayoutData
 	if data != nil {
 		v, ok := data.(page_routes_admin.LayoutData)
