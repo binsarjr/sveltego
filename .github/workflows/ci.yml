@@ -947,10 +947,10 @@ jobs:
 
   # Hydration-parity smoke (#446): builds each playground with the client
   # bundle, drives a headless Chromium, and fails on Svelte
-  # hydration_mismatch / hydration_attribute_changed warnings. Today only
-  # the synthetic --self-test runs; live-route assertions flip on once
-  # #462 wires ViteManifest into each playground main.go. Scoped to basic
-  # + ssr-stress to keep the playwright budget bounded.
+  # hydration_mismatch / hydration_attribute_changed warnings. Runs the
+  # synthetic --self-test as a sanity gate, then drives live routes
+  # against the real bundle. Scoped to basic + ssr-stress to keep the
+  # playwright budget bounded.
   hydration-parity:
     name: hydration-parity (${{ matrix.playground }})
     needs: [changes, lint-and-test-pr]
@@ -964,8 +964,10 @@ jobs:
         include:
           - playground: basic
             port: 3000
+            routes: "/,/post/1,/appstate/42"
           - playground: ssr-stress
             port: 3000
+            routes: "/,/longlist,/conditional,/layoutdeep/level2/level3"
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
@@ -1035,14 +1037,11 @@ jobs:
           kill "$(cat server.pid)" 2>/dev/null || true
           exit 1
 
-      # Live-route hydration smoke is held on #471: PR #463 emits
-      # `$state(...)` rune calls in client `.ts` files under
-      # `.gen/client/__router/state.ts` (source: `packages/sveltego/internal/vite/state.go`),
-      # which vite-plugin-svelte does not compile. The bundled router.js
-      # throws "ReferenceError: $state is not defined" at hydration. #462
-      # wires the playground ViteManifest so the bundle is at least
-      # delivered to the browser; the live-mode flip lands once #471
-      # renames the emit so vite-plugin-svelte picks the runes up.
+      # Self-test runs first as a sanity gate: it injects a synthetic
+      # hydration_mismatch and proves the harness fails on it. Live-route
+      # assertions then drive headless Chromium against the real bundle —
+      # restored once #471 renamed `state.ts` -> `state.svelte.ts` so
+      # vite-plugin-svelte compiles the runes in the client bundle.
       - name: Self-test (synthetic mismatch must fail the gate)
         shell: bash
         run: |
@@ -1051,6 +1050,15 @@ jobs:
             --base "http://localhost:${{ matrix.port }}" \
             --routes "/" \
             --self-test \
+            --playwright-from "$PLAYWRIGHT_NODE_PATH"
+
+      - name: Live routes (real bundle, no hydration mismatch)
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/hydration-smoke.mjs \
+            --base "http://localhost:${{ matrix.port }}" \
+            --routes "${{ matrix.routes }}" \
             --playwright-from "$PLAYWRIGHT_NODE_PATH"
 
       - name: Stop server

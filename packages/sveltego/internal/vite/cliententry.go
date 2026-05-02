@@ -39,7 +39,10 @@ func GenerateClientEntry(opts ClientEntryOptions) string {
 		fmt.Fprintf(&b, "import Page from %q;\n", opts.RelSveltePath)
 	}
 	fmt.Fprintf(&b, "import { startRouter } from %q;\n", opts.RelRouterPath)
-	relStatePath := strings.TrimSuffix(opts.RelRouterPath, "/router") + "/state"
+	// `.svelte.ts` (matched via the `.svelte` half here) routes the
+	// state module through vite-plugin-svelte so its `$state` runes
+	// compile rather than shipping raw to the browser (#471).
+	relStatePath := strings.TrimSuffix(opts.RelRouterPath, "/router") + "/state.svelte"
 	fmt.Fprintf(&b, "import { _setPage } from %q;\n\n", relStatePath)
 	b.WriteString("const el = document.getElementById('sveltego-data');\n")
 	b.WriteString("const payload = el ? JSON.parse(el.textContent ?? '{}') : {};\n")

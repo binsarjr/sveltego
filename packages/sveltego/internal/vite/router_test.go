@@ -540,7 +540,7 @@ func TestGenerateClientEntry_seedsState(t *testing.T) {
 		RelRouterPath: "../__router/router",
 	})
 	for _, want := range []string{
-		`import { _setPage } from "../__router/state"`,
+		`import { _setPage } from "../__router/state.svelte"`,
 		"_setPage(payload);",
 	} {
 		if !strings.Contains(src, want) {
@@ -556,7 +556,7 @@ func TestGenerateConfig_aliasesAppState(t *testing.T) {
 
 	src := GenerateConfig(ConfigOptions{})
 	for _, want := range []string{
-		`"$app/state": path.resolve(__dirname, ".gen/client/__router/state")`,
+		`"$app/state": path.resolve(__dirname, ".gen/client/__router/state.svelte")`,
 		`"$app/navigation": path.resolve(__dirname, ".gen/client/__router/navigation")`,
 	} {
 		if !strings.Contains(src, want) {
