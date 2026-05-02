@@ -299,10 +299,13 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 	if !hasSvelte && (hasLayout || hasError) {
 		hasSvelte = true
 	}
-	// usesFmt reports whether any emitted adapter actually references
-	// fmt.Errorf. Only the legacy Mustache-Go page+layout adapters
-	// (typed-data type-assert error path) use it; the SSR payload-bridge
-	// adapters introduced in Phase 6 (#428) and #456 do not.
+	// usesFmt gates the emitted `"fmt"` import on whether any adapter
+	// actually references fmt.Errorf. The only emit site is the
+	// legacy Mustache-Go page adapter's typed-data type-assert error
+	// path (see emitRenderAdapters); the SSR payload-bridge adapters
+	// introduced in Phase 6 (#428) and #456 do not. Without this gate
+	// trivial single-route Svelte projects fail `go build` with
+	// `"fmt" imported and not used` (#485).
 	usesFmt := false
 	for _, e := range entries {
 		if !e.route.HasPage {
@@ -311,14 +314,6 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 		if !isSvelteRoute(e.route.Pattern, opts.RouteOptions) {
 			usesFmt = true
 			break
-		}
-	}
-	if !usesFmt {
-		for _, li := range layoutImports {
-			if !li.hasSSR {
-				usesFmt = true
-				break
-			}
 		}
 	}
 
