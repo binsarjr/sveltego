@@ -311,9 +311,10 @@ Conventional Commits per [RFC #99](https://github.com/binsarjr/sveltego/issues/9
 | `rfc` | RFC document or amendment. |
 
 `<scope>` is the package name (`sveltego`, `adapter-cloudflare`, `codegen`,
-`router`, ...) or `repo` for cross-cutting changes. Subject is imperative,
-no trailing period, ≤ 72 characters. Breaking changes go in the footer:
-`BREAKING CHANGE: <description>`.
+`router`, ...) or `repo` for cross-cutting changes. For changes that touch
+multiple packages, comma-separate the scopes: `feat(codegen,server): ...`.
+Subject is imperative, no trailing period, ≤ 72 characters. Breaking
+changes go in the footer: `BREAKING CHANGE: <description>`.
 
 `release-please` (RFC #100) reads these commits to compute per-package
 version bumps and CHANGELOG entries.
