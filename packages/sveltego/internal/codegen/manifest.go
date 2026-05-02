@@ -303,6 +303,15 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 			}
 		}
 	}
+	// $app/state lowering (#466) plumbs server.PageState through every
+	// renderChain__<routeIdent> and renderError__<alias> emit, including
+	// the Mustache-Go legacy adapters. The server import must be present
+	// whenever there's at least one layout (renderChain emit) or one
+	// error boundary (renderErrorChain emit), even on otherwise-pure-
+	// Mustache-Go playgrounds.
+	if !hasSvelte && (hasLayout || hasError) {
+		hasSvelte = true
+	}
 	// usesFmt reports whether any emitted adapter actually references
 	// fmt.Errorf. Only the legacy Mustache-Go page+layout adapters
 	// (typed-data type-assert error path) use it; the SSR payload-bridge

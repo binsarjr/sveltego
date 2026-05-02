@@ -7,6 +7,7 @@ import (
 	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 	"github.com/binsarjr/sveltego/packages/sveltego/render"
 	"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
+	server "github.com/binsarjr/sveltego/packages/sveltego/runtime/svelte/server"
 
 	page_routes "myapp/.gen/routes"
 	page_routes_dash "myapp/.gen/routes/dash"
