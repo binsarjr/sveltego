@@ -6,9 +6,12 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/codegen/svelterender"
 )
 
 func writeFile(t *testing.T, path, content string) {
@@ -18,6 +21,26 @@ func writeFile(t *testing.T, path, content string) {
 	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
+// requireSSRSidecar skips the test when Node or the svelterender
+// sidecar's node_modules are unavailable. CI workflows that run the
+// SSR pipeline install both before the gate; the lint-and-test job
+// installs nothing JS-side, so codegen tests that drive a live
+// _layout.svelte / _page.svelte through the SSR transpile must skip
+// rather than fail. Mirrors svelterender.requireSidecarReady.
+func requireSSRSidecar(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not on PATH; skipping SSR-transpile codegen test")
+	}
+	dir, err := svelterender.SidecarRoot()
+	if err != nil {
+		t.Skipf("sidecar tree not found: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "node_modules", "acorn")); err != nil {
+		t.Skipf("sidecar node_modules missing; run `npm install` in %s", dir)
 	}
 }
 
@@ -299,6 +322,7 @@ func TestBuild_EmitsLayoutChain(t *testing.T) {
 // wire wrapper, manifest LayoutLoaders entry — is unchanged.
 func TestBuild_EmitsLayoutServer(t *testing.T) {
 	t.Parallel()
+	requireSSRSidecar(t)
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/app\n\ngo 1.22\n")
 	writeFile(t, filepath.Join(root, "src", "routes", "_layout.svelte"),
@@ -781,6 +805,7 @@ func Load(ctx *kit.LoadCtx) (PageData, error) {
 // dispatch.
 func TestBuild_LayoutDataNamedType(t *testing.T) {
 	t.Parallel()
+	requireSSRSidecar(t)
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/lyt\n\ngo 1.23\n")
 	writeFile(t, filepath.Join(root, "src", "routes", "_layout.svelte"),
