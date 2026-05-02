@@ -339,17 +339,17 @@ func (e *emitter) run() ([]byte, error) {
 func (e *emitter) renderSignature() string {
 	params := []string{fmt.Sprintf("payload *%s.Payload", e.opts.HelperAlias)}
 	if e.opts.TypedDataParam != "" {
-		params = append(params, fmt.Sprintf("data %s", e.opts.TypedDataParam))
+		params = append(params, "data "+e.opts.TypedDataParam)
 	} else {
 		params = append(params, "props map[string]any")
 	}
 	if e.opts.EmitChildrenParam {
-		params = append(params, fmt.Sprintf("children func(*%s.Payload)", e.opts.HelperAlias))
+		params = append(params, "children func(*"+e.opts.HelperAlias+".Payload)")
 	}
 	if e.opts.EmitPageStateParam {
-		params = append(params, fmt.Sprintf("pageState %s.PageState", e.opts.HelperAlias))
+		params = append(params, "pageState "+e.opts.HelperAlias+".PageState")
 	}
-	return fmt.Sprintf("func %s(%s) {", e.opts.FuncName, strings.Join(params, ", "))
+	return "func " + e.opts.FuncName + "(" + strings.Join(params, ", ") + ") {"
 }
 
 // emitProgram walks the Program body. Only ImportDeclaration and the

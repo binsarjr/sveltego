@@ -501,10 +501,10 @@ func urlFieldMap(name, current string) (appStateField, bool) {
 	return appStateField{}, false
 }
 
-// routeFieldMap lowers `page.route.<field>` segments.
+// routeFieldMap lowers `page.route.<field>` segments. Only `id` is
+// recognised today — Svelte's route surface adds nothing else.
 func routeFieldMap(name, current string) (appStateField, bool) {
-	switch name {
-	case "id":
+	if name == "id" {
 		return appStateField{emit: current + ".ID", terminal: true}, true
 	}
 	return appStateField{}, false
