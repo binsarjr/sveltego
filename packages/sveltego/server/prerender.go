@@ -438,6 +438,15 @@ func MaybePrerenderFromEnv(ctx context.Context, projectRoot string, s *Server) (
 	if err != nil {
 		return true, err
 	}
+	// Drop a routes.json sidecar so adapter-static's subprocess runner
+	// can enumerate dynamic routes through the binary boundary (#455).
+	// Best-effort: a write failure here is logged but does not fail the
+	// prerender pass.
+	if res != nil && res.ManifestPath != "" {
+		if werr := s.writeRoutesManifest(filepath.Dir(res.ManifestPath)); werr != nil {
+			fmt.Fprintf(os.Stderr, "prerender: write routes manifest: %v\n", werr)
+		}
+	}
 	return true, nil
 }
 

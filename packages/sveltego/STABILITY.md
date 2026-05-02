@@ -27,7 +27,14 @@ Layout-level values cascade to descendants per field; page-level values override
 
 ## Experimental
 
-(none yet)
+### `server.Server.Routes()` and `server.RouteSummary` ([#455](https://github.com/binsarjr/sveltego/issues/455))
+
+Adapter-facing accessor exposing the runtime route table:
+
+- `Routes() []RouteSummary` — projects every registered route into a `RouteSummary{Pattern, Prerender, SSR, DynamicParams, PageOptions}` snapshot. Returned slice is a copy; callers may sort or filter freely.
+- `RoutesManifestFilename` (`"routes.json"`) — sidecar written next to `manifest.json` when the user binary runs under `MaybePrerenderFromEnv`. Adapter-static's subprocess runner reads it to enumerate dynamic routes through the binary boundary.
+
+The shape is provisional. The struct may grow new fields and the JSON field names may change once tooling consumers stabilize.
 
 ## Deprecated
 
