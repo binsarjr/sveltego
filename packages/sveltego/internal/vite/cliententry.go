@@ -43,14 +43,17 @@ func GenerateClientEntry(opts ClientEntryOptions) string {
 	// state module through vite-plugin-svelte so its `$state` runes
 	// compile rather than shipping raw to the browser (#471).
 	relStatePath := strings.TrimSuffix(opts.RelRouterPath, "/router") + "/state.svelte"
-	fmt.Fprintf(&b, "import { _setPage } from %q;\n\n", relStatePath)
+	fmt.Fprintf(&b, "import { _setPage, _startVersionPoller } from %q;\n\n", relStatePath)
 	b.WriteString("const el = document.getElementById('sveltego-data');\n")
 	b.WriteString("const payload = el ? JSON.parse(el.textContent ?? '{}') : {};\n")
 	b.WriteString("(window as any).__sveltego__ = { ...payload, enhance };\n")
 	// Seed $app/state before mount so user scripts that read
 	// page.url / page.params / etc. on first render see the
-	// hydration values rather than the initial defaults.
-	b.WriteString("_setPage(payload);\n\n")
+	// hydration values rather than the initial defaults. Also kick
+	// off the version poller — only the first call has effect, so it
+	// is safe to inline in every per-route entry script.
+	b.WriteString("_setPage(payload);\n")
+	b.WriteString("if (payload.appVersion) _startVersionPoller(payload.appVersion, payload.versionPoll);\n\n")
 	b.WriteString("const component = mount(Page, {\n")
 	b.WriteString("  target: document.body,\n")
 	b.WriteString("  props: { data: payload.data, form: payload.form ?? null },\n")
