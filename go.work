@@ -23,5 +23,6 @@ use (
 	./playgrounds/blog
 	./playgrounds/dashboard
 	./playgrounds/ssr-stress
+	./playgrounds/static
 	./templates/ai
 )

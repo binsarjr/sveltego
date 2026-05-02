@@ -663,6 +663,7 @@ func emitMirrorAndWire(projectRoot, outDir, modulePath string, route routescan.S
 		packageName:    route.PackageName,
 		wireDir:        wireDir,
 		hasActions:     usf.HasActions,
+		hasLoad:        usf.HasLoad,
 	})
 }
 

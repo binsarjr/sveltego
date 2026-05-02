@@ -16,6 +16,7 @@ func TestEmitWire_LoadOnly(t *testing.T) {
 		packageName:    "_slug_",
 		wireDir:        dir,
 		hasActions:     false,
+		hasLoad:        true,
 	}
 	if err := emitWire(".gen", "example.com/app", r); err != nil {
 		t.Fatalf("emitWire: %v", err)
@@ -43,6 +44,43 @@ func TestEmitWire_LoadOnly(t *testing.T) {
 	assertParsesAsGo(t, filepath.Join(dir, "wire.gen.go"))
 }
 
+// TestEmitWire_NoLoadNoActions covers #467: a route ships
+// _page.server.go with PageOptions (e.g. Prerender = true) but neither
+// Load nor Actions. emitWire must drop a stub Load + stub Actions and
+// must not import usersrc (which would be unused and break the build).
+func TestEmitWire_NoLoadNoActions(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	r := mirrorRoute{
+		encodedSubpath: "routes",
+		packageName:    "routes",
+		wireDir:        dir,
+		hasActions:     false,
+		hasLoad:        false,
+	}
+	if err := emitWire(".gen", "example.com/app", r); err != nil {
+		t.Fatalf("emitWire: %v", err)
+	}
+	src, err := os.ReadFile(filepath.Join(dir, "wire.gen.go"))
+	if err != nil {
+		t.Fatalf("read wire: %v", err)
+	}
+	got := string(src)
+	if strings.Contains(got, "usersrc") {
+		t.Errorf("expected no usersrc import when hasLoad=false && hasActions=false:\n%s", got)
+	}
+	if !strings.Contains(got, "func Load(ctx *kit.LoadCtx) (any, error)") {
+		t.Errorf("missing Load stub:\n%s", got)
+	}
+	if !strings.Contains(got, "return nil, nil") {
+		t.Errorf("Load stub must return nil, nil:\n%s", got)
+	}
+	if !strings.Contains(got, "func Actions() any { return nil }") {
+		t.Errorf("missing Actions stub:\n%s", got)
+	}
+	assertParsesAsGo(t, filepath.Join(dir, "wire.gen.go"))
+}
+
 func TestEmitWire_LoadAndActions(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -51,6 +89,7 @@ func TestEmitWire_LoadAndActions(t *testing.T) {
 		packageName:    "routes",
 		wireDir:        dir,
 		hasActions:     true,
+		hasLoad:        true,
 	}
 	if err := emitWire(".gen", "myapp", r); err != nil {
 		t.Fatalf("emitWire: %v", err)
@@ -96,6 +135,9 @@ func Load(ctx *kit.LoadCtx) (any, error) { return nil, nil }
 	}
 	if !usf.HasActions {
 		t.Errorf("expected HasActions=true")
+	}
+	if !usf.HasLoad {
+		t.Errorf("expected HasLoad=true")
 	}
 	got, err := os.ReadFile(usf.MirrorPath)
 	if err != nil {
@@ -216,6 +258,45 @@ func Load(ctx *kit.LoadCtx) (any, error) { return nil, nil }
 	}
 	if err := mirrorUserSource(&usf); err != nil {
 		t.Fatalf("mirror: %v", err)
+	}
+	if usf.HasActions {
+		t.Errorf("expected HasActions=false")
+	}
+	if !usf.HasLoad {
+		t.Errorf("expected HasLoad=true")
+	}
+}
+
+// TestMirrorUserSource_NoLoad covers #467: a route's _page.server.go
+// declares only PageOptions (Templates, Prerender) and no Load. The
+// mirror still copies the file but flags HasLoad=false so the wire
+// emitter drops a stub Load instead of dispatching to usersrc.Load.
+func TestMirrorUserSource_NoLoad(t *testing.T) {
+	t.Parallel()
+	src := []byte(`//go:build sveltego
+
+package whatever
+
+const (
+	Templates = "svelte"
+	Prerender = true
+)
+`)
+	dir := t.TempDir()
+	userPath := filepath.Join(dir, "_page.server.go")
+	if err := os.WriteFile(userPath, src, 0o600); err != nil {
+		t.Fatalf("write user: %v", err)
+	}
+	usf := userSourceFile{
+		UserPath:    userPath,
+		MirrorPath:  filepath.Join(dir, "mirror", "routes", "page_server.go"),
+		PackageName: "routes",
+	}
+	if err := mirrorUserSource(&usf); err != nil {
+		t.Fatalf("mirror: %v", err)
+	}
+	if usf.HasLoad {
+		t.Errorf("expected HasLoad=false (no Load func declared)")
 	}
 	if usf.HasActions {
 		t.Errorf("expected HasActions=false")

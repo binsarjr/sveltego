@@ -64,7 +64,7 @@ jobs:
             init: 'packages/init/**'
             mcp: 'packages/mcp/**'
             lsp: 'packages/lsp/**'
-            playground: ['playgrounds/basic/**', 'playgrounds/blog/**', 'playgrounds/dashboard/**', 'playgrounds/ssr-stress/**']
+            playground: ['playgrounds/basic/**', 'playgrounds/blog/**', 'playgrounds/dashboard/**', 'playgrounds/ssr-stress/**', 'playgrounds/static/**']
             benchmarks: 'benchmarks/**'
             shared:
               - 'go.work'
@@ -944,6 +944,54 @@ jobs:
         shell: bash
         run: |
           if [ -f server.pid ]; then kill "$(cat server.pid)" 2>/dev/null || true; fi
+
+  # adapter-static smoke (#457): drives `sveltego prerender` against the
+  # static playground (Svelte+Prerender, #467) and asserts the deploy
+  # tree carries an HTML file per route. Skipped via the paths filter
+  # when adapter-static, sveltego, the static playground, or shared
+  # infra are all unchanged.
+  adapter-static-smoke:
+    name: adapter-static-smoke
+    needs: [changes, lint-and-test-pr]
+    if: |
+      (needs.changes.outputs.shared == 'true' ||
+       needs.changes.outputs.sveltego == 'true' ||
+       needs.changes.outputs.adapter-static == 'true' ||
+       needs.changes.outputs.playground == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install sidecar deps
+        working-directory: packages/sveltego/internal/codegen/svelterender/sidecar
+        run: npm ci --no-audit --no-fund
+
+      - name: Run sveltego prerender (adapter-static smoke)
+        working-directory: playgrounds/static
+        run: |
+          rm -rf build
+          go run github.com/binsarjr/sveltego/packages/sveltego/cmd/sveltego prerender --out=build
+
+      - name: Assert SSG output
+        working-directory: playgrounds/static
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f build/manifest.json
+          test -f build/about/index.html
+          test -f build/index/index.html
+          grep -F '<h1>About sveltego static</h1>' build/about/index.html
+          grep -F '<h1>sveltego static index</h1>' build/index/index.html
 
   # Hydration-parity smoke (#446): builds each playground with the client
   # bundle, drives a headless Chromium, and fails on Svelte

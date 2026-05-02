@@ -341,8 +341,12 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 		// RFC #379 phase 3: Svelte-mode page routes without a sibling
 		// _page.server.go contribute no Go symbols (no Page render, no
 		// Load wire). Skipping the import keeps the manifest compiling
-		// when the route directory holds only `_page.svelte`.
-		if isSvelteRoute(e.route.Pattern, opts.RouteOptions) && !e.route.HasPageServer && !e.route.HasServer {
+		// when the route directory holds only `_page.svelte`. Exception
+		// (#467): routes that received an SSR Render emit get a
+		// wire_render.gen.go in their gen package, so the alias resolves
+		// even without a user-authored _page.server.go.
+		_, hasSSREmit := ssrRoutes[e.route.Pattern]
+		if isSvelteRoute(e.route.Pattern, opts.RouteOptions) && !e.route.HasPageServer && !e.route.HasServer && !hasSSREmit {
 			continue
 		}
 		seenAlias[e.alias] = struct{}{}
