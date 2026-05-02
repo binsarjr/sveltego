@@ -10,6 +10,16 @@ shipped (2026-05-02), this playground returns full SSR HTML on
 targeted. No JS engine on the request path — Node only ran during
 `sveltego build` to produce the per-route `Render()` Go functions.
 
+## Render mode
+
+This playground runs every route in **SSR mode** — the default. `_page.server.go` files declare a `Load(ctx)` and emit no `Prerender` / `SSR` constants, so codegen seeds them with `kit.DefaultPageOptions()` (`SSR: true`). To switch a route into another mode, edit its `_page.server.go`:
+
+- **SSG** — add `const Prerender = true` to render once at build time.
+- **SPA** — add `const SSR = false` to ship the app shell + JSON payload only.
+- **Static** — delete `_page.server.go` entirely; only `_page.svelte` remains.
+
+See [`docs/render-modes.md`](../../docs/render-modes.md) for the full reference and decision tree.
+
 ## Layout
 
 ```
