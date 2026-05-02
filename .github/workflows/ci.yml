@@ -944,3 +944,120 @@ jobs:
         shell: bash
         run: |
           if [ -f server.pid ]; then kill "$(cat server.pid)" 2>/dev/null || true; fi
+
+  # Hydration-parity smoke (#446): builds each playground with the client
+  # bundle, drives a headless Chromium against each route, and fails on
+  # Svelte hydration_mismatch / hydration_attribute_changed warnings.
+  # Runs only against basic + ssr-stress to keep the playwright budget
+  # bounded; the curl-body smoke above already covers all four.
+  hydration-parity:
+    name: hydration-parity (${{ matrix.playground }})
+    needs: [changes, lint-and-test-pr]
+    if: |
+      (needs.changes.outputs.shared == 'true' ||
+       needs.changes.outputs.sveltego == 'true' ||
+       needs.changes.outputs.playground == 'true')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - playground: basic
+            port: 3000
+            routes: '/,/post/123'
+          - playground: ssr-stress
+            port: 3000
+            routes: '/,/longlist,/conditional'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install sidecar deps
+        working-directory: packages/sveltego/internal/codegen/svelterender/sidecar
+        run: npm ci --no-audit --no-fund
+
+      - name: Install playground deps
+        working-directory: playgrounds/${{ matrix.playground }}
+        run: npm install --no-audit --no-fund
+
+      - name: Install Playwright (npm)
+        id: pw
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          npm init -y --silent >/dev/null
+          npm install --no-audit --no-fund playwright
+          ver=$(node -p "require('./node_modules/playwright/package.json').version")
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          echo "PLAYWRIGHT_NODE_PATH=$RUNNER_TEMP/node_modules" >> "$GITHUB_ENV"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw.outputs.version }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Install Playwright browsers
+        shell: bash
+        working-directory: ${{ runner.temp }}
+        run: npx playwright install --with-deps chromium
+
+      - name: Compile + Build (with client)
+        working-directory: playgrounds/${{ matrix.playground }}
+        run: |
+          go run github.com/binsarjr/sveltego/packages/sveltego/cmd/sveltego compile
+          go run github.com/binsarjr/sveltego/packages/sveltego/cmd/sveltego build --out ./build/app
+
+      - name: Start server
+        working-directory: playgrounds/${{ matrix.playground }}
+        shell: bash
+        run: |
+          ./build/app &
+          echo $! > server.pid
+          for i in 1 2 3 4 5 6 7 8; do
+            if curl -fsS -o /dev/null "http://localhost:${{ matrix.port }}/"; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "server did not become ready"
+          kill "$(cat server.pid)" 2>/dev/null || true
+          exit 1
+
+      - name: Hydration-parity smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/hydration-smoke.mjs \
+            --base "http://localhost:${{ matrix.port }}" \
+            --routes "${{ matrix.routes }}" \
+            --playwright-from "$PLAYWRIGHT_NODE_PATH"
+
+      - name: Self-test (synthetic mismatch must fail the gate)
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/hydration-smoke.mjs \
+            --base "http://localhost:${{ matrix.port }}" \
+            --routes "/" \
+            --self-test \
+            --playwright-from "$PLAYWRIGHT_NODE_PATH"
+
+      - name: Stop server
+        if: always()
+        working-directory: playgrounds/${{ matrix.playground }}
+        shell: bash
+        run: |
+          if [ -f server.pid ]; then kill "$(cat server.pid)" 2>/dev/null || true; fi

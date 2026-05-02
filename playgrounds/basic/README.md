@@ -82,6 +82,24 @@ curl http://localhost:3000/post/123
 /post/123` returns the per-post view. The CI playground-smoke job
 asserts non-empty bodies on both paths.
 
+## Hydration-parity smoke (#446)
+
+CI runs `scripts/hydration-smoke.mjs` against `/` and `/post/123` after
+building the playground with the client bundle. The script loads each
+route in headless Chromium, waits for `window.__sveltego_hydrated`, and
+fails on Svelte `hydration_mismatch` / `hydration_attribute_changed`
+warnings. To run locally:
+
+```bash
+cd playgrounds/basic
+npm install
+go run github.com/binsarjr/sveltego/packages/sveltego/cmd/sveltego compile
+go run github.com/binsarjr/sveltego/packages/sveltego/cmd/sveltego build --out ./build/app
+./build/app &
+npx playwright install --with-deps chromium
+node ../../scripts/hydration-smoke.mjs --base http://localhost:3000 --routes /,/post/123
+```
+
 ## SSR fallback (opt-in)
 
 Routes whose JS the build-time transpiler cannot lower may opt out of
