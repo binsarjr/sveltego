@@ -68,6 +68,8 @@ export type HydrationPayload = {
   params: Record<string, string>;
   status: number;
   error: AppError;
+  appVersion?: string;
+  versionPoll?: { intervalMs: number; disabled?: boolean };
 };
 
 const initialPage: Page = {
@@ -118,11 +120,43 @@ export const navigating = {
   },
 };
 
+// VERSION_ENDPOINT mirrors the server-side path served by
+// Server.serveVersion. Kept inline rather than threaded through the
+// payload because the path is a hard-wired contract: the SvelteKit
+// equivalent sits at the same spot, and clients running an older bundle
+// against a newer server (or vice versa) still need to agree on it.
+const VERSION_ENDPOINT = '/_app/version.json';
+
+let buildVersion = '';
+
+// updatedCheck is the on-demand check called by updated.check(). It
+// fetches VERSION_ENDPOINT once, compares to buildVersion, flips the
+// rune on drift, and returns whether the version differs. Errors and
+// non-2xx responses resolve to false rather than throwing — matches
+// SvelteKit's swallow-and-return behavior so user UI does not need a
+// try/catch around updated.check().
+async function updatedCheck(): Promise<boolean> {
+  if (typeof fetch === 'undefined' || !buildVersion) return updatedFlag;
+  try {
+    const res = await fetch(VERSION_ENDPOINT, {
+      headers: { pragma: 'no-cache', 'cache-control': 'no-cache' },
+      cache: 'no-store',
+    });
+    if (!res.ok) return false;
+    const data = (await res.json()) as { version?: string };
+    const drifted = typeof data.version === 'string' && data.version !== buildVersion;
+    if (drifted) updatedFlag = true;
+    return drifted;
+  } catch {
+    return false;
+  }
+}
+
 export const updated = {
   get current() {
     return updatedFlag;
   },
-  check: async (): Promise<boolean> => updatedFlag,
+  check: updatedCheck,
 };
 
 // _setPage hydrates pageState from a server payload. routeId, params,
@@ -162,6 +196,62 @@ export function _setNavigating(nav: Navigation | null): void {
 // a poll detects a new app version.
 export function _setUpdated(value: boolean): void {
   updatedFlag = value;
+}
+
+// _startVersionPoller boots the background poller against
+// VERSION_ENDPOINT on the cadence supplied by the server (defaults to
+// 60s, see kit.DefaultVersionPollInterval). Polling stops permanently
+// once the rune flips to true so a stale tab never spams the endpoint.
+//
+// Errors and non-2xx responses retry with exponential backoff —
+// doubling the interval on every consecutive failure up to MAX_BACKOFF
+// — so a flapping endpoint or transient network drop does not produce
+// a tight retry loop. A successful (2xx) response resets the backoff
+// to the configured interval. SvelteKit's upstream poller uses a
+// fixed cadence; we deviate intentionally per acceptance criteria
+// (see issue #461).
+//
+// Idempotent: calling it twice is a no-op the second time. The poller
+// runs only in browser contexts (the typeof guards below keep the SSR
+// build-time evaluation pass from crashing on missing globals).
+let pollerStarted = false;
+const MAX_BACKOFF_MULT = 32;
+
+export function _startVersionPoller(version: string, opts?: { intervalMs?: number; disabled?: boolean }): void {
+  if (pollerStarted) return;
+  pollerStarted = true;
+  buildVersion = version;
+  if (!version) return;
+  if (opts?.disabled) return;
+  if (typeof window === 'undefined' || typeof fetch === 'undefined') return;
+  const baseInterval = Math.max(1000, opts?.intervalMs ?? 60000);
+  let backoffMult = 1;
+  const tick = async () => {
+    let success = false;
+    try {
+      const res = await fetch(VERSION_ENDPOINT, {
+        headers: { pragma: 'no-cache', 'cache-control': 'no-cache' },
+        cache: 'no-store',
+      });
+      if (res.ok) {
+        success = true;
+        const data = (await res.json()) as { version?: string };
+        if (typeof data.version === 'string' && data.version !== buildVersion) {
+          updatedFlag = true;
+          return;
+        }
+      }
+    } catch {
+      // network error; fall through to backoff path below
+    }
+    if (success) {
+      backoffMult = 1;
+    } else if (backoffMult < MAX_BACKOFF_MULT) {
+      backoffMult *= 2;
+    }
+    window.setTimeout(tick, baseInterval * backoffMult);
+  };
+  window.setTimeout(tick, baseInterval);
 }
 
 // _readState extracts the user portion of history.state, mirroring

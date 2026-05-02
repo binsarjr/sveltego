@@ -126,6 +126,14 @@ type Config struct {
 	// configuration gap. When no route opted in, the entire field is
 	// ignored and Node is never spawned.
 	SSRFallback SSRFallbackConfig
+	// VersionPoll configures the SvelteKit-style `updated` rune. When
+	// ViteManifest is non-empty the server hashes it at boot and
+	// serves the digest at /_app/version.json. The generated client
+	// poller compares the digest against the hydrated build version
+	// on Resolve().PollInterval and flips `updated.current` on drift.
+	// Disabled true keeps the endpoint alive (so updated.check() still
+	// works) but suppresses the background poll.
+	VersionPoll kit.VersionPollConfig
 }
 
 // Server is the http.Handler implementation that drives a sveltego app.
@@ -193,6 +201,16 @@ type Server struct {
 	// Stop calls for it).
 	fallbackConfig     SSRFallbackConfig
 	fallbackSupervisor *fallback.Supervisor
+
+	// appVersion is the build version digest served at
+	// /_app/version.json and seeded into the client hydration payload
+	// so the poller knows what to compare against. Empty string when
+	// no ViteManifest was supplied — the endpoint then reports 404 so
+	// a client never flips on the absence of a hash.
+	appVersion string
+	// versionPoll is the resolved poller config (zero values filled in
+	// from kit defaults).
+	versionPoll kit.VersionPollConfig
 }
 
 // New validates cfg and returns a Server ready for use as an http.Handler.
@@ -279,6 +297,8 @@ func New(cfg Config) (*Server, error) {
 		prerender:       cfg.Prerender,
 		prerenderAuth:   cfg.PrerenderAuth,
 		fallbackConfig:  cfg.SSRFallback,
+		appVersion:      computeAppVersion(cfg.ViteManifest),
+		versionPoll:     cfg.VersionPoll.Resolve(),
 	}
 	// Start as ready so that callers using httptest.NewServer directly
 	// (without ListenAndServe or Init) see normal pipeline behavior.
@@ -321,6 +341,9 @@ func (s *Server) startInit() chan struct{} {
 // PrerenderAuth, falling through to the live SSR pipeline (with the
 // normal init checks) on deny.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if s.serveVersion(w, r) {
+		return
+	}
 	if s.prerender != nil && s.servePrerendered(w, r) {
 		return
 	}
