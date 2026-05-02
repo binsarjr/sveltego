@@ -439,6 +439,15 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 	emitLayoutAdapters(&b, layoutImports)
 	emitLayoutHeadAdapters(&b, layoutImports)
 	emitErrorAdapters(&b, errorImports)
+	layoutByPathForChain := make(map[string]layoutImport, len(layoutImports))
+	for _, li := range layoutImports {
+		layoutByPathForChain[li.pkgPath] = li
+	}
+	errorAliasByPathForChain := make(map[string]string, len(errorImports))
+	for _, ei := range errorImports {
+		errorAliasByPathForChain[ei.pkgPath] = ei.alias
+	}
+	emitRouteRenderChains(&b, entries, layoutByPathForChain, errorAliasByPathForChain)
 
 	b.Line("// Routes returns the route table consumed by router.NewTree.")
 	b.Line("func Routes() []router.Route {")
@@ -914,6 +923,176 @@ func emitSSRErrorAdapter(b *Builder, ei errorImport) {
 	b.Line("")
 }
 
+// emitRouteRenderChains writes one renderChain__<routeIdent> function per
+// route that has at least one layout, plus one renderErrorChain__<routeIdent>
+// per route with an error boundary. Both fold the layout-composition loop
+// (previously rebuilt as runtime closures in pipeline.go and errors.go)
+// into a per-route emit so the runtime stores a single function pointer
+// rather than a slice of LayoutHandler closures.
+//
+// renderChain composes outer→inner around the page handler:
+//
+//	render__layout__<l0>(w, ctx, layoutDatas[0], func(w) error {
+//	  return render__layout__<l1>(w, ctx, layoutDatas[1], func(w) error {
+//	    return page(w, ctx, pageData)
+//	  })
+//	})
+//
+// renderErrorChain wraps the route's error template with the surviving
+// outer-N layouts (depth from ScannedRoute.ErrorBoundaryLayoutDepth)
+// and passes nil layoutData to each — matching the previous behavior
+// in renderErrorBoundary. The error template adapter (renderError__
+// <errorAlias>) is reused for the innermost call.
+func emitRouteRenderChains(b *Builder, entries []entry, layoutByPath map[string]layoutImport, errorAliasByPath map[string]string) {
+	emitted := false
+	for _, e := range entries {
+		emitChain := e.route.HasPage && len(e.route.LayoutPackagePaths) > 0
+		emitErrChain := e.route.ErrorBoundaryPackagePath != "" && errorAliasByPath[e.route.ErrorBoundaryPackagePath] != ""
+		if !emitted && (emitChain || emitErrChain) {
+			emitLayoutDataAtHelper(b)
+			emitted = true
+		}
+		emitRouteRenderChain(b, e.route, layoutByPath)
+		emitRouteRenderErrorChain(b, e.route, layoutByPath, errorAliasByPath)
+	}
+}
+
+// emitLayoutDataAtHelper writes the helper read used by every
+// renderChain__<routeIdent> emit. Hoisted so each route's chain expression
+// stays a single `return render__layout__<...>` line rather than dragging
+// in a per-call bounds check that bloats generated code.
+func emitLayoutDataAtHelper(b *Builder) {
+	b.Line("// layoutDataAt returns layoutDatas[i] when i is within bounds, otherwise nil.")
+	b.Line("// Used by per-route renderChain__<routeIdent> emits to keep the chain expression")
+	b.Line("// shape uniform regardless of how many entries the pipeline supplied.")
+	b.Line("func layoutDataAt(layoutDatas []any, i int) any {")
+	b.Indent()
+	b.Line("if i < len(layoutDatas) {")
+	b.Indent()
+	b.Line("return layoutDatas[i]")
+	b.Dedent()
+	b.Line("}")
+	b.Line("return nil")
+	b.Dedent()
+	b.Line("}")
+	b.Line("")
+}
+
+// emitRouteRenderChain emits renderChain__<routeIdent> when the route has
+// at least one layout. Routes without layouts get no emit; the runtime
+// leaves Route.RenderChain == nil and the pipeline calls Page directly.
+func emitRouteRenderChain(b *Builder, r routescan.ScannedRoute, layoutByPath map[string]layoutImport) {
+	if !r.HasPage || len(r.LayoutPackagePaths) == 0 {
+		return
+	}
+	ident := routeIdent(r.Segments)
+	b.Linef("// renderChain__%s composes the route's layout chain (outer→inner)", ident)
+	b.Linef("// around the page handler. Generated per-route so the pipeline does not")
+	b.Linef("// rebuild a closure stack on every request.")
+	b.Linef("func renderChain__%s(w *render.Writer, ctx *kit.RenderCtx, page router.PageHandler, pageData any, layoutDatas []any) error {", ident)
+	b.Indent()
+	emitChainBody(b, r.LayoutPackagePaths, layoutByPath, "page(w, ctx, pageData)")
+	b.Dedent()
+	b.Line("}")
+	b.Line("")
+}
+
+// emitRouteRenderErrorChain emits renderErrorChain__<routeIdent> when the
+// route has an error boundary. The function composes the surviving
+// outer-layout prefix (depth = r.ErrorBoundaryLayoutDepth) around the
+// error-template adapter. nil layoutData propagates to each layout —
+// matching the legacy renderErrorBoundary behavior where error renders
+// did not see layout data.
+func emitRouteRenderErrorChain(b *Builder, r routescan.ScannedRoute, layoutByPath map[string]layoutImport, errorAliasByPath map[string]string) {
+	if r.ErrorBoundaryPackagePath == "" {
+		return
+	}
+	errAlias, ok := errorAliasByPath[r.ErrorBoundaryPackagePath]
+	if !ok || errAlias == "" {
+		return
+	}
+	ident := routeIdent(r.Segments)
+	depth := r.ErrorBoundaryLayoutDepth
+	if depth < 0 {
+		depth = 0
+	}
+	if depth > len(r.LayoutPackagePaths) {
+		depth = len(r.LayoutPackagePaths)
+	}
+	survivingLayouts := r.LayoutPackagePaths[:depth]
+
+	b.Linef("// renderErrorChain__%s composes the surviving outer-layout prefix", ident)
+	b.Linef("// around the route's _error.svelte handler. The boundary depth (%d)", depth)
+	b.Linef("// is baked in; layoutData is intentionally nil per legacy behavior.")
+	b.Linef("func renderErrorChain__%s(w *render.Writer, ctx *kit.RenderCtx, safe kit.SafeError, layoutDatas []any) error {", ident)
+	b.Indent()
+	b.Line("_ = layoutDatas")
+	innerCall := fmt.Sprintf("renderError__%s(w, ctx, safe)", errAlias)
+	emitErrorChainBody(b, survivingLayouts, layoutByPath, innerCall)
+	b.Dedent()
+	b.Line("}")
+	b.Line("")
+}
+
+// emitChainBody writes the success-path layout composition. For zero
+// layouts it just runs the inner expression. For N layouts it writes
+// nested children-callback closures wrapping inner.
+func emitChainBody(b *Builder, layoutPaths []string, layoutByPath map[string]layoutImport, innerCall string) {
+	if len(layoutPaths) == 0 {
+		b.Linef("return %s", innerCall)
+		return
+	}
+	openLayoutCalls(b, layoutPaths, layoutByPath, innerCall, false)
+}
+
+// emitErrorChainBody writes the error-path layout composition. Each
+// layout receives nil for its data parameter, matching the legacy
+// renderErrorBoundary behavior.
+func emitErrorChainBody(b *Builder, layoutPaths []string, layoutByPath map[string]layoutImport, innerCall string) {
+	if len(layoutPaths) == 0 {
+		b.Linef("return %s", innerCall)
+		return
+	}
+	openLayoutCalls(b, layoutPaths, layoutByPath, innerCall, true)
+}
+
+// openLayoutCalls emits the outer→inner layout-composition Go code as a
+// single `return render__layout__<l0>(...)` expression. nilData=true
+// passes a nil layoutData to every wrapper (error path); nilData=false
+// reads from layoutDatas[i] (success path).
+func openLayoutCalls(b *Builder, layoutPaths []string, layoutByPath map[string]layoutImport, innerCall string, nilData bool) {
+	// Build the nested expression depth-first. For three layouts l0,l1,l2:
+	//   return render__layout__<l0>(w, ctx, d0, func(w) error {
+	//     return render__layout__<l1>(w, ctx, d1, func(w) error {
+	//       return render__layout__<l2>(w, ctx, d2, func(w) error {
+	//         return <innerCall>
+	//       })
+	//     })
+	//   })
+	for i, path := range layoutPaths {
+		li, ok := layoutByPath[path]
+		if !ok {
+			// Layout package missing from import map — emit a defensive
+			// passthrough so the build still compiles. This shouldn't
+			// happen in practice (every layout in r.LayoutPackagePaths
+			// appears in layoutImports), but bailing here keeps the
+			// generated file syntactically valid.
+			continue
+		}
+		dataExpr := "nil"
+		if !nilData {
+			dataExpr = fmt.Sprintf("layoutDataAt(layoutDatas, %d)", i)
+		}
+		b.Linef("return render__layout__%s(w, ctx, %s, func(w *render.Writer) error {", li.alias, dataExpr)
+		b.Indent()
+	}
+	b.Linef("return %s", innerCall)
+	for range layoutPaths {
+		b.Dedent()
+		b.Line("})")
+	}
+}
+
 func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutByPath map[string]layoutImport, errorAliasByPath map[string]string, routeOptions map[string]kit.PageOptions, pageHeads map[string]bool, clientKeys map[string]string, ssrRoutes map[string]string, fallbackByRoute map[string]string) {
 	b.Line("{")
 	b.Indent()
@@ -956,17 +1135,14 @@ func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutBy
 		b.Linef("Actions: %s.Actions,", alias)
 	}
 	if len(r.LayoutPackagePaths) > 0 {
-		b.Line("LayoutChain: []router.LayoutHandler{")
-		b.Indent()
-		for _, p := range r.LayoutPackagePaths {
-			li, ok := layoutByPath[p]
-			if !ok {
-				continue
-			}
-			b.Linef("render__layout__%s,", li.alias)
+		// RenderChain folds the layout-composition closure stack into a
+		// single per-route function emitted by emitRouteRenderChain.
+		// Server-only routes do not get a RenderChain even if they share
+		// a layout dir — their Page handler is nil so the pipeline never
+		// invokes RenderChain for them.
+		if r.HasPage {
+			b.Linef("RenderChain: renderChain__%s,", routeIdent(r.Segments))
 		}
-		b.Dedent()
-		b.Line("},")
 
 		anyServer := false
 		anyHead := false
@@ -1020,10 +1196,9 @@ func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutBy
 	emitOptionsField(b, r.Pattern, routeOptions)
 	if r.ErrorBoundaryPackagePath != "" {
 		if ea, ok := errorAliasByPath[r.ErrorBoundaryPackagePath]; ok && ea != "" {
-			b.Linef("Error: renderError__%s,", ea)
-			if r.ErrorBoundaryLayoutDepth > 0 {
-				b.Linef("ErrorLayoutDepth: %d,", r.ErrorBoundaryLayoutDepth)
-			}
+			// renderErrorChain__<routeIdent> wraps the surviving outer-layout
+			// prefix around renderError__<errAlias> at compile time.
+			b.Linef("RenderError: renderErrorChain__%s,", routeIdent(r.Segments))
 		}
 	}
 	b.Dedent()

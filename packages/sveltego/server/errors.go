@@ -177,7 +177,7 @@ func (s *Server) handlePipelineError(w http.ResponseWriter, r *http.Request, ev 
 // boundary when one applies; otherwise it falls back to the plain-text
 // writer that has handled error responses since Phase 0h.
 func (s *Server) respondWithError(w http.ResponseWriter, r *http.Request, ev *kit.RequestEvent, route *router.Route, safe kit.SafeError, original error) {
-	if route == nil || route.Error == nil {
+	if route == nil || route.RenderError == nil {
 		s.writeSafeError(w, r, ev, safe, original)
 		return
 	}
@@ -190,16 +190,12 @@ func (s *Server) respondWithError(w http.ResponseWriter, r *http.Request, ev *ki
 	}
 }
 
-// renderErrorBoundary composes the outer-layout chain (LayoutChain[:depth])
-// around the route's Error handler and writes the resulting HTML response.
-// The status code mirrors safe.HTTPStatus(); cookies queued on ev are
-// flushed before the write.
+// renderErrorBoundary writes the route's _error.svelte response. The
+// generated RenderError closure embeds the surviving outer-layout
+// composition; the pipeline only passes context, the SafeError, and
+// the layoutDatas slice. Status mirrors safe.HTTPStatus(); cookies
+// queued on ev are flushed before the write.
 func (s *Server) renderErrorBoundary(w http.ResponseWriter, r *http.Request, ev *kit.RequestEvent, route *router.Route, safe kit.SafeError, original error) error {
-	depth := route.ErrorLayoutDepth
-	if depth > len(route.LayoutChain) {
-		depth = len(route.LayoutChain)
-	}
-
 	buf := render.Acquire()
 	defer render.Release(buf)
 
@@ -218,20 +214,9 @@ func (s *Server) renderErrorBoundary(w http.ResponseWriter, r *http.Request, ev 
 		rctx = &kit.RenderCtx{Request: r}
 	}
 
-	inner := func(buf *render.Writer) error {
-		return route.Error(buf, rctx, safe)
-	}
-	for i := depth - 1; i >= 0; i-- {
-		layout := route.LayoutChain[i]
-		next := inner
-		inner = func(buf *render.Writer) error {
-			return layout(buf, rctx, nil, next)
-		}
-	}
-
 	buf.WriteString(s.shellHead)
 	buf.WriteString(s.shellMid)
-	if err := inner(buf); err != nil {
+	if err := route.RenderError(buf, rctx, safe, nil); err != nil {
 		return err
 	}
 	buf.WriteString(s.shellTail)

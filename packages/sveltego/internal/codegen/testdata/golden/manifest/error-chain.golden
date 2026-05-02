@@ -101,31 +101,99 @@ func renderError__page_routes_admin(w *render.Writer, ctx *kit.RenderCtx, safe k
 	return page_routes_admin.ErrorPage{}.Render(w, ctx, safe)
 }
 
+// layoutDataAt returns layoutDatas[i] when i is within bounds, otherwise nil.
+// Used by per-route renderChain__<routeIdent> emits to keep the chain expression
+// shape uniform regardless of how many entries the pipeline supplied.
+func layoutDataAt(layoutDatas []any, i int) any {
+	if i < len(layoutDatas) {
+		return layoutDatas[i]
+	}
+	return nil
+}
+
+// renderChain__Index composes the route's layout chain (outer→inner)
+// around the page handler. Generated per-route so the pipeline does not
+// rebuild a closure stack on every request.
+func renderChain__Index(w *render.Writer, ctx *kit.RenderCtx, page router.PageHandler, pageData any, layoutDatas []any) error {
+	return render__layout__page_routes(w, ctx, layoutDataAt(layoutDatas, 0), func(w *render.Writer) error {
+		return page(w, ctx, pageData)
+	})
+}
+
+// renderErrorChain__Index composes the surviving outer-layout prefix
+// around the route's _error.svelte handler. The boundary depth (1)
+// is baked in; layoutData is intentionally nil per legacy behavior.
+func renderErrorChain__Index(w *render.Writer, ctx *kit.RenderCtx, safe kit.SafeError, layoutDatas []any) error {
+	_ = layoutDatas
+	return render__layout__page_routes(w, ctx, nil, func(w *render.Writer) error {
+		return renderError__page_routes(w, ctx, safe)
+	})
+}
+
+// renderChain__Admin composes the route's layout chain (outer→inner)
+// around the page handler. Generated per-route so the pipeline does not
+// rebuild a closure stack on every request.
+func renderChain__Admin(w *render.Writer, ctx *kit.RenderCtx, page router.PageHandler, pageData any, layoutDatas []any) error {
+	return render__layout__page_routes(w, ctx, layoutDataAt(layoutDatas, 0), func(w *render.Writer) error {
+		return render__layout__page_routes_admin(w, ctx, layoutDataAt(layoutDatas, 1), func(w *render.Writer) error {
+			return page(w, ctx, pageData)
+		})
+	})
+}
+
+// renderErrorChain__Admin composes the surviving outer-layout prefix
+// around the route's _error.svelte handler. The boundary depth (2)
+// is baked in; layoutData is intentionally nil per legacy behavior.
+func renderErrorChain__Admin(w *render.Writer, ctx *kit.RenderCtx, safe kit.SafeError, layoutDatas []any) error {
+	_ = layoutDatas
+	return render__layout__page_routes(w, ctx, nil, func(w *render.Writer) error {
+		return render__layout__page_routes_admin(w, ctx, nil, func(w *render.Writer) error {
+			return renderError__page_routes_admin(w, ctx, safe)
+		})
+	})
+}
+
+// renderChain__AdminUsers composes the route's layout chain (outer→inner)
+// around the page handler. Generated per-route so the pipeline does not
+// rebuild a closure stack on every request.
+func renderChain__AdminUsers(w *render.Writer, ctx *kit.RenderCtx, page router.PageHandler, pageData any, layoutDatas []any) error {
+	return render__layout__page_routes(w, ctx, layoutDataAt(layoutDatas, 0), func(w *render.Writer) error {
+		return render__layout__page_routes_admin(w, ctx, layoutDataAt(layoutDatas, 1), func(w *render.Writer) error {
+			return page(w, ctx, pageData)
+		})
+	})
+}
+
+// renderErrorChain__AdminUsers composes the surviving outer-layout prefix
+// around the route's _error.svelte handler. The boundary depth (2)
+// is baked in; layoutData is intentionally nil per legacy behavior.
+func renderErrorChain__AdminUsers(w *render.Writer, ctx *kit.RenderCtx, safe kit.SafeError, layoutDatas []any) error {
+	_ = layoutDatas
+	return render__layout__page_routes(w, ctx, nil, func(w *render.Writer) error {
+		return render__layout__page_routes_admin(w, ctx, nil, func(w *render.Writer) error {
+			return renderError__page_routes_admin(w, ctx, safe)
+		})
+	})
+}
+
 // Routes returns the route table consumed by router.NewTree.
 func Routes() []router.Route {
 	return []router.Route{
 		{
-			Pattern:  `/`,
-			Segments: []router.Segment{},
-			Page:     render__page_routes,
-			LayoutChain: []router.LayoutHandler{
-				render__layout__page_routes,
-			},
-			Error:            renderError__page_routes,
-			ErrorLayoutDepth: 1,
+			Pattern:     `/`,
+			Segments:    []router.Segment{},
+			Page:        render__page_routes,
+			RenderChain: renderChain__Index,
+			RenderError: renderErrorChain__Index,
 		},
 		{
 			Pattern: `/admin`,
 			Segments: []router.Segment{
 				{Kind: router.SegmentStatic, Value: `admin`},
 			},
-			Page: render__page_routes_admin,
-			LayoutChain: []router.LayoutHandler{
-				render__layout__page_routes,
-				render__layout__page_routes_admin,
-			},
-			Error:            renderError__page_routes_admin,
-			ErrorLayoutDepth: 2,
+			Page:        render__page_routes_admin,
+			RenderChain: renderChain__Admin,
+			RenderError: renderErrorChain__Admin,
 		},
 		{
 			Pattern: `/admin/users`,
@@ -133,13 +201,9 @@ func Routes() []router.Route {
 				{Kind: router.SegmentStatic, Value: `admin`},
 				{Kind: router.SegmentStatic, Value: `users`},
 			},
-			Page: render__page_routes_admin_users,
-			LayoutChain: []router.LayoutHandler{
-				render__layout__page_routes,
-				render__layout__page_routes_admin,
-			},
-			Error:            renderError__page_routes_admin,
-			ErrorLayoutDepth: 2,
+			Page:        render__page_routes_admin_users,
+			RenderChain: renderChain__AdminUsers,
+			RenderError: renderErrorChain__AdminUsers,
 		},
 	}
 }
