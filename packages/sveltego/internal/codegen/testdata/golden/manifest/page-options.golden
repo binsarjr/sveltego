@@ -2,8 +2,6 @@
 package gen
 
 import (
-	"fmt"
-
 	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 	"github.com/binsarjr/sveltego/packages/sveltego/render"
 	"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
