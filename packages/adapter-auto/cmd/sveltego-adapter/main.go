@@ -8,7 +8,7 @@
 //	sveltego-adapter build --target=server   --binary <path> --out dist/
 //	sveltego-adapter build --target=docker   --out dist/
 //	sveltego-adapter build --target=lambda   --module <path> --root <project>
-//	sveltego-adapter build --target=static   --root <project>     # blocked
+//	sveltego-adapter build --target=static   --root <project> --out dist/
 //	sveltego-adapter build --target=cloudflare                     # blocked
 //	sveltego-adapter doc   --target=<name>
 //	sveltego-adapter targets
@@ -80,6 +80,7 @@ func runBuild(args []string, _, _ io.Writer) error {
 	handler := fs.String("handler", "", "SAM logical-id (lambda target)")
 	memory := fs.Int("memory-mb", 0, "Lambda memory size MB (default 512)")
 	timeout := fs.Int("timeout", 0, "Lambda timeout seconds (default 30)")
+	failOnDynamic := fs.Bool("fail-on-dynamic", false, "static target: fail if any non-prerenderable route exists")
 	if err := fs.Parse(args); err != nil {
 		return fmt.Errorf("%w: %s", errUsage, err.Error())
 	}
@@ -130,6 +131,7 @@ func runBuild(args []string, _, _ io.Writer) error {
 		HandlerName:    *handler,
 		MemoryMB:       *memory,
 		TimeoutSeconds: *timeout,
+		FailOnDynamic:  *failOnDynamic,
 	})
 }
 
@@ -177,7 +179,7 @@ Commands:
   help                             Show this message
 
 Targets:
-  server, docker, lambda, static (blocked on #65), cloudflare (blocked)
+  server, docker, lambda, static, cloudflare (blocked)
 
 Examples:
   sveltego-adapter build --target=server --binary ./app --out ./dist

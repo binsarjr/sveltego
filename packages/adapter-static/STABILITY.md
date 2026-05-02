@@ -1,8 +1,8 @@
 # Stability — adapter-static
 
-Last updated: 2026-04-30 · Version: pre-alpha
+Last updated: 2026-05-02 · Version: pre-alpha
 
-Tiers per [RFC #97](https://github.com/binsarjr/sveltego/issues/97). Pre-`v0.1` every export is implicitly experimental; this file populates as APIs land. Note: Build is currently a stub returning ErrNotImplemented; the signature is reserved.
+Tiers per [RFC #97](https://github.com/binsarjr/sveltego/issues/97). Pre-`v0.1` every export is implicitly experimental.
 
 ## Stable
 
@@ -10,15 +10,21 @@ Tiers per [RFC #97](https://github.com/binsarjr/sveltego/issues/97). Pre-`v0.1` 
 
 ## Experimental
 
-- `adapterstatic.Build` (stub — returns ErrNotImplemented)
+- `adapterstatic.Build` — drives prerender + packaging end-to-end (#447)
 - `adapterstatic.BuildContext`
+- `adapterstatic.Runner` — pluggable prerender driver
+- `adapterstatic.RunInfo`
+- `adapterstatic.ErrDynamicRoutes`
+- `adapterstatic.PrerenderManifestFilename`
+- `adapterstatic.DefaultMainPackage`
 - `adapterstatic.Doc`
 - `adapterstatic.Name`
-- `adapterstatic.ErrNotImplemented`
 
 ## Deprecated
 
-(none yet)
+- `adapterstatic.ErrNotImplemented` — removed when the adapter shipped
+  in #447. Callers that wrapped the sentinel must update to the new
+  validation-error surface.
 
 ## Internal-only (do not import even though exported)
 
