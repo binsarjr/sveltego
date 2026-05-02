@@ -250,36 +250,20 @@ func TestBuildDefaultEnvLookupUsesOsEnv(t *testing.T) {
 	}
 }
 
-// TestBuildSubstitutesPublicEnvInLayout verifies that env.StaticPublic
-// calls in _layout.svelte are also inlined at build time.
+// TestBuildSubstitutesPublicEnvInLayout verified that
+// env.StaticPublic calls in _layout.svelte mustaches were inlined at
+// build time when the legacy Mustache-Go layout pipeline owned the
+// .svelte body. Post-ADR-0008 (#410, "pivot to pure-Svelte
+// templates") Go expressions in mustaches are out, and post-#478
+// every pure-Svelte layout ssr-transpiles via Option B — which has
+// no equivalent build-time env-substitution pass. The Mustache-Go
+// path that drove `substituteStaticEnv` for layouts is reached by
+// nothing in production.
+//
+// The substitution mechanism itself remains unit-tested in this file
+// (TestSubstituteStaticEnv*); only the integration over a layout
+// .svelte source has nowhere to land. Re-enable once a "Go
+// expressions in pure-Svelte source" RFC introduces a new substrate.
 func TestBuildSubstitutesPublicEnvInLayout(t *testing.T) {
-	root := envSubstRoot(t)
-
-	writeFile(t, filepath.Join(root, "src", "routes", "_layout.svelte"),
-		`<div class={env.StaticPublic("PUBLIC_THEME")}><slot/></div>`)
-	writePlainPage(t, root, `<p>hello</p>`)
-
-	lookup := func(key string) (string, bool) {
-		if key == "PUBLIC_THEME" {
-			return "dark", true
-		}
-		return "", false
-	}
-
-	_, err := Build(context.Background(), BuildOptions{ProjectRoot: root, EnvLookup: lookup})
-	if err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-
-	b, err := os.ReadFile(filepath.Join(root, ".gen", "routes", "layout.gen.go"))
-	if err != nil {
-		t.Fatalf("read layout.gen.go: %v", err)
-	}
-	src := string(b)
-	if !strings.Contains(src, `"dark"`) {
-		t.Errorf("layout.gen.go missing literal; got:\n%s", src)
-	}
-	if strings.Contains(src, "env.StaticPublic") {
-		t.Errorf("env.StaticPublic not removed from layout; got:\n%s", src)
-	}
+	t.Skip("Mustache-Go layout pipeline retired by #478; env.StaticPublic in pure-Svelte mustaches is out per ADR 0008. Unit coverage stays via TestSubstituteStaticEnv*.")
 }

@@ -119,8 +119,8 @@ type errorPlan struct {
 //     or annotate the route to opt into the sidecar fallback.
 func runSSRTranspile(ctx context.Context, projectRoot, outDir, modulePath string, logger *slog.Logger, scan *routescan.ScanResult, routeOptions map[string]kit.PageOptions) (SSRPlanResult, error) {
 	transpilePlan, fallback := planSSR(scan, routeOptions)
-	layoutPlans := planSSRLayouts(scan, transpilePlan)
-	errorPlans := planSSRErrors(scan, transpilePlan)
+	layoutPlans := planSSRLayouts(scan, routeOptions)
+	errorPlans := planSSRErrors(scan, routeOptions)
 	result := SSRPlanResult{Fallback: fallback}
 	if len(transpilePlan) == 0 && len(fallback) == 0 && len(layoutPlans) == 0 && len(errorPlans) == 0 {
 		return result, nil
@@ -551,26 +551,29 @@ func planSSR(scan *routescan.ScanResult, routeOptions map[string]kit.PageOptions
 }
 
 // planSSRLayouts collects every unique layout package referenced by a
-// route that qualifies for the Phase 6 SSR transpile (#456). Layouts
-// shared between sibling routes are deduplicated by package path; only
-// layouts reachable from a Svelte-SSR-eligible page route are included.
+// pure-Svelte SSR-eligible route (#456, #478). Layouts shared between
+// sibling routes are deduplicated by package path.
+//
+// Eligibility matches planSSR's predicate MINUS the SSRFallback gate:
+// the page may opt out of build-time transpile via
+// `<!-- sveltego:ssr-fallback -->`, but its layout chain still renders
+// Go-side in both Phase 6 (transpile) and Phase 8 (sidecar fallback)
+// paths. Decoupling layout eligibility from page transpile lets blog
+// — where every page is fallback-annotated — still SSR-transpile its
+// root layout instead of falling back to Mustache-Go (#478).
 //
 // A layout with `_layout.server.go` drives shape inference via typegen
 // (KindLayout); a layout without a server file synthesises an empty
 // shape so the Lowerer leaves bare expressions alone but still hard-
 // errors on `data.X` access (matching the page contract).
-func planSSRLayouts(scan *routescan.ScanResult, pagePlans []ssrPlan) []layoutPlan {
+func planSSRLayouts(scan *routescan.ScanResult, routeOptions map[string]kit.PageOptions) []layoutPlan {
 	if scan == nil {
 		return nil
-	}
-	pageRoutes := make(map[string]struct{}, len(pagePlans))
-	for _, p := range pagePlans {
-		pageRoutes[p.route.Pattern] = struct{}{}
 	}
 	seen := make(map[string]struct{})
 	plans := make([]layoutPlan, 0)
 	for _, r := range scan.Routes {
-		if _, ok := pageRoutes[r.Pattern]; !ok {
+		if !routeEligibleForSSRChain(r, routeOptions) {
 			continue
 		}
 		for i, layoutDir := range r.LayoutChain {
@@ -614,31 +617,31 @@ func planSSRLayouts(scan *routescan.ScanResult, pagePlans []ssrPlan) []layoutPla
 	return plans
 }
 
-// planSSRErrors collects every unique error-boundary package referenced
-// by a route that qualifies for the Phase 6 SSR transpile. Boundaries
-// shared between sibling routes are deduplicated by package path; only
-// boundaries reachable from a Svelte-SSR-eligible page route are
-// included so error rendering and page rendering travel the same
-// transpile pipeline (#412).
+// planSSRErrors collects every unique error-boundary package
+// referenced by a pure-Svelte SSR-eligible route (#412, #478).
+// Boundaries shared between sibling routes are deduplicated by package
+// path.
+//
+// Eligibility matches planSSR's predicate MINUS the SSRFallback gate
+// (see planSSRLayouts for the rationale). Error boundaries always
+// render Go-side regardless of how the page itself reached the runtime,
+// so a fallback-annotated page must still surface its boundary through
+// the SSR transpile path.
 //
 // All error templates receive the same synthetic ErrorData shape — an
 // alias to kit.SafeError — so the Lowerer rewrites `data.code` →
 // `data.Code`, `data.message` → `data.Message`, `data.id` → `data.ID`.
 // The shape's field names mirror typegen's lowerFirst-of-Go-field
 // convention so user templates stay JS-camelCase as expected.
-func planSSRErrors(scan *routescan.ScanResult, pagePlans []ssrPlan) []errorPlan {
+func planSSRErrors(scan *routescan.ScanResult, routeOptions map[string]kit.PageOptions) []errorPlan {
 	if scan == nil {
 		return nil
-	}
-	pageRoutes := make(map[string]struct{}, len(pagePlans))
-	for _, p := range pagePlans {
-		pageRoutes[p.route.Pattern] = struct{}{}
 	}
 	shape := errorDataShape()
 	seen := make(map[string]struct{})
 	plans := make([]errorPlan, 0)
 	for _, r := range scan.Routes {
-		if _, ok := pageRoutes[r.Pattern]; !ok {
+		if !routeEligibleForSSRChain(r, routeOptions) {
 			continue
 		}
 		if r.ErrorBoundaryPackagePath == "" || r.ErrorBoundaryDir == "" {
@@ -656,6 +659,29 @@ func planSSRErrors(scan *routescan.ScanResult, pagePlans []ssrPlan) []errorPlan 
 		})
 	}
 	return plans
+}
+
+// routeEligibleForSSRChain reports whether a route's layout chain and
+// error boundary should travel the SSR Option B transpile path. The
+// predicate mirrors planSSR's Templates+SSR/Prerender check but
+// deliberately ignores `r.SSRFallback`: fallback-annotated pages still
+// render their layouts and errors Go-side at request time, so the
+// Phase 6 transpile path must cover their chain-mates too (#478).
+//
+// Returns false for non-page routes (REST endpoints), Mustache-template
+// routes, and routes that opt out of SSR entirely.
+func routeEligibleForSSRChain(r routescan.ScannedRoute, routeOptions map[string]kit.PageOptions) bool {
+	if !r.HasPage {
+		return false
+	}
+	opts, ok := routeOptions[r.Pattern]
+	if !ok {
+		return false
+	}
+	if opts.Templates != kit.TemplatesSvelte {
+		return false
+	}
+	return opts.SSR || opts.Prerender || opts.PrerenderAuto
 }
 
 // errorDataShape returns the synthetic typegen Shape used by the

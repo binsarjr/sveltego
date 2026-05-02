@@ -1,5 +1,9 @@
 <script lang="ts">
   let { children } = $props();
+
+  function toggleDark() {
+    document.documentElement.classList.toggle('dark');
+  }
 </script>
 
 <!--
@@ -17,7 +21,7 @@
       id="dark-toggle"
       type="button"
       class="rounded-md px-3 py-1.5 text-sm font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-      onclick="document.documentElement.classList.toggle('dark')"
+      onclick={toggleDark}
     >
       toggle dark
     </button>
