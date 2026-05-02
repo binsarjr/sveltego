@@ -276,8 +276,12 @@ func TestGenerateClientEntry_importsRouter(t *testing.T) {
 	for _, want := range []string{
 		`import Page from "../../routes/_page.svelte"`,
 		`import { startRouter } from "../__router/router"`,
-		"const component = mount(Page",
-		"startRouter({ component, payload, target: document.body })",
+		"import { hydrate, mount } from 'svelte'",
+		"const appShell = document.getElementById('app');",
+		"const target = appShell ?? document.body;",
+		"const attach = appShell ? mount : hydrate;",
+		"const component = attach(Page",
+		"startRouter({ component, payload, target });",
 	} {
 		if !strings.Contains(src, want) {
 			t.Errorf("entry missing %q:\n%s", want, src)
@@ -301,7 +305,7 @@ func TestGenerateClientEntry_snapshotImport(t *testing.T) {
 	})
 	for _, want := range []string{
 		`import Page, { snapshot } from "../../routes/_page.svelte"`,
-		"startRouter({ component, payload, target: document.body, snapshot })",
+		"startRouter({ component, payload, target, snapshot });",
 	} {
 		if !strings.Contains(src, want) {
 			t.Errorf("entry missing %q:\n%s", want, src)

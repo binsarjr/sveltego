@@ -193,21 +193,25 @@ func Build(ctx context.Context, opts BuildOptions) (*BuildResult, error) {
 			}
 			routeCount++
 
-			if !opts.NoClient {
-				ck, relSvelteFromRouter, cerr := emitClientEntry(opts.ProjectRoot, outDir, routesDir, route, pageName, hasSnapshot)
-				if cerr != nil {
-					return nil, cerr
-				}
-				clientRouteKeys = append(clientRouteKeys, ck)
-				// Vite's manifest keys facade entries by the source-relative
-				// path of the input file, not the input alias. Match the
-				// key Vite actually emits so route-tag injection finds the
-				// chunk at runtime.
-				clientKeysByPkg[route.PackagePath] = filepath.ToSlash(filepath.Join(outDir, "client", filepath.FromSlash(ck), "entry.ts"))
-				clientRouterMap[route.Pattern] = relSvelteFromRouter
-				if hasSnapshot {
-					clientSnapshotRoutes[route.Pattern] = true
-				}
+			// Path math runs unconditionally so the manifest's ClientKey
+			// stays wired even under `sveltego prerender` (NoClient=true).
+			// Without this, prerender would clobber manifest.gen.go and
+			// drop ClientKey from every route, leaving the frozen HTML
+			// without its <script type="module"> client bundle tag and
+			// breaking hydration on SSG pages.
+			ck, relSvelteFromRouter, cerr := emitClientEntry(opts.ProjectRoot, outDir, routesDir, route, pageName, hasSnapshot, !opts.NoClient)
+			if cerr != nil {
+				return nil, cerr
+			}
+			clientRouteKeys = append(clientRouteKeys, ck)
+			// Vite's manifest keys facade entries by the source-relative
+			// path of the input file, not the input alias. Match the
+			// key Vite actually emits so route-tag injection finds the
+			// chunk at runtime.
+			clientKeysByPkg[route.PackagePath] = filepath.ToSlash(filepath.Join(outDir, "client", filepath.FromSlash(ck), "entry.ts"))
+			clientRouterMap[route.Pattern] = relSvelteFromRouter
+			if hasSnapshot {
+				clientSnapshotRoutes[route.Pattern] = true
 			}
 		case route.HasServer:
 			if err := emitRESTRoute(opts.ProjectRoot, outDir, modulePath, route); err != nil {
@@ -388,18 +392,13 @@ func serviceWorkerEntry(projectRoot string) string {
 // component lazily without re-deriving the path. hasSnapshot wires the
 // snapshot capture/restore hooks into the initial-mount path so a
 // reload that lands on a route with persisted state restores it.
-func emitClientEntry(projectRoot, outDir, routesDir string, route routescan.ScannedRoute, pageName string, hasSnapshot bool) (string, string, error) {
+func emitClientEntry(projectRoot, outDir, routesDir string, route routescan.ScannedRoute, pageName string, hasSnapshot, writeFiles bool) (string, string, error) {
 	routesParent := filepath.Dir(routesDir)
 	relDir, err := filepath.Rel(routesParent, route.Dir)
 	if err != nil {
 		return "", "", fmt.Errorf("codegen: client entry rel path: %w", err)
 	}
 	routeKey := filepath.ToSlash(filepath.Join(relDir, strings.TrimSuffix(pageName, ".svelte")))
-
-	entryDir := filepath.Join(projectRoot, outDir, "client", filepath.FromSlash(routeKey))
-	if err := os.MkdirAll(entryDir, 0o755); err != nil {
-		return "", "", fmt.Errorf("codegen: mkdir client entry %s: %w", entryDir, err)
-	}
 
 	entryRelFromRoot := filepath.ToSlash(filepath.Join(outDir, "client", routeKey, "entry.ts"))
 	depth := len(strings.Split(filepath.ToSlash(filepath.Dir(entryRelFromRoot)), "/"))
@@ -408,8 +407,25 @@ func emitClientEntry(projectRoot, outDir, routesDir string, route routescan.Scan
 		return "", "", fmt.Errorf("codegen: client entry svelte rel path: %w", err)
 	}
 	svelteSrc := filepath.ToSlash(routeDirFromRoot) + "/" + pageName
-	relSvelte := vite.RelativeSveltePath(svelteSrc, depth)
 
+	// Path to the .svelte source from the SPA router directory
+	// (.gen/client/__router/) — depth from routes parent to project root
+	// is the same as for entry.ts, so router.ts at depth-3 ascends
+	// correspondingly.
+	routerDirFromRoot := filepath.ToSlash(filepath.Join(outDir, "client", "__router"))
+	routerDepth := len(strings.Split(routerDirFromRoot, "/"))
+	relSvelteFromRouter := vite.RelativeSveltePath(svelteSrc, routerDepth)
+
+	if !writeFiles {
+		return routeKey, relSvelteFromRouter, nil
+	}
+
+	entryDir := filepath.Join(projectRoot, outDir, "client", filepath.FromSlash(routeKey))
+	if err := os.MkdirAll(entryDir, 0o755); err != nil {
+		return "", "", fmt.Errorf("codegen: mkdir client entry %s: %w", entryDir, err)
+	}
+
+	relSvelte := vite.RelativeSveltePath(svelteSrc, depth)
 	// The per-route entry sits at .gen/client/<routeKey>/entry.ts; the
 	// shared router module lives at .gen/client/__router/router.ts. The
 	// relative path from the entry's directory walks up to .gen/client/
@@ -431,13 +447,6 @@ func emitClientEntry(projectRoot, outDir, routesDir string, route routescan.Scan
 		return "", "", fmt.Errorf("codegen: write enhance runtime %s: %w", enhanceAbs, err)
 	}
 
-	// Path to the .svelte source from the SPA router directory
-	// (.gen/client/__router/) — depth from routes parent to project root
-	// is the same as for entry.ts, so router.ts at depth-3 ascends
-	// correspondingly.
-	routerDirFromRoot := filepath.ToSlash(filepath.Join(outDir, "client", "__router"))
-	routerDepth := len(strings.Split(routerDirFromRoot, "/"))
-	relSvelteFromRouter := vite.RelativeSveltePath(svelteSrc, routerDepth)
 	return routeKey, relSvelteFromRouter, nil
 }
 

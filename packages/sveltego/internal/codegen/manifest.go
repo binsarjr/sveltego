@@ -370,21 +370,25 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 		}
 	}
 
+	// Any route entry emits an `Options: kit.PageOptions{...}` field via
+	// emitRouteEntry, so the manifest needs the kit import whenever
+	// entries exist — even template-only Svelte routes with no Page
+	// handler, no layout, no error, and default-matching options
+	// (#495). The earlier hasNonDefaultOptions gate missed this case
+	// when routeOptions wasn't populated for the pattern.
+	needsKit := hasPage || hasLayout || hasError || hasNonDefaultOptions || len(entries) > 0
+	needsRender := hasPage || hasLayout || hasError
 	b.Line("import (")
 	b.Indent()
-	switch {
-	case hasPage || hasLayout:
-		if usesFmt {
-			b.Line(`"fmt"`)
-			b.Line("")
-		}
+	if usesFmt {
+		b.Line(`"fmt"`)
+		b.Line("")
+	}
+	if needsKit {
 		b.Line(`"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"`)
+	}
+	if needsRender {
 		b.Line(`"github.com/binsarjr/sveltego/packages/sveltego/render"`)
-	case hasError:
-		b.Line(`"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"`)
-		b.Line(`"github.com/binsarjr/sveltego/packages/sveltego/render"`)
-	case hasNonDefaultOptions:
-		b.Line(`"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"`)
 	}
 	if hasSvelte {
 		b.Line(`server "github.com/binsarjr/sveltego/packages/sveltego/runtime/svelte/server"`)

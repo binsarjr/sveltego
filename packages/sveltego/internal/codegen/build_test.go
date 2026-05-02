@@ -360,7 +360,7 @@ export const snapshot = {
 	if !bytes.Contains(rootEntryBytes, []byte(`import Page, { snapshot } from`)) {
 		t.Errorf("snapshot route entry.ts missing snapshot import:\n%s", rootEntryBytes)
 	}
-	if !bytes.Contains(rootEntryBytes, []byte(`startRouter({ component, payload, target: document.body, snapshot })`)) {
+	if !bytes.Contains(rootEntryBytes, []byte(`startRouter({ component, payload, target, snapshot });`)) {
 		t.Errorf("snapshot route entry.ts must hand snapshot to startRouter:\n%s", rootEntryBytes)
 	}
 
