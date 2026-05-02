@@ -435,19 +435,15 @@ func buildClientManifest(routes []router.Route) []clientManifestEntry {
 	return out
 }
 
-// marshalPayload encodes p as JSON and escapes sequences that would break
-// a <script> tag context: "</" and "<!--". The escaping matches the
-// writeEscapedScriptJSON approach used for streaming resolve scripts.
-func marshalPayload(p clientPayload) ([]byte, error) {
-	raw, err := json.Marshal(p)
-	if err != nil {
-		return nil, err
-	}
-	// Fast-path: nothing to escape.
+// escapeScriptSpecialInPlace rewrites the input bytes so any "</" and
+// "<!--" sequences are neutralized via "<", preventing a payload
+// containing those bytes from terminating the enclosing <script> tag or
+// opening an HTML comment. Operates on a fresh slice — the input is not
+// retained — so callers may pass a shared buffer's slice safely.
+func escapeScriptSpecial(raw []byte) []byte {
 	if indexScriptSpecial(raw) < 0 {
-		return raw, nil
+		return raw
 	}
-	// Slow-path: rebuild with "</" → "</" and "<!--" → "<!--".
 	var out []byte
 	i := 0
 	for i < len(raw) {
@@ -461,7 +457,7 @@ func marshalPayload(p clientPayload) ([]byte, error) {
 		i++
 	}
 	out = append(out, raw...)
-	return out, nil
+	return out
 }
 
 // buildClientPayload assembles a clientPayload from the data gathered
@@ -518,15 +514,20 @@ func (s *Server) applyInitialPayloadFields(p *clientPayload) {
 
 // emitPayloadScriptTag writes the hydration payload as a JSON <script>
 // tag into buf. Uses id "sveltego-data" so client entry.ts can read it
-// via document.getElementById("sveltego-data").
-func emitPayloadScriptTag(buf *render.Writer, p clientPayload) {
-	encoded, err := marshalPayload(p)
-	if err != nil {
+// via document.getElementById("sveltego-data"). The splice writer reuses
+// pre-encoded stable fields owned by s; the assembled bytes are then
+// passed through escapeScriptSpecial so any "</" or "<!--" inside
+// per-request data can't break out of the script tag.
+func (s *Server) emitPayloadScriptTag(buf *render.Writer, p clientPayload) {
+	scratch := acquirePayloadBuf()
+	defer releasePayloadBuf(scratch)
+	if err := s.writePayloadJSON(scratch, p); err != nil {
 		// Emit an empty payload rather than omitting the tag; the client
 		// will mount with nil data rather than crashing on a missing element.
 		buf.WriteString(`<script id="sveltego-data" type="application/json">{}</script>`)
 		return
 	}
+	encoded := escapeScriptSpecial(scratch.Bytes())
 	buf.WriteString(`<script id="sveltego-data" type="application/json">`)
 	buf.WriteRaw(bytesAsString(encoded))
 	buf.WriteString(`</script>`)
@@ -581,10 +582,14 @@ func (s *Server) renderDataJSON(r *http.Request, ev *kit.RequestEvent, route *ro
 	if lctx != nil {
 		payload.Deps = lctx.CollectDeps()
 	}
-	body, err := json.Marshal(payload)
-	if err != nil {
+	scratch := acquirePayloadBuf()
+	if err := s.writePayloadJSON(scratch, payload); err != nil {
+		releasePayloadBuf(scratch)
 		return nil, fmt.Errorf("server: marshal __data.json: %w", err)
 	}
+	body := make([]byte, scratch.Len())
+	copy(body, scratch.Bytes())
+	releasePayloadBuf(scratch)
 	headers := http.Header{}
 	headers.Set("Content-Type", "application/json")
 	headers.Set("Content-Length", strconv.Itoa(len(body)))
@@ -707,7 +712,7 @@ func (s *Server) renderSvelteShell(r *http.Request, ev *kit.RequestEvent, route 
 	if lctx != nil {
 		payload.Deps = lctx.CollectDeps()
 	}
-	emitPayloadScriptTag(buf, payload)
+	s.emitPayloadScriptTag(buf, payload)
 	if s.serviceWorker != "" {
 		buf.WriteString(s.serviceWorker)
 	}
@@ -881,7 +886,7 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 	if lctx != nil {
 		payload.Deps = lctx.CollectDeps()
 	}
-	emitPayloadScriptTag(buf, payload)
+	s.emitPayloadScriptTag(buf, payload)
 	if s.serviceWorker != "" {
 		buf.WriteString(s.serviceWorker)
 	}
@@ -1055,7 +1060,7 @@ func (s *Server) renderStreaming(w http.ResponseWriter, r *http.Request, ev *kit
 	if err := inner(buf); err != nil {
 		return err
 	}
-	emitPayloadScriptTag(buf, payload)
+	s.emitPayloadScriptTag(buf, payload)
 
 	ctx := r.Context()
 

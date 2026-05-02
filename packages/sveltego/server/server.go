@@ -170,6 +170,25 @@ type Server struct {
 	// route modules without a separate manifest fetch (#37).
 	clientManifest []clientManifestEntry
 
+	// encodedManifest is the pre-marshaled `,"manifest":<json>` slice
+	// for the initial SSR payload. Computed at New() so each request
+	// only splices bytes instead of re-running reflection over the
+	// full route table. Nil when no Page-bearing routes exist (no SPA
+	// manifest needed). See #488.
+	encodedManifest []byte
+	// encodedAppVersion is the pre-marshaled `,"appVersion":"<hash>"`
+	// slice. Nil when no ViteManifest was supplied at construction.
+	encodedAppVersion []byte
+	// encodedVersionPoll is the pre-marshaled `,"versionPoll":{...}`
+	// slice. Nil when AppVersion is empty (poller has nothing to
+	// compare against).
+	encodedVersionPoll []byte
+	// encodedRouteIDs maps route.Pattern → pre-marshaled `"<pattern>"`
+	// JSON string bytes. Populated at New() for every route in the
+	// tree. The splice writer uses this to skip a per-request
+	// json.Marshal of the routeId field on the hot path.
+	encodedRouteIDs map[string][]byte
+
 	// initState is initPending/initReady/initFailed; read with atomic.
 	initState atomic.Int32
 	// initDone is closed once Init completes (success or failure).
@@ -275,30 +294,37 @@ func New(cfg Config) (*Server, error) {
 		swTag = serviceWorkerRegisterScript
 	}
 	done := make(chan struct{})
+	clientManifest := buildClientManifest(tree.Routes())
+	appVersion := computeAppVersion(cfg.ViteManifest)
+	resolvedPoll := cfg.VersionPoll.Resolve()
 	srv := &Server{
-		tree:            tree,
-		Logger:          logger,
-		hooks:           cfg.Hooks.WithDefaults(),
-		csp:             cfg.CSP,
-		cspTemplate:     kit.NewCSPTemplate(cfg.CSP),
-		streamTimeout:   streamTimeout,
-		cronTasks:       cfg.CronTasks,
-		shellHead:       head,
-		shellMid:        mid,
-		shellTail:       tail,
-		viteManifest:    vm,
-		viteBase:        viteBase,
-		serviceWorker:   swTag,
-		clientManifest:  buildClientManifest(tree.Routes()),
-		initDone:        done,
-		initTimeout:     initTimeout,
-		initPendingHTML: initPendingHTML,
-		initErrorHTML:   initErrorHTML,
-		prerender:       cfg.Prerender,
-		prerenderAuth:   cfg.PrerenderAuth,
-		fallbackConfig:  cfg.SSRFallback,
-		appVersion:      computeAppVersion(cfg.ViteManifest),
-		versionPoll:     cfg.VersionPoll.Resolve(),
+		tree:               tree,
+		Logger:             logger,
+		hooks:              cfg.Hooks.WithDefaults(),
+		csp:                cfg.CSP,
+		cspTemplate:        kit.NewCSPTemplate(cfg.CSP),
+		streamTimeout:      streamTimeout,
+		cronTasks:          cfg.CronTasks,
+		shellHead:          head,
+		shellMid:           mid,
+		shellTail:          tail,
+		viteManifest:       vm,
+		viteBase:           viteBase,
+		serviceWorker:      swTag,
+		clientManifest:     clientManifest,
+		encodedManifest:    encodePayloadField("manifest", clientManifest),
+		encodedAppVersion:  encodeAppVersionField(appVersion),
+		encodedVersionPoll: encodeVersionPollField(appVersion, resolvedPoll),
+		encodedRouteIDs:    encodeRouteIDs(tree.Routes()),
+		initDone:           done,
+		initTimeout:        initTimeout,
+		initPendingHTML:    initPendingHTML,
+		initErrorHTML:      initErrorHTML,
+		prerender:          cfg.Prerender,
+		prerenderAuth:      cfg.PrerenderAuth,
+		fallbackConfig:     cfg.SSRFallback,
+		appVersion:         appVersion,
+		versionPoll:        resolvedPoll,
 	}
 	// Start as ready so that callers using httptest.NewServer directly
 	// (without ListenAndServe or Init) see normal pipeline behavior.
