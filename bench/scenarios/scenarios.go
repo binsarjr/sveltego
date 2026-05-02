@@ -15,6 +15,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
@@ -22,6 +24,26 @@ import (
 	"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
 	svelteServer "github.com/binsarjr/sveltego/packages/sveltego/runtime/svelte/server"
 	"github.com/binsarjr/sveltego/packages/sveltego/server"
+)
+
+// Mode tags a scenario with the render mode under measurement so the CLI
+// driver and CI gate can run a subset of scenarios without parsing names.
+type Mode string
+
+const (
+	// ModeSSR is the request-time SSR pipeline: route match → Load →
+	// Render → shell + payload.
+	ModeSSR Mode = "ssr"
+	// ModeSSG is the prerendered static-file path: build-time HTML
+	// served by the static handler with no per-request work beyond OS
+	// file read + headers.
+	ModeSSG Mode = "ssg"
+	// ModeSPA is the SSR=false shell-only path: app.html shell + empty
+	// mount point, no Render emit, JSON payload computed from Load.
+	ModeSPA Mode = "spa"
+	// ModeStatic is the no-Load Svelte route: shell + empty payload,
+	// the cheapest pure-Svelte pipeline state.
+	ModeStatic Mode = "static"
 )
 
 // shell is the minimal app.html used by every scenario. The server
@@ -33,8 +55,16 @@ const shell = "<!doctype html><html><head>%sveltego.head%</head><body>%sveltego.
 type Scenario struct {
 	// Name is the human-readable label, used to derive benchmark names.
 	Name string
-	// Server is the sveltego server pre-built once per scenario.
+	// Mode tags the render mode this scenario measures.
+	Mode Mode
+	// Server is the sveltego server pre-built once per scenario. Nil
+	// when the scenario serves through Handler directly (e.g. SSG via
+	// the bare static handler).
 	Server *server.Server
+	// Handler, when non-nil, takes precedence over Server. Used by
+	// scenarios that exercise a bare http.Handler (SSG static files)
+	// to avoid spinning up the full server pipeline.
+	Handler http.Handler
 	// Request is a representative request for the scenario's hot route.
 	Request *http.Request
 }
@@ -45,7 +75,11 @@ type Scenario struct {
 // pass a fresh recorder per iteration so per-iter alloc counts are honest.
 func (s Scenario) Run(rec *httptest.ResponseRecorder) int {
 	rec.Body.Reset()
-	s.Server.ServeHTTP(rec, s.Request)
+	if s.Handler != nil {
+		s.Handler.ServeHTTP(rec, s.Request)
+	} else {
+		s.Server.ServeHTTP(rec, s.Request)
+	}
 	return rec.Body.Len()
 }
 
@@ -83,7 +117,23 @@ func All() ([]Scenario, error) {
 	if err != nil {
 		return nil, fmt.Errorf("ssr-heavy: %w", err)
 	}
-	return []Scenario{hello, list, detail, action, spa, ssrHello, ssrTypical, ssrHeavy}, nil
+	ssg, err := SSGServe()
+	if err != nil {
+		return nil, fmt.Errorf("ssg-serve: %w", err)
+	}
+	spaShell, err := SPAShell()
+	if err != nil {
+		return nil, fmt.Errorf("spa-shell: %w", err)
+	}
+	staticNoLoad, err := StaticNoLoad()
+	if err != nil {
+		return nil, fmt.Errorf("static-no-load: %w", err)
+	}
+	return []Scenario{
+		hello, list, detail, action, spa,
+		ssrHello, ssrTypical, ssrHeavy,
+		ssg, spaShell, staticNoLoad,
+	}, nil
 }
 
 // Hello renders a static greeting at "/".
@@ -102,6 +152,7 @@ func Hello() (Scenario, error) {
 	}
 	return Scenario{
 		Name:    "hello",
+		Mode:    ModeSSR,
 		Server:  srv,
 		Request: httptest.NewRequest(http.MethodGet, "/", nil),
 	}, nil
@@ -133,6 +184,7 @@ func List() (Scenario, error) {
 	}
 	return Scenario{
 		Name:    "list",
+		Mode:    ModeSSR,
 		Server:  srv,
 		Request: httptest.NewRequest(http.MethodGet, "/posts", nil),
 	}, nil
@@ -159,6 +211,7 @@ func Detail() (Scenario, error) {
 	}
 	return Scenario{
 		Name:    "detail",
+		Mode:    ModeSSR,
 		Server:  srv,
 		Request: httptest.NewRequest(http.MethodGet, "/posts/42", nil),
 	}, nil
@@ -187,6 +240,7 @@ func Action() (Scenario, error) {
 	}
 	return Scenario{
 		Name:    "action",
+		Mode:    ModeSSR,
 		Server:  srv,
 		Request: httptest.NewRequest(http.MethodPost, "/api/echo", nil),
 	}, nil
@@ -225,6 +279,7 @@ func SvelteSPA() (Scenario, error) {
 	}
 	return Scenario{
 		Name:    "svelte-spa",
+		Mode:    ModeSSR,
 		Server:  srv,
 		Request: httptest.NewRequest(http.MethodGet, "/spa", nil),
 	}, nil
@@ -287,6 +342,7 @@ func SSRHello() (Scenario, error) {
 	}
 	return Scenario{
 		Name:    "ssr-hello",
+		Mode:    ModeSSR,
 		Server:  srv,
 		Request: httptest.NewRequest(http.MethodGet, "/", nil),
 	}, nil
@@ -336,6 +392,7 @@ func SSRTypicalPage() (Scenario, error) {
 	}
 	return Scenario{
 		Name:    "ssr-typical",
+		Mode:    ModeSSR,
 		Server:  srv,
 		Request: httptest.NewRequest(http.MethodGet, "/page", nil),
 	}, nil
@@ -375,7 +432,114 @@ func SSRHeavyList() (Scenario, error) {
 	}
 	return Scenario{
 		Name:    "ssr-heavy",
+		Mode:    ModeSSR,
 		Server:  srv,
 		Request: httptest.NewRequest(http.MethodGet, "/heavy", nil),
+	}, nil
+}
+
+// ssgPrebakedHTML is a representative prerendered document size: shell
+// boilerplate plus a small body. Matches the shape `Server.Prerender`
+// would emit for a static "/" route. Hardcoded so the scenario builder
+// is self-contained; drift from real prerender output is tracked in the
+// bench README.
+const ssgPrebakedHTML = "<!doctype html><html><head><title>ssg</title></head>" +
+	"<body><h1>hello world</h1><p>prerendered at build time.</p></body></html>"
+
+// SSGServe measures the SSG cold-read path: serving a prebuilt
+// `index.html` from disk via the static handler. There is no Load, no
+// Render, no shell merge — just an OS file read with cache headers. The
+// v1.0 budget for prerendered routes lives here (#421).
+//
+// The handler-only path is wired through the Scenario.Handler field
+// rather than wrapping it in a full Server, so the measurement reflects
+// what production would actually do for SSG output (mount StaticHandler
+// at the prerender prefix).
+func SSGServe() (Scenario, error) {
+	dir, err := os.MkdirTemp("", "sveltego-bench-ssg-*")
+	if err != nil {
+		return Scenario{}, fmt.Errorf("mkdir temp: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte(ssgPrebakedHTML), 0o600); err != nil {
+		return Scenario{}, fmt.Errorf("write prebaked html: %w", err)
+	}
+	handler := server.StaticHandler(kit.StaticConfig{Dir: dir})
+	req := httptest.NewRequest(http.MethodGet, "/index.html", nil)
+	return Scenario{
+		Name:    "ssg-serve",
+		Mode:    ModeSSG,
+		Handler: handler,
+		Request: req,
+	}, nil
+}
+
+// SPAShell measures the SSR=false shell-only path: the route declares
+// `Options.SSR = false`, so the server short-circuits to renderEmptyShell
+// and returns app.html with an empty mount point plus the JSON
+// hydration payload computed from Load. No template render, no payload
+// inlined into the body. Cheaper than full SSR; quantifies the SSR vs
+// SPA tradeoff for v1.0 perf signoff (#421).
+func SPAShell() (Scenario, error) {
+	type spaShellData struct {
+		Title string `json:"title"`
+		Items []int  `json:"items"`
+	}
+	routes := []router.Route{{
+		Pattern: "/spa-shell",
+		Segments: []router.Segment{
+			{Kind: router.SegmentStatic, Value: "spa-shell"},
+		},
+		Load: func(_ *kit.LoadCtx) (any, error) {
+			return spaShellData{
+				Title: "spa shell",
+				Items: []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+			}, nil
+		},
+		Options: kit.PageOptions{
+			SSR:       false,
+			CSR:       true,
+			CSRF:      true,
+			Templates: kit.TemplatesSvelte,
+		},
+	}}
+	srv, err := newServer(routes)
+	if err != nil {
+		return Scenario{}, err
+	}
+	return Scenario{
+		Name:    "spa-shell",
+		Mode:    ModeSPA,
+		Server:  srv,
+		Request: httptest.NewRequest(http.MethodGet, "/spa-shell", nil),
+	}, nil
+}
+
+// StaticNoLoad measures the cheapest pure-Svelte pipeline state: a
+// route with Templates="svelte", no Load handler, no _page.server.go.
+// The pipeline returns the Svelte shell with an empty data payload.
+// Distinguishes "no work to do" cost from full SSR cost so static-only
+// pages have their own baseline.
+func StaticNoLoad() (Scenario, error) {
+	routes := []router.Route{{
+		Pattern: "/static",
+		Segments: []router.Segment{
+			{Kind: router.SegmentStatic, Value: "static"},
+		},
+		Options: kit.PageOptions{
+			SSR:       true,
+			CSR:       true,
+			CSRF:      true,
+			Templates: kit.TemplatesSvelte,
+		},
+	}}
+	srv, err := newServer(routes)
+	if err != nil {
+		return Scenario{}, err
+	}
+	return Scenario{
+		Name:    "static-no-load",
+		Mode:    ModeStatic,
+		Server:  srv,
+		Request: httptest.NewRequest(http.MethodGet, "/static", nil),
 	}, nil
 }

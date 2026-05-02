@@ -17,7 +17,11 @@ bench/
     main.go                  # rps + p50/p99 driver (no external load tools)
   baseline/
     README.md                # how to refresh checked-in numbers
-    baseline.txt             # `go test -bench=.` reference output
+    baseline.txt             # `go test -bench=.` reference output (all modes)
+    baseline-ssr.txt         # SSR-mode subset (regression gate, #105)
+    baseline-ssg.txt         # SSG-mode subset (regression gate, #105)
+    baseline-spa.txt         # SPA-mode subset (regression gate, #105)
+    baseline-static.txt      # static-no-Load subset (regression gate, #105)
   results/
     YYYY-MM-DD/              # dated raw runs (e.g. pivot before/after)
   scripts/
@@ -36,17 +40,36 @@ Single scenario via the driver:
 go run ./bench/cmd/sveltego-bench -scenario hello -duration 5s
 ```
 
+Run a single mode subset:
+
+```sh
+go run ./bench/cmd/sveltego-bench -mode ssg -duration 5s
+go run ./bench/cmd/sveltego-bench -mode spa -duration 5s
+go run ./bench/cmd/sveltego-bench -mode static -duration 5s
+```
+
+`-mode` accepts `ssr`, `ssg`, `spa`, `static`, or `all` (default).
+`-scenario` selects one scenario by name and overrides `-mode`.
+
 ## Scenarios
 
-| Name       | Pattern           | Notes                                                    |
-| ---------- | ----------------- | -------------------------------------------------------- |
-| hello      | `GET /`           | static greeting — measures pipeline floor                |
-| list       | `GET /posts`      | 10-row index — measures iterative writer + escape        |
-| detail     | `GET /posts/[id]` | param resolution + small body                            |
-| action     | `POST /api/echo`  | _server.go path — bypasses page render, exercises mux    |
-| svelte-spa | `GET /spa`        | pure-Svelte SPA hot path: Load → JSON payload + shell    |
+Scenarios are tagged with a `Mode` (`ssr` / `ssg` / `spa` / `static`) so a CI gate or local run can target one mode at a time via the driver's `--mode` flag.
 
-Beyond the four HTTP scenarios:
+| Name           | Mode   | Pattern              | Notes                                                                |
+| -------------- | ------ | -------------------- | -------------------------------------------------------------------- |
+| hello          | ssr    | `GET /`              | static greeting — measures pipeline floor                            |
+| list           | ssr    | `GET /posts`         | 10-row index — measures iterative writer + escape                    |
+| detail         | ssr    | `GET /posts/[id]`    | param resolution + small body                                        |
+| action         | ssr    | `POST /api/echo`     | _server.go path — bypasses page render, exercises mux                |
+| svelte-spa     | ssr    | `GET /spa`           | pure-Svelte hot path with SSR=true: Load → JSON payload + shell      |
+| ssr-hello      | ssr    | `GET /`              | emitted Render simplest case: Push + EscapeHTML pair                 |
+| ssr-typical    | ssr    | `GET /page`          | mid-complexity SSR: header + conditional + 10-item list + footer     |
+| ssr-heavy      | ssr    | `GET /heavy`         | 100-item each-loop, stresses hot loop + per-iter EscapeHTML          |
+| ssg-serve      | ssg    | `GET /index.html`    | static handler serving prebuilt HTML — SSG cold-read floor (#448)    |
+| spa-shell      | spa    | `GET /spa-shell`     | SSR=false short-circuit to renderEmptyShell + JSON payload (#448)    |
+| static-no-load | static | `GET /static`        | Templates="svelte", no Load — empty payload pipeline cost (#448)     |
+
+Beyond the HTTP scenarios:
 
 - `BenchmarkRouteResolution` — isolated `tree.Match` cost
 - `BenchmarkRenderWriter` — isolated `render.Writer` hot loop
@@ -78,18 +101,40 @@ None of that lands in Phase 0mm. The MVP gate ships sveltego-vs-sveltego regress
 
 ## Performance reference
 
-Apple M1 Pro, darwin/arm64, `count=6`, 2026-05-01 (post RFC #379 pivot):
+Apple M1 Pro, darwin/arm64, `count=6`, 2026-05-02 (post #448 multi-mode bench):
 
-| Bench               | ns/op | B/op | allocs/op |
-| ------------------- | ----: | ---: | --------: |
-| ServeHTTP_Hello     |  ~1965 |  2726 |        31 |
-| ServeHTTP_List      |  ~2068 |  3199 |        32 |
-| ServeHTTP_Detail    |  ~2376 |  3969 |        38 |
-| ServeHTTP_Action    |  ~1035 |  1728 |        23 |
-| ServeHTTP_SvelteSPA |  ~2061 |  3256 |        37 |
-| RouteResolution     |   ~134 |   336 |         2 |
-| RenderWriter        |    ~17 |     0 |         0 |
-| ManifestColdStart   |  ~2520 |  7731 |        43 |
+| Bench                     | ns/op | B/op  | allocs/op | rps p50 |
+| ------------------------- | ----: | ----: | --------: | ------: |
+| ServeHTTP_Hello           |  ~1926 |  2772 |        31 |  519k   |
+| ServeHTTP_List            |  ~2250 |  3239 |        32 |  444k   |
+| ServeHTTP_Detail          |  ~2693 |  4023 |        38 |  371k   |
+| ServeHTTP_Action          |  ~1067 |  1728 |        23 |  937k   |
+| ServeHTTP_SvelteSPA       |  ~2194 |  3273 |        37 |  456k   |
+| ServeHTTP_SSRHello        |  ~1996 |  2864 |        32 |  501k   |
+| ServeHTTP_SSRTypical      |  ~2551 |  3776 |        49 |  392k   |
+| ServeHTTP_SSRHeavy        |  ~5893 | 11655 |       143 |  170k   |
+| ServeHTTP_SSGServe        | ~17460 |  2096 |        28 |   57k   |
+| ServeHTTP_SPAShell        |  ~1273 |  2352 |        28 |  786k   |
+| ServeHTTP_StaticNoLoad    |  ~1772 |  2896 |        31 |  564k   |
+| RouteResolution           |   ~134 |   336 |         2 | 7.5M    |
+| RenderWriter              |    ~17 |     0 |         0 |   60M   |
+| ManifestColdStart         |  ~2470 |  7795 |        43 |  405k   |
+
+### Per-mode budget vs measured
+
+Numbers are single-thread, in-process, `httptest`. The "v1.0 budget" column is the rps target from CLAUDE.md and RFC #421; "headroom" is `(measured - budget) / budget`.
+
+| Mode    | Bench                  | v1.0 budget    | measured rps | headroom |
+| ------- | ---------------------- | -------------- | -----------: | -------: |
+| ssr     | ServeHTTP_SSRTypical   | 10–40k rps     | 392k         | ~10×     |
+| ssg     | ServeHTTP_SSGServe     | 20–40k rps     |  57k         | ~1.4×    |
+| spa     | ServeHTTP_SPAShell     | JSON-payload   | 786k         | ~80×     |
+| static  | ServeHTTP_StaticNoLoad | static-payload | 564k         | ~14×     |
+
+The SSG scenario is dominated by `os.Open` + mtime stat + ETag derivation in
+`http.ServeContent`. Real production rps will exceed the in-process number once
+the OS page cache and ETag short-circuit kick in for repeat requests; the
+checked-in baseline measures cold-read every iteration.
 
 Single-thread per-request floor for the hello scenario still translates to >500k rps; sveltego's 20–40k rps mid-complexity SSR target (CLAUDE.md) is comfortably exceeded under no contention. The pure-Svelte SPA hot path lands in the same band as the legacy hello scenario, confirming the JSON-payload pivot does not regress the hot path.
 

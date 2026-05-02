@@ -1,0 +1,54 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/binsarjr/sveltego/bench
+cpu: Apple M1 Pro
+BenchmarkServeHTTP_Hello-10         	  588476	      1957 ns/op	    2839 B/op	      31 allocs/op
+BenchmarkServeHTTP_Hello-10         	  593432	      1917 ns/op	    2838 B/op	      31 allocs/op
+BenchmarkServeHTTP_Hello-10         	  630237	      1861 ns/op	    2839 B/op	      31 allocs/op
+BenchmarkServeHTTP_Hello-10         	  642780	      2103 ns/op	    2839 B/op	      31 allocs/op
+BenchmarkServeHTTP_Hello-10         	  648912	      1935 ns/op	    2839 B/op	      31 allocs/op
+BenchmarkServeHTTP_Hello-10         	  602929	      1892 ns/op	    2839 B/op	      31 allocs/op
+BenchmarkServeHTTP_List-10          	  541099	      2253 ns/op	    3311 B/op	      32 allocs/op
+BenchmarkServeHTTP_List-10          	  519079	      2235 ns/op	    3311 B/op	      32 allocs/op
+BenchmarkServeHTTP_List-10          	  533912	      2238 ns/op	    3311 B/op	      32 allocs/op
+BenchmarkServeHTTP_List-10          	  513680	      2338 ns/op	    3311 B/op	      32 allocs/op
+BenchmarkServeHTTP_List-10          	  515612	      2247 ns/op	    3311 B/op	      32 allocs/op
+BenchmarkServeHTTP_List-10          	  538201	      2286 ns/op	    3311 B/op	      32 allocs/op
+BenchmarkServeHTTP_Detail-10        	  450534	      2798 ns/op	    4177 B/op	      41 allocs/op
+BenchmarkServeHTTP_Detail-10        	  469765	      2653 ns/op	    4177 B/op	      41 allocs/op
+BenchmarkServeHTTP_Detail-10        	  434785	      2680 ns/op	    4177 B/op	      41 allocs/op
+BenchmarkServeHTTP_Detail-10        	  429595	      2784 ns/op	    4177 B/op	      41 allocs/op
+BenchmarkServeHTTP_Detail-10        	  463116	      2638 ns/op	    4177 B/op	      41 allocs/op
+BenchmarkServeHTTP_Detail-10        	  469653	      2706 ns/op	    4177 B/op	      41 allocs/op
+BenchmarkServeHTTP_Action-10        	  991970	      1112 ns/op	    1728 B/op	      23 allocs/op
+BenchmarkServeHTTP_Action-10        	 1000000	      1071 ns/op	    1728 B/op	      23 allocs/op
+BenchmarkServeHTTP_Action-10        	 1000000	      1063 ns/op	    1728 B/op	      23 allocs/op
+BenchmarkServeHTTP_Action-10        	 1000000	      1030 ns/op	    1728 B/op	      23 allocs/op
+BenchmarkServeHTTP_Action-10        	 1000000	      1037 ns/op	    1728 B/op	      23 allocs/op
+BenchmarkServeHTTP_Action-10        	 1000000	      1080 ns/op	    1728 B/op	      23 allocs/op
+BenchmarkServeHTTP_SvelteSPA-10     	  546672	      2285 ns/op	    3401 B/op	      37 allocs/op
+BenchmarkServeHTTP_SvelteSPA-10     	  522127	      2182 ns/op	    3401 B/op	      37 allocs/op
+BenchmarkServeHTTP_SvelteSPA-10     	  535605	      2298 ns/op	    3401 B/op	      37 allocs/op
+BenchmarkServeHTTP_SvelteSPA-10     	  546228	      2170 ns/op	    3401 B/op	      37 allocs/op
+BenchmarkServeHTTP_SvelteSPA-10     	  530751	      2196 ns/op	    3401 B/op	      37 allocs/op
+BenchmarkServeHTTP_SvelteSPA-10     	  542854	      2192 ns/op	    3401 B/op	      37 allocs/op
+BenchmarkServeHTTP_SSRHello-10      	  622260	      1981 ns/op	    2915 B/op	      35 allocs/op
+BenchmarkServeHTTP_SSRHello-10      	  613815	      1988 ns/op	    2916 B/op	      35 allocs/op
+BenchmarkServeHTTP_SSRHello-10      	  585448	      2018 ns/op	    2915 B/op	      35 allocs/op
+BenchmarkServeHTTP_SSRHello-10      	  602725	      1961 ns/op	    2915 B/op	      35 allocs/op
+BenchmarkServeHTTP_SSRHello-10      	  642996	      2048 ns/op	    2915 B/op	      35 allocs/op
+BenchmarkServeHTTP_SSRHello-10      	  542380	      2004 ns/op	    2916 B/op	      35 allocs/op
+BenchmarkServeHTTP_SSRTypical-10    	  442461	      2588 ns/op	    3776 B/op	      49 allocs/op
+BenchmarkServeHTTP_SSRTypical-10    	  485992	      2552 ns/op	    3776 B/op	      49 allocs/op
+BenchmarkServeHTTP_SSRTypical-10    	  479782	      2549 ns/op	    3776 B/op	      49 allocs/op
+BenchmarkServeHTTP_SSRTypical-10    	  439360	      2516 ns/op	    3776 B/op	      49 allocs/op
+BenchmarkServeHTTP_SSRTypical-10    	  458349	      2525 ns/op	    3776 B/op	      49 allocs/op
+BenchmarkServeHTTP_SSRTypical-10    	  464929	      2554 ns/op	    3776 B/op	      49 allocs/op
+BenchmarkServeHTTP_SSRHeavy-10      	  207330	      5922 ns/op	   11655 B/op	     143 allocs/op
+BenchmarkServeHTTP_SSRHeavy-10      	  198253	      5977 ns/op	   11655 B/op	     143 allocs/op
+BenchmarkServeHTTP_SSRHeavy-10      	  206232	      5830 ns/op	   11655 B/op	     143 allocs/op
+BenchmarkServeHTTP_SSRHeavy-10      	  201805	      5866 ns/op	   11654 B/op	     143 allocs/op
+BenchmarkServeHTTP_SSRHeavy-10      	  203329	      5919 ns/op	   11655 B/op	     143 allocs/op
+BenchmarkServeHTTP_SSRHeavy-10      	  202472	      5859 ns/op	   11655 B/op	     143 allocs/op
+PASS
+ok  	github.com/binsarjr/sveltego/bench	58.476s
