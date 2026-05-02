@@ -1035,11 +1035,14 @@ jobs:
           kill "$(cat server.pid)" 2>/dev/null || true
           exit 1
 
-      # Live-route hydration smoke is gated on #462 (wire ViteManifest into
-      # the playground main.go files). Until that lands, the served HTML has
-      # no <script type="module"> tag, so window.__sveltego_hydrated never
-      # fires. The synthetic --self-test below proves the harness gate is
-      # real; flip the routes back on in a one-line edit once #462 ships.
+      # Live-route hydration smoke is held on #471: PR #463 emits
+      # `$state(...)` rune calls in client `.ts` files under
+      # `.gen/client/__router/state.ts` (source: `packages/sveltego/internal/vite/state.go`),
+      # which vite-plugin-svelte does not compile. The bundled router.js
+      # throws "ReferenceError: $state is not defined" at hydration. #462
+      # wires the playground ViteManifest so the bundle is at least
+      # delivered to the browser; the live-mode flip lands once #471
+      # renames the emit so vite-plugin-svelte picks the runes up.
       - name: Self-test (synthetic mismatch must fail the gate)
         shell: bash
         run: |
