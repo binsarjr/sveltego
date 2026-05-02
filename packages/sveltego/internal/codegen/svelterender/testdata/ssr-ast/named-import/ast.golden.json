@@ -1,0 +1,586 @@
+{
+  "ast": {
+    "body": [
+      {
+        "attributes": [],
+        "end": 44,
+        "source": {
+          "end": 43,
+          "raw": "'svelte/internal/server'",
+          "start": 19,
+          "type": "Literal",
+          "value": "svelte/internal/server"
+        },
+        "specifiers": [
+          {
+            "end": 13,
+            "local": {
+              "end": 13,
+              "name": "$",
+              "start": 12,
+              "type": "Identifier"
+            },
+            "start": 7,
+            "type": "ImportNamespaceSpecifier"
+          }
+        ],
+        "start": 0,
+        "type": "ImportDeclaration"
+      },
+      {
+        "attributes": [],
+        "end": 91,
+        "source": {
+          "end": 90,
+          "raw": "'$app/state'",
+          "start": 78,
+          "type": "Literal",
+          "value": "$app/state"
+        },
+        "specifiers": [
+          {
+            "end": 58,
+            "imported": {
+              "end": 58,
+              "name": "page",
+              "start": 54,
+              "type": "Identifier"
+            },
+            "local": {
+              "end": 58,
+              "name": "page",
+              "start": 54,
+              "type": "Identifier"
+            },
+            "start": 54,
+            "type": "ImportSpecifier"
+          },
+          {
+            "end": 70,
+            "imported": {
+              "end": 70,
+              "name": "navigating",
+              "start": 60,
+              "type": "Identifier"
+            },
+            "local": {
+              "end": 70,
+              "name": "navigating",
+              "start": 60,
+              "type": "Identifier"
+            },
+            "start": 60,
+            "type": "ImportSpecifier"
+          }
+        ],
+        "start": 45,
+        "type": "ImportDeclaration"
+      },
+      {
+        "attributes": [],
+        "end": 131,
+        "source": {
+          "end": 130,
+          "raw": "'$app/navigation'",
+          "start": 113,
+          "type": "Literal",
+          "value": "$app/navigation"
+        },
+        "specifiers": [
+          {
+            "end": 105,
+            "imported": {
+              "end": 105,
+              "name": "goto",
+              "start": 101,
+              "type": "Identifier"
+            },
+            "local": {
+              "end": 105,
+              "name": "goto",
+              "start": 101,
+              "type": "Identifier"
+            },
+            "start": 101,
+            "type": "ImportSpecifier"
+          }
+        ],
+        "start": 92,
+        "type": "ImportDeclaration"
+      },
+      {
+        "declaration": {
+          "async": false,
+          "body": {
+            "body": [
+              {
+                "end": 511,
+                "expression": {
+                  "arguments": [
+                    {
+                      "async": false,
+                      "body": {
+                        "body": [
+                          {
+                            "declarations": [
+                              {
+                                "end": 250,
+                                "id": {
+                                  "end": 240,
+                                  "properties": [
+                                    {
+                                      "computed": false,
+                                      "end": 238,
+                                      "key": {
+                                        "end": 238,
+                                        "name": "data",
+                                        "start": 234,
+                                        "type": "Identifier"
+                                      },
+                                      "kind": "init",
+                                      "method": false,
+                                      "shorthand": true,
+                                      "start": 234,
+                                      "type": "Property",
+                                      "value": {
+                                        "end": 238,
+                                        "name": "data",
+                                        "start": 234,
+                                        "type": "Identifier"
+                                      }
+                                    }
+                                  ],
+                                  "start": 232,
+                                  "type": "ObjectPattern"
+                                },
+                                "init": {
+                                  "end": 250,
+                                  "name": "$$props",
+                                  "start": 243,
+                                  "type": "Identifier"
+                                },
+                                "start": 232,
+                                "type": "VariableDeclarator"
+                              }
+                            ],
+                            "end": 251,
+                            "kind": "let",
+                            "start": 228,
+                            "type": "VariableDeclaration"
+                          },
+                          {
+                            "declarations": [
+                              {
+                                "end": 284,
+                                "id": {
+                                  "end": 266,
+                                  "name": "target",
+                                  "start": 260,
+                                  "type": "Identifier"
+                                },
+                                "init": {
+                                  "end": 284,
+                                  "raw": "'/named-import'",
+                                  "start": 269,
+                                  "type": "Literal",
+                                  "value": "/named-import"
+                                },
+                                "start": 260,
+                                "type": "VariableDeclarator"
+                              }
+                            ],
+                            "end": 285,
+                            "kind": "const",
+                            "start": 254,
+                            "type": "VariableDeclaration"
+                          },
+                          {
+                            "async": false,
+                            "body": {
+                              "body": [
+                                {
+                                  "end": 322,
+                                  "expression": {
+                                    "arguments": [
+                                      {
+                                        "end": 320,
+                                        "name": "target",
+                                        "start": 314,
+                                        "type": "Identifier"
+                                      }
+                                    ],
+                                    "callee": {
+                                      "end": 313,
+                                      "name": "goto",
+                                      "start": 309,
+                                      "type": "Identifier"
+                                    },
+                                    "end": 321,
+                                    "optional": false,
+                                    "start": 309,
+                                    "type": "CallExpression"
+                                  },
+                                  "start": 309,
+                                  "type": "ExpressionStatement"
+                                }
+                              ],
+                              "end": 326,
+                              "start": 304,
+                              "type": "BlockStatement"
+                            },
+                            "end": 326,
+                            "expression": false,
+                            "generator": false,
+                            "id": {
+                              "end": 301,
+                              "name": "nav",
+                              "start": 298,
+                              "type": "Identifier"
+                            },
+                            "params": [],
+                            "start": 289,
+                            "type": "FunctionDeclaration"
+                          },
+                          {
+                            "end": 506,
+                            "expression": {
+                              "arguments": [
+                                {
+                                  "end": 504,
+                                  "expressions": [
+                                    {
+                                      "arguments": [
+                                        {
+                                          "computed": false,
+                                          "end": 375,
+                                          "object": {
+                                            "end": 366,
+                                            "name": "data",
+                                            "start": 362,
+                                            "type": "Identifier"
+                                          },
+                                          "optional": false,
+                                          "property": {
+                                            "end": 375,
+                                            "name": "greeting",
+                                            "start": 367,
+                                            "type": "Identifier"
+                                          },
+                                          "start": 362,
+                                          "type": "MemberExpression"
+                                        }
+                                      ],
+                                      "callee": {
+                                        "computed": false,
+                                        "end": 361,
+                                        "object": {
+                                          "end": 354,
+                                          "name": "$",
+                                          "start": 353,
+                                          "type": "Identifier"
+                                        },
+                                        "optional": false,
+                                        "property": {
+                                          "end": 361,
+                                          "name": "escape",
+                                          "start": 355,
+                                          "type": "Identifier"
+                                        },
+                                        "start": 353,
+                                        "type": "MemberExpression"
+                                      },
+                                      "end": 376,
+                                      "optional": false,
+                                      "start": 353,
+                                      "type": "CallExpression"
+                                    },
+                                    {
+                                      "arguments": [
+                                        {
+                                          "computed": false,
+                                          "end": 414,
+                                          "object": {
+                                            "computed": false,
+                                            "end": 405,
+                                            "object": {
+                                              "end": 401,
+                                              "name": "page",
+                                              "start": 397,
+                                              "type": "Identifier"
+                                            },
+                                            "optional": false,
+                                            "property": {
+                                              "end": 405,
+                                              "name": "url",
+                                              "start": 402,
+                                              "type": "Identifier"
+                                            },
+                                            "start": 397,
+                                            "type": "MemberExpression"
+                                          },
+                                          "optional": false,
+                                          "property": {
+                                            "end": 414,
+                                            "name": "pathname",
+                                            "start": 406,
+                                            "type": "Identifier"
+                                          },
+                                          "start": 397,
+                                          "type": "MemberExpression"
+                                        }
+                                      ],
+                                      "callee": {
+                                        "computed": false,
+                                        "end": 396,
+                                        "object": {
+                                          "end": 389,
+                                          "name": "$",
+                                          "start": 388,
+                                          "type": "Identifier"
+                                        },
+                                        "optional": false,
+                                        "property": {
+                                          "end": 396,
+                                          "name": "escape",
+                                          "start": 390,
+                                          "type": "Identifier"
+                                        },
+                                        "start": 388,
+                                        "type": "MemberExpression"
+                                      },
+                                      "end": 415,
+                                      "optional": false,
+                                      "start": 388,
+                                      "type": "CallExpression"
+                                    },
+                                    {
+                                      "arguments": [
+                                        {
+                                          "alternate": {
+                                            "end": 477,
+                                            "raw": "'idle'",
+                                            "start": 471,
+                                            "type": "Literal",
+                                            "value": "idle"
+                                          },
+                                          "consequent": {
+                                            "end": 468,
+                                            "raw": "'navigating'",
+                                            "start": 456,
+                                            "type": "Literal",
+                                            "value": "navigating"
+                                          },
+                                          "end": 477,
+                                          "start": 435,
+                                          "test": {
+                                            "computed": false,
+                                            "end": 453,
+                                            "object": {
+                                              "end": 445,
+                                              "name": "navigating",
+                                              "start": 435,
+                                              "type": "Identifier"
+                                            },
+                                            "optional": false,
+                                            "property": {
+                                              "end": 453,
+                                              "name": "current",
+                                              "start": 446,
+                                              "type": "Identifier"
+                                            },
+                                            "start": 435,
+                                            "type": "MemberExpression"
+                                          },
+                                          "type": "ConditionalExpression"
+                                        }
+                                      ],
+                                      "callee": {
+                                        "computed": false,
+                                        "end": 434,
+                                        "object": {
+                                          "end": 427,
+                                          "name": "$",
+                                          "start": 426,
+                                          "type": "Identifier"
+                                        },
+                                        "optional": false,
+                                        "property": {
+                                          "end": 434,
+                                          "name": "escape",
+                                          "start": 428,
+                                          "type": "Identifier"
+                                        },
+                                        "start": 426,
+                                        "type": "MemberExpression"
+                                      },
+                                      "end": 478,
+                                      "optional": false,
+                                      "start": 426,
+                                      "type": "CallExpression"
+                                    }
+                                  ],
+                                  "quasis": [
+                                    {
+                                      "end": 351,
+                                      "start": 347,
+                                      "tail": false,
+                                      "type": "TemplateElement",
+                                      "value": {
+                                        "cooked": "<h1>",
+                                        "raw": "<h1>"
+                                      }
+                                    },
+                                    {
+                                      "end": 386,
+                                      "start": 377,
+                                      "tail": false,
+                                      "type": "TemplateElement",
+                                      "value": {
+                                        "cooked": "</h1> <p>",
+                                        "raw": "</h1> <p>"
+                                      }
+                                    },
+                                    {
+                                      "end": 424,
+                                      "start": 416,
+                                      "tail": false,
+                                      "type": "TemplateElement",
+                                      "value": {
+                                        "cooked": "</p> <p>",
+                                        "raw": "</p> <p>"
+                                      }
+                                    },
+                                    {
+                                      "end": 503,
+                                      "start": 479,
+                                      "tail": true,
+                                      "type": "TemplateElement",
+                                      "value": {
+                                        "cooked": "</p> <button>go</button>",
+                                        "raw": "</p> <button>go</button>"
+                                      }
+                                    }
+                                  ],
+                                  "start": 346,
+                                  "type": "TemplateLiteral"
+                                }
+                              ],
+                              "callee": {
+                                "computed": false,
+                                "end": 345,
+                                "object": {
+                                  "end": 340,
+                                  "name": "$$renderer",
+                                  "start": 330,
+                                  "type": "Identifier"
+                                },
+                                "optional": false,
+                                "property": {
+                                  "end": 345,
+                                  "name": "push",
+                                  "start": 341,
+                                  "type": "Identifier"
+                                },
+                                "start": 330,
+                                "type": "MemberExpression"
+                              },
+                              "end": 505,
+                              "optional": false,
+                              "start": 330,
+                              "type": "CallExpression"
+                            },
+                            "start": 330,
+                            "type": "ExpressionStatement"
+                          }
+                        ],
+                        "end": 509,
+                        "start": 224,
+                        "type": "BlockStatement"
+                      },
+                      "end": 509,
+                      "expression": false,
+                      "generator": false,
+                      "id": null,
+                      "params": [
+                        {
+                          "end": 219,
+                          "name": "$$renderer",
+                          "start": 209,
+                          "type": "Identifier"
+                        }
+                      ],
+                      "start": 208,
+                      "type": "ArrowFunctionExpression"
+                    }
+                  ],
+                  "callee": {
+                    "computed": false,
+                    "end": 207,
+                    "object": {
+                      "end": 197,
+                      "name": "$$renderer",
+                      "start": 187,
+                      "type": "Identifier"
+                    },
+                    "optional": false,
+                    "property": {
+                      "end": 207,
+                      "name": "component",
+                      "start": 198,
+                      "type": "Identifier"
+                    },
+                    "start": 187,
+                    "type": "MemberExpression"
+                  },
+                  "end": 510,
+                  "optional": false,
+                  "start": 187,
+                  "type": "CallExpression"
+                },
+                "start": 187,
+                "type": "ExpressionStatement"
+              }
+            ],
+            "end": 513,
+            "start": 184,
+            "type": "BlockStatement"
+          },
+          "end": 513,
+          "expression": false,
+          "generator": false,
+          "id": {
+            "end": 162,
+            "name": "_page",
+            "start": 157,
+            "type": "Identifier"
+          },
+          "params": [
+            {
+              "end": 173,
+              "name": "$$renderer",
+              "start": 163,
+              "type": "Identifier"
+            },
+            {
+              "end": 182,
+              "name": "$$props",
+              "start": 175,
+              "type": "Identifier"
+            }
+          ],
+          "start": 148,
+          "type": "FunctionDeclaration"
+        },
+        "end": 513,
+        "start": 133,
+        "type": "ExportDefaultDeclaration"
+      }
+    ],
+    "end": 513,
+    "sourceType": "module",
+    "start": 0,
+    "type": "Program"
+  },
+  "route": "/named-import",
+  "schema": "ssr-json-ast/v1"
+}

@@ -61,20 +61,32 @@ export function parseToAST(jsSource) {
 // minor changes in Acorn's property emission order can never produce a
 // different golden file. Arrays preserve order (semantics depend on
 // position). null and primitives pass through.
+//
+// Cycle detection tracks ancestors on the current walk path, not every
+// node ever seen. ESTree ASTs are DAGs in the wild — Acorn shares the
+// same Identifier object between `imported` and `local` on a non-rename
+// `ImportSpecifier` (`import { page }` from '$app/state'), and any
+// `WeakSet`-add-only check would mis-flag that as a cycle. A genuine
+// cycle is a node reachable from itself via parent→child edges, which
+// is what an enter/exit ancestor stack catches.
 export function stableStringify(value) {
-	const seen = new WeakSet();
+	const ancestors = new WeakSet();
 	const walk = (node) => {
 		if (node === null || typeof node !== "object") return node;
-		if (seen.has(node)) {
+		if (ancestors.has(node)) {
 			throw new Error("stableStringify: cycle in AST");
 		}
-		seen.add(node);
-		if (Array.isArray(node)) return node.map(walk);
-		const out = {};
-		for (const key of Object.keys(node).sort()) {
-			out[key] = walk(node[key]);
+		ancestors.add(node);
+		try {
+			if (Array.isArray(node)) return node.map(walk);
+			const out = {};
+			for (const key of Object.keys(node).sort()) {
+				out[key] = walk(node[key]);
+			}
+			return out;
+		} finally {
+			ancestors.delete(node);
 		}
-		return out;
 	};
 	return JSON.stringify(walk(value), null, 2) + "\n";
 }

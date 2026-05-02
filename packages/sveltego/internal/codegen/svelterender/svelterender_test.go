@@ -1,15 +1,21 @@
 package svelterender
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"flag"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
+	"time"
 )
 
 var updateGolden = flag.Bool("update", false, "rewrite *.golden.json fixtures from sidecar output")
@@ -99,13 +105,14 @@ func TestBuildSSRAST_HelloWorld(t *testing.T) {
 		Jobs: []SSRJob{
 			{Route: "/hello-world", Source: "hello-world/_page.svelte"},
 			{Route: "/each-list", Source: "each-list/_page.svelte"},
+			{Route: "/named-import", Source: "named-import/_page.svelte"},
 		},
 	})
 	if err != nil {
 		t.Fatalf("BuildSSRAST: %v", err)
 	}
-	if len(results) != 2 {
-		t.Fatalf("results = %d, want 2", len(results))
+	if len(results) != 3 {
+		t.Fatalf("results = %d, want 3", len(results))
 	}
 
 	for _, r := range results {
@@ -121,6 +128,12 @@ func TestBuildSSRAST_HelloWorld(t *testing.T) {
 	}{
 		{"hello-world", filepath.Join(out, "hello-world", "ast.json"), filepath.Join(absRoot, "hello-world", "ast.golden.json")},
 		{"each-list", filepath.Join(out, "each-list", "ast.json"), filepath.Join(absRoot, "each-list", "ast.golden.json")},
+		// named-import is the regression case for the Acorn shared-Identifier
+		// DAG that crashed the legacy WeakSet cycle detector. Source carries
+		// `import { page } from '$app/state'` — the no-rename form that pins
+		// `imported === local` on the ImportSpecifier (#460). The job MUST
+		// produce a clean ast.json; absence of an error here is the test.
+		{"named-import", filepath.Join(out, "named-import", "ast.json"), filepath.Join(absRoot, "named-import", "ast.golden.json")},
 	}
 	for _, tc := range cases {
 		got, err := os.ReadFile(tc.out)
@@ -209,4 +222,110 @@ func TestBuildSSRAST_Determinism(t *testing.T) {
 	if !bytes.Equal(a, b) {
 		t.Fatalf("ast.json not byte-identical across runs (sidecar non-deterministic)")
 	}
+}
+
+// TestSSRServe_AppAliases boots the real --mode=ssr-serve sidecar and
+// renders a fixture that imports `$app/state` and `$app/navigation`.
+// The fix for #460 wires server-side shims into the sidecar so the
+// `$app/*` bare specifiers resolve at request time; before the fix Node
+// would throw `Cannot find package '$app'` and the render would 5xx.
+//
+// The test only asserts a 200 response with non-empty body — it
+// deliberately doesn't pin the exact rendered HTML, which depends on
+// svelte/server output details and the shim's default page state.
+func TestSSRServe_AppAliases(t *testing.T) {
+	t.Parallel()
+	sidecarDir, nodePath := requireSidecarReady(t)
+
+	root := filepath.Join("testdata", "ssr-ast")
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		t.Fatalf("abs: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, nodePath, filepath.Join(sidecarDir, "index.mjs"),
+		"--mode=ssr-serve",
+		"--root="+absRoot,
+		"--port=0",
+	)
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		t.Fatalf("stderr pipe: %v", err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start sidecar: %v", err)
+	}
+	defer func() {
+		_ = cmd.Process.Kill()
+		_, _ = cmd.Process.Wait()
+	}()
+
+	port, err := readSidecarPort(stderrPipe, 20*time.Second)
+	if err != nil {
+		t.Fatalf("read sidecar port: %v", err)
+	}
+	endpoint := "http://127.0.0.1:" + strconv.Itoa(port) + "/render"
+
+	body, _ := json.Marshal(map[string]any{
+		"route":  "/named-import",
+		"source": "named-import/_page.svelte",
+		"data":   map[string]any{"greeting": "hi"},
+	})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := (&http.Client{Timeout: 15 * time.Second}).Do(req)
+	if err != nil {
+		t.Fatalf("post render: %v", err)
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status %d, body=%s", resp.StatusCode, string(raw))
+	}
+	var out struct {
+		Body  string `json:"body"`
+		Head  string `json:"head"`
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("decode: %v (raw=%s)", err, string(raw))
+	}
+	if out.Error != "" {
+		t.Fatalf("sidecar error: %s", out.Error)
+	}
+	if out.Body == "" {
+		t.Fatalf("empty body, raw=%s", string(raw))
+	}
+}
+
+// readSidecarPort drains the sidecar's stderr until it sees the listen
+// announcement, returning the port. Lines that don't match the prefix
+// are discarded; a timeout is treated as boot failure.
+func readSidecarPort(r io.Reader, timeout time.Duration) (int, error) {
+	deadline := time.Now().Add(timeout)
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if idx := strings.Index(line, "SVELTEGO_SSR_FALLBACK_LISTEN port="); idx >= 0 {
+			n, err := strconv.Atoi(strings.TrimSpace(line[idx+len("SVELTEGO_SSR_FALLBACK_LISTEN port="):]))
+			if err != nil {
+				return 0, err
+			}
+			return n, nil
+		}
+		if time.Now().After(deadline) {
+			return 0, errors.New("timed out waiting for sidecar listen line")
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return 0, err
+	}
+	return 0, errors.New("sidecar exited before announcing port")
 }

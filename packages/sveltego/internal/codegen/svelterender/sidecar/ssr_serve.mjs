@@ -29,6 +29,38 @@ const compiledCache = new Map();
 let cacheDir = null;
 const sidecarDir = dirname(fileURLToPath(import.meta.url));
 
+// Server-side shim URLs for the `$app/*` virtual modules the client
+// build resolves via Vite alias. The compiled .mjs the sidecar emits per
+// route imports `'$app/state'` and `'$app/navigation'`; without these
+// shims Node fails to resolve the bare specifier and the render call
+// throws (#460). Resolved once at module load — `pathToFileURL` is the
+// canonical way to import a local file by absolute path.
+const appShimURLs = {
+	"$app/state": pathToFileURL(joinPath(sidecarDir, "shims", "app-state.mjs"))
+		.href,
+	"$app/navigation": pathToFileURL(
+		joinPath(sidecarDir, "shims", "app-navigation.mjs"),
+	).href,
+};
+
+// rewriteAppAliases substitutes `'$app/state'` and `'$app/navigation'`
+// import sources in the compiled JS with absolute file URLs of the
+// server-side shims. The regex matches both single and double quotes
+// (Svelte's compiler picks per-output) and allows the source string to
+// appear either in `from '...'` (static imports) or `import('...')`
+// (dynamic imports). Any other `$app/*` specifier is left alone so the
+// caller surfaces a clear "unresolved $app/<name>" error rather than
+// silently substituting an unrelated module.
+export function rewriteAppAliases(code) {
+	return code.replace(
+		/(\bfrom\s*|\bimport\s*\(\s*)(['"])(\$app\/(?:state|navigation))\2/g,
+		(_match, prefix, quote, specifier) => {
+			const url = appShimURLs[specifier];
+			return `${prefix}${quote}${url}${quote}`;
+		},
+	);
+}
+
 async function ensureCacheDir() {
 	if (cacheDir) return cacheDir;
 	// Place the cache dir inside the sidecar tree so Node's module
@@ -57,10 +89,11 @@ async function loadComponent(root, source) {
 	if (!result || typeof result.js?.code !== "string") {
 		throw new Error(`svelte/compiler produced no js.code for ${source}`);
 	}
+	const rewritten = rewriteAppAliases(result.js.code);
 	const dir = await ensureCacheDir();
 	const safe = absolute.replace(/[^a-zA-Z0-9_]/g, "_");
 	const modPath = joinPath(dir, `${safe}.mjs`);
-	await writeFile(modPath, result.js.code, "utf8");
+	await writeFile(modPath, rewritten, "utf8");
 	const url = pathToFileURL(modPath).href;
 	const mod = await import(url);
 	const fn = mod.default;
