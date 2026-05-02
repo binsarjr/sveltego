@@ -66,50 +66,102 @@ func render__page_routes_admin_users(w *render.Writer, ctx *kit.RenderCtx, data 
 	return page_routes_admin_users.Page{}.Render(w, ctx, typed)
 }
 
-// render__layout__page_routes adapts page_routes.Layout{}.Render to router.LayoutHandler.
-// The trailing pageState parameter is the $app/state surface (#466);
-// legacy Mustache-Go layouts ignore it but accept the trailing arg so
-// the per-route renderChain__<routeIdent> emit can pass pageState
-// uniformly across SSR-bridged and Mustache-Go layouts.
+// render__layout__page_routes bridges page_routes.RenderLayoutSSR (Svelte SSR Option B,
+// children-callback ABI from #453) into router.LayoutHandler.
 func render__layout__page_routes(w *render.Writer, ctx *kit.RenderCtx, data any, children func(*render.Writer) error, pageState server.PageState) error {
-	_ = pageState
-	var typed page_routes.LayoutData
-	if data != nil {
-		v, ok := data.(page_routes.LayoutData)
-		if !ok {
-			return fmt.Errorf("sveltego: layout %q: LayoutData type mismatch (got %T, want page_routes.LayoutData)", `.gen/routes`, data)
+	_ = ctx
+	var payload server.Payload
+	var childErr error
+	inner := func(p *server.Payload) {
+		if childErr != nil {
+			return
 		}
-		typed = v
+		buf := render.Acquire()
+		defer render.Release(buf)
+		if err := children(buf); err != nil {
+			childErr = err
+			return
+		}
+		p.Push(string(buf.Bytes()))
 	}
-	return page_routes.Layout{}.Render(w, ctx, typed, children)
+	if err := page_routes.RenderLayoutSSR(&payload, data, inner, pageState); err != nil {
+		return err
+	}
+	if childErr != nil {
+		return childErr
+	}
+	if head := payload.HeadHTML(); head != "" {
+		w.WriteString(head)
+	}
+	w.WriteString(payload.Body())
+	return nil
 }
 
-// render__layout__page_routes_admin adapts page_routes_admin.Layout{}.Render to router.LayoutHandler.
-// The trailing pageState parameter is the $app/state surface (#466);
-// legacy Mustache-Go layouts ignore it but accept the trailing arg so
-// the per-route renderChain__<routeIdent> emit can pass pageState
-// uniformly across SSR-bridged and Mustache-Go layouts.
+// render__layout__page_routes_admin bridges page_routes_admin.RenderLayoutSSR (Svelte SSR Option B,
+// children-callback ABI from #453) into router.LayoutHandler.
 func render__layout__page_routes_admin(w *render.Writer, ctx *kit.RenderCtx, data any, children func(*render.Writer) error, pageState server.PageState) error {
-	_ = pageState
-	var typed page_routes_admin.LayoutData
-	if data != nil {
-		v, ok := data.(page_routes_admin.LayoutData)
-		if !ok {
-			return fmt.Errorf("sveltego: layout %q: LayoutData type mismatch (got %T, want page_routes_admin.LayoutData)", `.gen/routes/admin`, data)
+	_ = ctx
+	var payload server.Payload
+	var childErr error
+	inner := func(p *server.Payload) {
+		if childErr != nil {
+			return
 		}
-		typed = v
+		buf := render.Acquire()
+		defer render.Release(buf)
+		if err := children(buf); err != nil {
+			childErr = err
+			return
+		}
+		p.Push(string(buf.Bytes()))
 	}
-	return page_routes_admin.Layout{}.Render(w, ctx, typed, children)
+	if err := page_routes_admin.RenderLayoutSSR(&payload, data, inner, pageState); err != nil {
+		return err
+	}
+	if childErr != nil {
+		return childErr
+	}
+	if head := payload.HeadHTML(); head != "" {
+		w.WriteString(head)
+	}
+	w.WriteString(payload.Body())
+	return nil
 }
 
-// renderError__page_routes adapts page_routes.ErrorPage{}.Render to router.ErrorHandler.
+// renderError__page_routes bridges page_routes.RenderErrorSSR (Svelte SSR Option B,
+// payload-bridge from #412) into router.ErrorHandler.
 func renderError__page_routes(w *render.Writer, ctx *kit.RenderCtx, safe kit.SafeError) error {
-	return page_routes.ErrorPage{}.Render(w, ctx, safe)
+	var payload server.Payload
+	pageState := server.PageState{
+		URL:    ctx.URL,
+		Params: ctx.Params,
+		Status: safe.HTTPStatus(),
+		Error:  &server.PageError{Message: safe.Error(), Status: safe.HTTPStatus()},
+	}
+	page_routes.RenderErrorSSR(&payload, safe, pageState)
+	if head := payload.HeadHTML(); head != "" {
+		w.WriteString(head)
+	}
+	w.WriteString(payload.Body())
+	return nil
 }
 
-// renderError__page_routes_admin adapts page_routes_admin.ErrorPage{}.Render to router.ErrorHandler.
+// renderError__page_routes_admin bridges page_routes_admin.RenderErrorSSR (Svelte SSR Option B,
+// payload-bridge from #412) into router.ErrorHandler.
 func renderError__page_routes_admin(w *render.Writer, ctx *kit.RenderCtx, safe kit.SafeError) error {
-	return page_routes_admin.ErrorPage{}.Render(w, ctx, safe)
+	var payload server.Payload
+	pageState := server.PageState{
+		URL:    ctx.URL,
+		Params: ctx.Params,
+		Status: safe.HTTPStatus(),
+		Error:  &server.PageError{Message: safe.Error(), Status: safe.HTTPStatus()},
+	}
+	page_routes_admin.RenderErrorSSR(&payload, safe, pageState)
+	if head := payload.HeadHTML(); head != "" {
+		w.WriteString(head)
+	}
+	w.WriteString(payload.Body())
+	return nil
 }
 
 // layoutDataAt returns layoutDatas[i] when i is within bounds, otherwise nil.
@@ -217,7 +269,6 @@ func Routes() []router.Route {
 		{
 			Pattern:     `/`,
 			Segments:    []router.Segment{},
-			Page:        render__page_routes,
 			RenderChain: renderChain__Index,
 			RenderError: renderErrorChain__Index,
 		},
@@ -226,7 +277,6 @@ func Routes() []router.Route {
 			Segments: []router.Segment{
 				{Kind: router.SegmentStatic, Value: `admin`},
 			},
-			Page:        render__page_routes_admin,
 			RenderChain: renderChain__Admin,
 			RenderError: renderErrorChain__Admin,
 		},
@@ -236,7 +286,6 @@ func Routes() []router.Route {
 				{Kind: router.SegmentStatic, Value: `admin`},
 				{Kind: router.SegmentStatic, Value: `users`},
 			},
-			Page:        render__page_routes_admin_users,
 			RenderChain: renderChain__AdminUsers,
 			RenderError: renderErrorChain__AdminUsers,
 		},

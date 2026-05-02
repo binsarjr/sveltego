@@ -44,7 +44,6 @@ func Routes() []router.Route {
 				{Kind: router.SegmentStatic, Value: `docs`},
 				{Kind: router.SegmentRest, Name: `path`},
 			},
-			Page: render__page_routes_docs____path,
 		},
 	}
 }

@@ -1,1 +1,0 @@
-{#each Items as item}{#key item.ID}<li>{item.Name}</li>{/key}{/each}

@@ -1,1 +1,0 @@
-{#each Posts as p}{p.Title}{/each}

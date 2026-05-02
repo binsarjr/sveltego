@@ -1,1 +1,0 @@
-{#await fetchOne()}{:then v}<span>{v}</span>{/await}

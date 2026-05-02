@@ -82,104 +82,6 @@ func Load(ctx *kit.LoadCtx) (PageData, error) {
 		"package db\n\nfunc Title() string { return \"hi\" }\n")
 }
 
-func TestBuild_HappyPath(t *testing.T) {
-	t.Skip("Mustache-Go emit path unreachable after #384; rewrite against pure-Svelte expectations in #406")
-	t.Parallel()
-	root := t.TempDir()
-	scaffoldProject(t, root, "example.com/app")
-
-	res, err := Build(context.Background(), BuildOptions{ProjectRoot: root})
-	if err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-	if res.Routes != 2 {
-		t.Errorf("Routes = %d, want 2", res.Routes)
-	}
-
-	rootPage := filepath.Join(root, ".gen", "routes", "page.gen.go")
-	idPage := filepath.Join(root, ".gen", "routes", "_id_", "page.gen.go")
-	manifest := filepath.Join(root, ".gen", "manifest.gen.go")
-	for _, p := range []string{rootPage, idPage, manifest} {
-		if _, err := os.Stat(p); err != nil {
-			t.Errorf("expected %s to exist: %v", p, err)
-		}
-	}
-
-	rootBytes, err := os.ReadFile(rootPage)
-	if err != nil {
-		t.Fatalf("read root page: %v", err)
-	}
-	if !bytes.Contains(rootBytes, []byte(`"example.com/app/lib/db"`)) {
-		t.Errorf("expected $lib import rewritten to module path, got:\n%s", rootBytes)
-	}
-	if bytes.Contains(rootBytes, []byte("$lib")) {
-		t.Errorf("expected no remaining $lib literal, got:\n%s", rootBytes)
-	}
-	if !bytes.Contains(rootBytes, []byte("package routes")) {
-		t.Errorf("expected `package routes`, got:\n%s", rootBytes)
-	}
-
-	idBytes, err := os.ReadFile(idPage)
-	if err != nil {
-		t.Fatalf("read id page: %v", err)
-	}
-	if !bytes.Contains(idBytes, []byte("package _id_")) {
-		t.Errorf("expected `package _id_`, got:\n%s", idBytes)
-	}
-
-	// Mirror + wire emitted for the route with page.server.go.
-	idMirror := filepath.Join(root, ".gen", "usersrc", "routes", "_id_", "page_server.go")
-	idWire := filepath.Join(root, ".gen", "routes", "_id_", "wire.gen.go")
-	for _, p := range []string{idMirror, idWire} {
-		if _, err := os.Stat(p); err != nil {
-			t.Errorf("expected %s to exist: %v", p, err)
-		}
-	}
-	mirrorBytes, err := os.ReadFile(idMirror)
-	if err != nil {
-		t.Fatalf("read id mirror: %v", err)
-	}
-	if bytes.Contains(mirrorBytes, []byte("//go:build")) {
-		t.Errorf("mirror retained build constraint:\n%s", mirrorBytes)
-	}
-	if !bytes.Contains(mirrorBytes, []byte("package _id_")) {
-		t.Errorf("mirror package clause not rewritten:\n%s", mirrorBytes)
-	}
-	wireBytes, err := os.ReadFile(idWire)
-	if err != nil {
-		t.Fatalf("read id wire: %v", err)
-	}
-	if !bytes.Contains(wireBytes, []byte(`usersrc "example.com/app/.gen/usersrc/routes/_id_"`)) {
-		t.Errorf("wire missing mirror import:\n%s", wireBytes)
-	}
-	if !bytes.Contains(wireBytes, []byte("func Load(ctx *kit.LoadCtx)")) {
-		t.Errorf("wire missing Load wrapper:\n%s", wireBytes)
-	}
-
-	manifestBytes, err := os.ReadFile(manifest)
-	if err != nil {
-		t.Fatalf("read manifest: %v", err)
-	}
-	for _, want := range []string{
-		`"example.com/app/.gen/routes"`,
-		`"example.com/app/.gen/routes/_id_"`,
-		`func render__page_routes`,
-		`func render__page_routes__id_`,
-		// gofmt aligns struct field values; spacing varies with longest field name.
-		// Check that the Page field references the correct handler without asserting spacing.
-		`Page:`,
-		`render__page_routes__id_`,
-	} {
-		if !bytes.Contains(manifestBytes, []byte(want)) {
-			t.Errorf("manifest missing %q:\n%s", want, manifestBytes)
-		}
-	}
-
-	for _, p := range []string{rootPage, idPage, manifest, idWire, idMirror} {
-		assertParsesAsGo(t, p)
-	}
-}
-
 func TestBuild_MissingGoMod(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -248,66 +150,6 @@ func TestBuild_Determinism(t *testing.T) {
 		if !bytes.Equal(a, b) {
 			t.Errorf("non-deterministic output in %s", path)
 		}
-	}
-}
-
-func TestBuild_EmitsLayoutChain(t *testing.T) {
-	t.Skip("Mustache-Go layout body emitter unreachable after #384; rewrite against pure-Svelte expectations in #406")
-	t.Parallel()
-	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/app\n\ngo 1.22\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "_layout.svelte"),
-		`<header>root</header><slot />`+"\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "dash", "_layout.svelte"),
-		`<nav>dash</nav><slot />`+"\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "dash", "_page.svelte"),
-		`<h1>Dash</h1>`+"\n")
-
-	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: root}); err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-
-	rootLayout := filepath.Join(root, ".gen", "routes", "layout.gen.go")
-	dashLayout := filepath.Join(root, ".gen", "routes", "dash", "layout.gen.go")
-	dashPage := filepath.Join(root, ".gen", "routes", "dash", "page.gen.go")
-	manifest := filepath.Join(root, ".gen", "manifest.gen.go")
-	for _, p := range []string{rootLayout, dashLayout, dashPage, manifest} {
-		if _, err := os.Stat(p); err != nil {
-			t.Errorf("expected %s to exist: %v", p, err)
-		}
-	}
-
-	rootBytes, err := os.ReadFile(rootLayout)
-	if err != nil {
-		t.Fatalf("read root layout: %v", err)
-	}
-	for _, want := range []string{
-		"type Layout struct{}",
-		"type LayoutData = struct{}",
-		"children func(*render.Writer) error",
-		"if children != nil",
-	} {
-		if !bytes.Contains(rootBytes, []byte(want)) {
-			t.Errorf("root layout missing %q:\n%s", want, rootBytes)
-		}
-	}
-
-	manifestBytes, err := os.ReadFile(manifest)
-	if err != nil {
-		t.Fatalf("read manifest: %v", err)
-	}
-	for _, want := range []string{
-		`render__layout__page_routes`,
-		`render__layout__page_routes_dash`,
-		`LayoutChain: []router.LayoutHandler{`,
-	} {
-		if !bytes.Contains(manifestBytes, []byte(want)) {
-			t.Errorf("manifest missing %q:\n%s", want, manifestBytes)
-		}
-	}
-
-	for _, p := range []string{rootLayout, dashLayout, dashPage, manifest} {
-		assertParsesAsGo(t, p)
 	}
 }
 
@@ -410,61 +252,6 @@ func Load(ctx *kit.LoadCtx) (LayoutData, error) {
 // _layout.svelte that each declare <svelte:head> produce Head methods
 // in their gen packages and matching head adapters + Head/LayoutHeads
 // fields in the manifest.
-func TestBuild_EmitsSvelteHead(t *testing.T) {
-	t.Skip("Mustache-Go svelte:head emitter unreachable after #384; rewrite against pure-Svelte expectations in #406")
-	t.Parallel()
-	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/app\n\ngo 1.22\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "_layout.svelte"),
-		`<svelte:head><meta name="theme" content="dark"></svelte:head>
-<header>root</header><slot />`+"\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "_page.svelte"),
-		`<svelte:head><title>Home</title></svelte:head>
-<h1>Home</h1>`+"\n")
-
-	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: root}); err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-
-	pagePath := filepath.Join(root, ".gen", "routes", "page.gen.go")
-	layoutPath := filepath.Join(root, ".gen", "routes", "layout.gen.go")
-	manifest := filepath.Join(root, ".gen", "manifest.gen.go")
-
-	pageBytes, err := os.ReadFile(pagePath)
-	if err != nil {
-		t.Fatalf("read page: %v", err)
-	}
-	if !bytes.Contains(pageBytes, []byte("func (p Page) Head(")) {
-		t.Errorf("page missing Head method:\n%s", pageBytes)
-	}
-	layoutBytes, err := os.ReadFile(layoutPath)
-	if err != nil {
-		t.Fatalf("read layout: %v", err)
-	}
-	if !bytes.Contains(layoutBytes, []byte("func (l Layout) Head(")) {
-		t.Errorf("layout missing Head method:\n%s", layoutBytes)
-	}
-
-	manifestBytes, err := os.ReadFile(manifest)
-	if err != nil {
-		t.Fatalf("read manifest: %v", err)
-	}
-	for _, want := range []string{
-		"func head__page_routes(",
-		"func head__layout__page_routes(",
-		"head__page_routes",
-		"LayoutHeads: []router.LayoutHeadHandler{",
-	} {
-		if !bytes.Contains(manifestBytes, []byte(want)) {
-			t.Errorf("manifest missing %q:\n%s", want, manifestBytes)
-		}
-	}
-
-	for _, p := range []string{pagePath, layoutPath, manifest} {
-		assertParsesAsGo(t, p)
-	}
-}
-
 // TestBuild_EmitsSPARouterModule asserts that the codegen pass writes
 // the shared SPA router module at .gen/client/__router/router.ts and
 // that every per-route entry.ts imports it (#37).
@@ -604,40 +391,6 @@ func TestBuild_EmbedSkippedWhenNoAssets(t *testing.T) {
 // TestBuild_ReleaseRejectsLibDevImport verifies that a _page.svelte
 // importing "$lib/dev/..." causes Build to return an error in release
 // mode but succeeds in dev mode.
-func TestBuild_ReleaseRejectsLibDevImport(t *testing.T) {
-	t.Skip("Mustache-Go body walker (which checks lib/dev imports) unreachable after #384; rewrite against pure-Svelte expectations in #406")
-	t.Parallel()
-	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/app\n\ngo 1.22\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "_page.svelte"),
-		`<script lang="go">
-import (
-	"context"
-	"$lib/dev/panel"
-)
-</script>
-<h1>Hello</h1>
-`)
-	writeFile(t, filepath.Join(root, "src", "lib", "dev", "panel", "panel.go"),
-		"package panel\n\nfunc Show() string { return \"dev\" }\n")
-	writeFile(t, filepath.Join(root, "src", "lib", "util.go"),
-		"package lib\n")
-
-	// Dev mode: succeeds — $lib/dev imports are allowed.
-	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: root}); err != nil {
-		t.Fatalf("dev Build: unexpected error: %v", err)
-	}
-
-	// Release mode: must fail with a meaningful message.
-	_, err := Build(context.Background(), BuildOptions{ProjectRoot: root, Release: true})
-	if err == nil {
-		t.Fatal("release Build: expected error on $lib/dev import, got nil")
-	}
-	if !strings.Contains(err.Error(), "$lib/dev") {
-		t.Errorf("release Build: error should mention $lib/dev, got: %v", err)
-	}
-}
-
 // TestBuild_ReleaseAllowsNonDevLibImport verifies that $lib imports that
 // are not under dev/ pass through release mode unchanged.
 func TestBuild_ReleaseAllowsNonDevLibImport(t *testing.T) {
@@ -739,63 +492,6 @@ func assertParsesAsGo(t *testing.T, path string) {
 // The scaffold flow is the canonical repro: a fresh project's
 // page.server.go uses the named-type form by default to keep Load()
 // readable. See feedback_minimal_setup.md (2026-05-01).
-func TestBuild_PageDataNamedType(t *testing.T) {
-	t.Skip("Mustache-Go page.gen.go emit unreachable after #384; the typegen path covers PageData inference now")
-	t.Parallel()
-	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/named\n\ngo 1.23\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "_page.svelte"),
-		"<h1>{data.Greeting}</h1>\n")
-	writeFile(t, filepath.Join(root, "src", "routes", "_page.server.go"),
-		`//go:build sveltego
-
-package routes
-
-import (
-	"context"
-	"github.com/binsarjr/sveltego/exports/kit"
-)
-
-type PageData struct {
-	Greeting string
-}
-
-func Load(ctx *kit.LoadCtx) (PageData, error) {
-	_ = ctx
-	return PageData{Greeting: "hello"}, nil
-}
-`)
-
-	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: root}); err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-
-	pageGen := filepath.Join(root, ".gen", "routes", "page.gen.go")
-	body, err := os.ReadFile(pageGen)
-	if err != nil {
-		t.Fatalf("read page.gen.go: %v", err)
-	}
-	got := string(body)
-
-	const wantAlias = "type PageData = usersrc.PageData"
-	if !strings.Contains(got, wantAlias) {
-		t.Errorf("expected %q in page.gen.go, got:\n%s", wantAlias, got)
-	}
-	if strings.Contains(got, "type PageData = struct{}") {
-		t.Errorf("empty alias `type PageData = struct{}` leaked into named-type branch:\n%s", got)
-	}
-	const wantImport = `usersrc "example.com/named/.gen/usersrc/routes"`
-	if !strings.Contains(got, wantImport) {
-		t.Errorf("expected import %q, got:\n%s", wantImport, got)
-	}
-	// page.gen.go must parse as Go and reference data.Greeting (the
-	// alias gives the gen file access to the user's named field).
-	assertParsesAsGo(t, pageGen)
-	if !strings.Contains(got, "data.Greeting") {
-		t.Errorf("expected data.Greeting reference in render body:\n%s", got)
-	}
-}
-
 // TestBuild_LayoutDataNamedType mirrors TestBuild_PageDataNamedType for
 // layouts. A layout.server.go declaring `type LayoutData struct{...}`
 // flows the named type through the SSR layout wire so the manifest

@@ -43,7 +43,6 @@ func Routes() []router.Route {
 			Segments: []router.Segment{
 				{Kind: router.SegmentStatic, Value: `about`},
 			},
-			Page: render__page_routes__g_marketing_about,
 		},
 	}
 }

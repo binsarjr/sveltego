@@ -1,1 +1,0 @@
-{#each Rows as row}{#each row.Cells as c}{c}{/each}{/each}

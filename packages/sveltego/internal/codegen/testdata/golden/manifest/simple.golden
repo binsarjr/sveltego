@@ -41,7 +41,6 @@ func Routes() []router.Route {
 		{
 			Pattern:  `/`,
 			Segments: []router.Segment{},
-			Page:     render__page_routes,
 		},
 	}
 }
