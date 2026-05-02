@@ -731,3 +731,129 @@ func TestStreaming_emitsViteAssetTags(t *testing.T) {
 		t.Errorf("module script must precede resolve patches; js=%d resolve=%d", jsIdx, resolveIdx)
 	}
 }
+
+// TestRenderPage_payloadCarriesAppState pins the wire shape of the
+// $app/state surface (#312): every SSR payload must populate routeId,
+// url, params, status, error, data, and form so the client-side `page`
+// rune reads valid values on first paint without a follow-up round-trip.
+func TestRenderPage_payloadCarriesAppState(t *testing.T) {
+	t.Parallel()
+
+	type pageData struct {
+		Title string `json:"title"`
+	}
+
+	srv := newTestServer(t, []router.Route{{
+		Pattern: "/post/[id]",
+		Segments: []router.Segment{
+			{Kind: router.SegmentStatic, Value: "post"},
+			{Kind: router.SegmentParam, Name: "id"},
+		},
+		Page: func(w *render.Writer, _ *kit.RenderCtx, _ any) error {
+			w.WriteString("<article>post</article>")
+			return nil
+		},
+		Load: func(ctx *kit.LoadCtx) (any, error) {
+			return pageData{Title: "post-" + ctx.Params["id"]}, nil
+		},
+	}})
+	ts := httptest.NewServer(srv)
+	t.Cleanup(ts.Close)
+
+	resp, err := http.Get(ts.URL + "/post/42?ref=feed")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+
+	bs := string(body)
+	start := strings.Index(bs, `<script id="sveltego-data" type="application/json">`)
+	if start < 0 {
+		t.Fatalf("payload script tag missing; body=%s", bs)
+	}
+	start += len(`<script id="sveltego-data" type="application/json">`)
+	end := strings.Index(bs[start:], `</script>`)
+	raw := bs[start : start+end]
+
+	var payload struct {
+		RouteID string                    `json:"routeId"`
+		URL     string                    `json:"url"`
+		Params  map[string]string         `json:"params"`
+		Status  int                       `json:"status"`
+		Error   *struct{ Message string } `json:"error"`
+		Form    json.RawMessage           `json:"form"`
+		Data    json.RawMessage           `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		t.Fatalf("parse payload: %v; raw=%s", err, raw)
+	}
+	if payload.RouteID != "/post/[id]" {
+		t.Errorf("routeId = %q, want /post/[id]", payload.RouteID)
+	}
+	if !strings.HasSuffix(payload.URL, "/post/42?ref=feed") {
+		t.Errorf("url = %q, want path /post/42?ref=feed", payload.URL)
+	}
+	if payload.Params["id"] != "42" {
+		t.Errorf("params[id] = %q, want 42", payload.Params["id"])
+	}
+	if payload.Status != 200 {
+		t.Errorf("status = %d, want 200", payload.Status)
+	}
+	if payload.Error != nil {
+		t.Errorf("error = %+v, want nil on success path", payload.Error)
+	}
+	if string(payload.Form) != "null" {
+		t.Errorf("form = %s, want null on GET", payload.Form)
+	}
+}
+
+// TestDataJSON_carriesAppState mirrors TestRenderPage_payloadCarriesAppState
+// for the __data.json endpoint so SPA-router refetches see the same nine
+// fields as the initial SSR render.
+func TestDataJSON_carriesAppState(t *testing.T) {
+	t.Parallel()
+
+	srv := newTestServer(t, []router.Route{{
+		Pattern: "/item/[id]",
+		Segments: []router.Segment{
+			{Kind: router.SegmentStatic, Value: "item"},
+			{Kind: router.SegmentParam, Name: "id"},
+		},
+		Page: func(_ *render.Writer, _ *kit.RenderCtx, _ any) error { return nil },
+		Load: func(ctx *kit.LoadCtx) (any, error) {
+			return map[string]string{"id": ctx.Params["id"]}, nil
+		},
+	}})
+	ts := httptest.NewServer(srv)
+	t.Cleanup(ts.Close)
+
+	resp, err := http.Get(ts.URL + "/item/7/__data.json")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+
+	var payload struct {
+		RouteID string            `json:"routeId"`
+		Params  map[string]string `json:"params"`
+		Status  int               `json:"status"`
+		Error   any               `json:"error"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("parse: %v; body=%s", err, body)
+	}
+	if payload.RouteID != "/item/[id]" {
+		t.Errorf("routeId = %q, want /item/[id]", payload.RouteID)
+	}
+	if payload.Params["id"] != "7" {
+		t.Errorf("params[id] = %q, want 7", payload.Params["id"])
+	}
+	if payload.Status != 200 {
+		t.Errorf("status = %d, want 200", payload.Status)
+	}
+	if payload.Error != nil {
+		t.Errorf("error = %v, want nil", payload.Error)
+	}
+}

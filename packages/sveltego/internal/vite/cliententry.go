@@ -38,10 +38,16 @@ func GenerateClientEntry(opts ClientEntryOptions) string {
 	} else {
 		fmt.Fprintf(&b, "import Page from %q;\n", opts.RelSveltePath)
 	}
-	fmt.Fprintf(&b, "import { startRouter } from %q;\n\n", opts.RelRouterPath)
+	fmt.Fprintf(&b, "import { startRouter } from %q;\n", opts.RelRouterPath)
+	relStatePath := strings.TrimSuffix(opts.RelRouterPath, "/router") + "/state"
+	fmt.Fprintf(&b, "import { _setPage } from %q;\n\n", relStatePath)
 	b.WriteString("const el = document.getElementById('sveltego-data');\n")
 	b.WriteString("const payload = el ? JSON.parse(el.textContent ?? '{}') : {};\n")
-	b.WriteString("(window as any).__sveltego__ = { ...payload, enhance };\n\n")
+	b.WriteString("(window as any).__sveltego__ = { ...payload, enhance };\n")
+	// Seed $app/state before mount so user scripts that read
+	// page.url / page.params / etc. on first render see the
+	// hydration values rather than the initial defaults.
+	b.WriteString("_setPage(payload);\n\n")
 	b.WriteString("const component = mount(Page, {\n")
 	b.WriteString("  target: document.body,\n")
 	b.WriteString("  props: { data: payload.data, form: payload.form ?? null },\n")

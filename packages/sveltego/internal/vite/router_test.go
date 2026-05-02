@@ -476,3 +476,91 @@ func TestGenerateEnhance_redirectFollowsSPA(t *testing.T) {
 		}
 	}
 }
+
+// TestGenerateStateModule_emitsSurface pins the public $app/state surface.
+// page exposes the nine fields documented in #312; navigating and updated
+// expose `current` getters powered by Svelte 5 runes.
+func TestGenerateStateModule_emitsSurface(t *testing.T) {
+	t.Parallel()
+
+	src := GenerateStateModule()
+	for _, want := range []string{
+		"export const page",
+		"export const navigating",
+		"export const updated",
+		"$state<Page>",
+		"$state<Navigation | null>(null)",
+		"export function _setPage",
+		"export function _setNavigating",
+		"export function _setUpdated",
+		"get url()",
+		"get params()",
+		"get route()",
+		"get status()",
+		"get error()",
+		"get data()",
+		"get form()",
+		"get state()",
+		"history.state",
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("state module missing %q:\n%s", want, src)
+		}
+	}
+}
+
+// TestGenerateRouter_importsStateSetters confirms the router calls into
+// the state module when starting and committing navigations so $app/state
+// stays in sync with the active page.
+func TestGenerateRouter_importsStateSetters(t *testing.T) {
+	t.Parallel()
+
+	src := GenerateRouter(RouterOptions{Routes: map[string]string{"/": "../routes/_page.svelte"}})
+	for _, want := range []string{
+		"import { _setPage, _setNavigating",
+		"_setPage(initial.payload)",
+		"_setNavigating({",
+		"_setNavigating(null)",
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("router missing %q:\n%s", want, src)
+		}
+	}
+}
+
+// TestGenerateClientEntry_seedsState asserts the per-route entry primes
+// $app/state from the hydration payload before mount so user scripts that
+// read page.url / page.params on first render see real values, not the
+// state module's initial defaults.
+func TestGenerateClientEntry_seedsState(t *testing.T) {
+	t.Parallel()
+
+	src := GenerateClientEntry(ClientEntryOptions{
+		RelSveltePath: "../../routes/_page.svelte",
+		RelRouterPath: "../__router/router",
+	})
+	for _, want := range []string{
+		`import { _setPage } from "../__router/state"`,
+		"_setPage(payload);",
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("entry missing %q:\n%s", want, src)
+		}
+	}
+}
+
+// TestGenerateConfig_aliasesAppState pins the vite alias map: user code
+// imports `$app/state` and `$app/navigation` directly, mirroring SvelteKit.
+func TestGenerateConfig_aliasesAppState(t *testing.T) {
+	t.Parallel()
+
+	src := GenerateConfig(ConfigOptions{})
+	for _, want := range []string{
+		`"$app/state": path.resolve(__dirname, ".gen/client/__router/state")`,
+		`"$app/navigation": path.resolve(__dirname, ".gen/client/__router/navigation")`,
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("config missing alias %q:\n%s", want, src)
+		}
+	}
+}

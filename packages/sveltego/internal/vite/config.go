@@ -66,6 +66,15 @@ func GenerateConfig(opts ConfigOptions) string {
 	if hasAddon(opts.Addons, AddonTailwindV3) {
 		b.WriteString("  css: { postcss: './postcss.config.js' },\n")
 	}
+	// Alias the SvelteKit-style `$app/*` virtual modules to the codegen
+	// outputs under `<genDir>/__router/`. User code imports `$app/state`
+	// and `$app/navigation` exactly as they would on SvelteKit.
+	b.WriteString("  resolve: {\n")
+	b.WriteString("    alias: {\n")
+	fmt.Fprintf(&b, "      %q: path.resolve(__dirname, %q),\n", "$app/state", genDir+"/__router/state")
+	fmt.Fprintf(&b, "      %q: path.resolve(__dirname, %q),\n", "$app/navigation", genDir+"/__router/navigation")
+	b.WriteString("    },\n")
+	b.WriteString("  },\n")
 	b.WriteString("  build: {\n")
 	fmt.Fprintf(&b, "    outDir: %q,\n", outDir)
 	b.WriteString("    manifest: true,\n")
