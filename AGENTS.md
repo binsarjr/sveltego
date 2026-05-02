@@ -27,6 +27,7 @@ Hard invariants (post-ADR 0008 + 0009; do not reopen without new evidence — se
 - **Codegen, not interpretation.** Static decisions at build time. Codegen emits `.svelte.d.ts` declarations (Go AST → TypeScript), prerendered HTML for SSG routes, and per-route Go `Render()` functions transpiled from `svelte/server` JS output for SSR routes.
 - **Svelte 5 only.** Runes (`$props`, `$state`, `$derived`, `$effect`, `$bindable`). Skip Svelte 4 legacy reactivity.
 - **Performance target:** 20–40k rps for SSG (zero per-request work) and JSON-payload responses; ≥10k rps p50 for transpiled SSR routes (RFC #421 acceptance criterion). If a proposal cannot reach that, surface the gap before writing code.
+- **Four render modes per route.** `kit.PageOptions` selects per route; `kit.DefaultPageOptions()` returns `SSR: true`, so **SSR is the default** (matches SvelteKit). The four modes: **SSR** (default; Go `Render()` emits HTML, client hydrates), **SSG** (`Prerender: true`; build-time HTML, static handler), **SPA** (`SSR: false`; app shell + JSON payload, client renders), **Static** (no `_page.server.go`; pure `.svelte`, client renders against `{}`). Layouts cascade per-field; page-level overrides win. Full reference: [`docs/render-modes.md`](./docs/render-modes.md).
 
 For high-level project context, read [`README.md`](./README.md) first, then [`CLAUDE.md`](./CLAUDE.md).
 

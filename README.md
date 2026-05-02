@@ -57,6 +57,58 @@ hooks.server.go                  ──→ Handle, HandleError, HandleFetch
 
 Routes opting into `kit.PageOptions{Prerender: true}` ship as static HTML rendered at build time via `svelte/server`. Routes without prerender are transpiled to Go `Render()` functions at build time and rendered server-side from the Go binary at request time — no JS engine on the request path. Routes whose JS the transpiler cannot lower opt out explicitly via the `<!-- sveltego:ssr-fallback -->` HTML comment in `_page.svelte`; those route through a long-running Node sidecar with HTML cached by `(route, hash(load_result))`. **Node runs only at build time, plus as a build-time companion for opted-in fallback routes.** The deployed Go binary plus `static/` is the entire deployable.
 
+## Four render modes
+
+sveltego supports four render modes per route. **SSR is the default** — `kit.DefaultPageOptions()` returns `SSR: true`, matching SvelteKit's convention. Pick a mode per route by setting fields on `kit.PageOptions` in `_page.server.go` (or `_layout.server.go`; layouts cascade, page-level overrides win). Full reference + decision tree: [docs/render-modes.md](docs/render-modes.md).
+
+| Mode    | When to use                       | Page-options recipe                                | Runtime path                                |
+|---------|-----------------------------------|----------------------------------------------------|---------------------------------------------|
+| **SSR** (default) | Dynamic, fresh data per request   | Default — no opt-in needed (`SSR: true` is default)  | Go `Render()` emits HTML; client hydrates    |
+| **SSG** | Marketing, docs, blog             | `kit.PageOptions{Prerender: true}`                 | Build-time HTML; static handler at runtime  |
+| **SPA** | Authenticated dashboards, console | `kit.PageOptions{SSR: false}`                      | App shell + JSON payload; client renders    |
+| **Static** | No per-page data                  | No `_page.server.go`; pure `.svelte` only          | App shell + empty payload; client renders   |
+
+Quick examples:
+
+```go
+// SSR (default) — _page.server.go
+//go:build sveltego
+
+func Load(ctx kit.LoadCtx) (PageData, error) {
+    return PageData{Posts: fetchPosts(ctx)}, nil
+}
+```
+
+```go
+// SSG — _page.server.go
+//go:build sveltego
+
+const Prerender = true
+
+func Load(ctx kit.LoadCtx) (PageData, error) {
+    return PageData{Title: "About"}, nil
+}
+```
+
+```go
+// SPA — _page.server.go
+//go:build sveltego
+
+const SSR = false
+
+func Load(ctx kit.LoadCtx) (PageData, error) {
+    return PageData{User: currentUser(ctx)}, nil
+}
+```
+
+```svelte
+<!-- Static — _page.svelte only, no _page.server.go -->
+<h1>About sveltego</h1>
+<p>Static content, no server-side data.</p>
+```
+
+The `playgrounds/basic` app runs SSR by default; switch any route by editing the constants above.
+
 ## Quickstart
 
 Pre-alpha — expect rough edges. One Go command from any terminal, no clone, no global install:
