@@ -112,12 +112,18 @@ func TestRunBuildLambda(t *testing.T) {
 	}
 }
 
-func TestRunBuildStaticBlocked(t *testing.T) {
+func TestRunBuildStatic(t *testing.T) {
 	t.Parallel()
+	// Static target now drives the prerender pipeline (#447). The CLI
+	// hands a synthetic project root that has no go.mod, so the
+	// underlying `go build` fails — that surfaces as an adapter-static
+	// error which is the signal we use to confirm dispatch landed
+	// correctly.
 	var stdout, stderr bytes.Buffer
-	err := run([]string{"build", "--target=static"}, &stdout, &stderr)
-	if err == nil || !strings.Contains(err.Error(), "static target requires") {
-		t.Fatalf("expected static blocker, got %v", err)
+	root := t.TempDir()
+	err := run([]string{"build", "--target=static", "--root", root}, &stdout, &stderr)
+	if err == nil || !strings.Contains(err.Error(), "adapter-static") {
+		t.Fatalf("expected adapter-static error, got %v", err)
 	}
 }
 

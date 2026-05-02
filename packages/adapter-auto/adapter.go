@@ -40,6 +40,11 @@ type BuildContext struct {
 	HandlerName    string
 	MemoryMB       int
 	TimeoutSeconds int
+
+	// FailOnDynamic forwards to adapter-static. When true, the static
+	// build fails if any route in the project is not opted into
+	// prerender.
+	FailOnDynamic bool
 }
 
 // ErrUnknownTarget is returned when Target does not match any known
@@ -98,8 +103,10 @@ func Build(ctx context.Context, bc BuildContext) error {
 		})
 	case adapterstatic.Name:
 		return adapterstatic.Build(ctx, adapterstatic.BuildContext{
-			ProjectRoot: bc.ProjectRoot,
-			OutputDir:   bc.OutputDir,
+			ProjectRoot:   bc.ProjectRoot,
+			OutputDir:     bc.OutputDir,
+			MainPackage:   bc.MainPackage,
+			FailOnDynamic: bc.FailOnDynamic,
 		})
 	case adaptercloudflare.Name:
 		return adaptercloudflare.Build(ctx, adaptercloudflare.BuildContext{

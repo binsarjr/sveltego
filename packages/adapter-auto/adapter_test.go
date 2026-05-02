@@ -10,7 +10,6 @@ import (
 
 	adapterauto "github.com/binsarjr/sveltego/adapter-auto"
 	adaptercloudflare "github.com/binsarjr/sveltego/adapter-cloudflare"
-	adapterstatic "github.com/binsarjr/sveltego/adapter-static"
 )
 
 func TestDetect(t *testing.T) {
@@ -92,13 +91,17 @@ func TestBuildDispatchesLambda(t *testing.T) {
 	}
 }
 
-func TestBuildDispatchesStaticReturnsBlocker(t *testing.T) {
+func TestBuildDispatchesStatic(t *testing.T) {
 	t.Parallel()
+	// Static target now wires through to the prerender pipeline (#447).
+	// Without ProjectRoot set the static adapter fails validation; that
+	// is the signal we use to confirm dispatch landed in the static
+	// adapter rather than the cloudflare/server stubs.
 	err := adapterauto.Build(context.Background(), adapterauto.BuildContext{
 		Target: "static",
 	})
-	if !errors.Is(err, adapterstatic.ErrNotImplemented) {
-		t.Fatalf("expected static blocker, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "adapter-static") {
+		t.Fatalf("expected adapter-static error, got %v", err)
 	}
 }
 
