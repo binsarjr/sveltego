@@ -1,14 +1,13 @@
-// Package codegen lowers a parsed Svelte 5 fragment to Go source that runs
-// against the render package. The generated file declares a Page receiver
-// whose Render method writes the SSR HTML into a *render.Writer.
+// Package codegen lowers user-authored Svelte/Go inputs to the
+// generated `.gen/` tree the runtime imports. The package owns the
+// build driver, the routescan-aware manifest emitter, and the
+// adapters that bridge user types into router handlers.
 package codegen
 
 import (
 	"fmt"
 	"strconv"
 	"strings"
-
-	"github.com/binsarjr/sveltego/packages/sveltego/internal/images"
 )
 
 // Builder accumulates generated Go source with line and indentation
@@ -22,40 +21,6 @@ type Builder struct {
 	buf    strings.Builder
 	indent int
 	err    error
-	// hasChildren is true when the enclosing Render method declares the
-	// `children func(*render.Writer) error` parameter (layout templates).
-	// emitElement consults this flag when lowering <slot />.
-	hasChildren bool
-	// keyCounter assigns stable per-template indices to {#key} blocks so
-	// the SSR anchor comments line up with the client-side hydration
-	// metadata table.
-	keyCounter int
-	// nestDepth counts how deep the current emit position sits inside
-	// element wrappers or block constructs ({#if}, {#each}, {#await},
-	// {#key}). Special elements like <svelte:body> may only appear at
-	// the template root and consult this counter to validate placement.
-	nestDepth int
-	// componentMode is true while emitting a Svelte component's Render
-	// body (GenerateComponent). Slot outlets in this mode dispatch to
-	// the per-component Slots struct rather than the layout `children`
-	// closure.
-	componentMode bool
-	// slots collects every <slot> outlet seen during a component render
-	// so GenerateComponent can emit the matching Slots struct field set.
-	// Names are normalized: empty/"default" both map to "Default"; named
-	// slots map to PascalCase identifiers.
-	slots []slotOutlet
-	// provenance, when true, causes emitNode to prefix each span with a
-	// // gen: source=... kind=... comment so LLMs and humans can trace the
-	// generated code back to its .svelte source line.
-	provenance bool
-	// srcPath is the relative .svelte source path written into span
-	// comments. Set once from Options.Filename before the first emit.
-	srcPath string
-	// imageVariants maps each <Image src=...> path to its build-time
-	// generated variant set. emitImage consults this table to resolve
-	// the hashed URLs and intrinsic dimensions written into the page.
-	imageVariants map[string]images.Result
 }
 
 // Line appends s as one indented source line.

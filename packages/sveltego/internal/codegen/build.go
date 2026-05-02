@@ -14,8 +14,6 @@ import (
 
 	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 	"github.com/binsarjr/sveltego/packages/sveltego/internal/codegen/svelterender"
-	"github.com/binsarjr/sveltego/packages/sveltego/internal/images"
-	"github.com/binsarjr/sveltego/packages/sveltego/internal/parser"
 	"github.com/binsarjr/sveltego/packages/sveltego/internal/routescan"
 	"github.com/binsarjr/sveltego/packages/sveltego/internal/vite"
 )
@@ -63,10 +61,6 @@ type BuildOptions struct {
 	Provenance bool
 	// NoClient skips emitting Vite client entry files and vite.config.gen.js.
 	NoClient bool
-	// ImageWidths overrides the default variant widths used by the
-	// build-time image pipeline for <Image> elements. Empty applies the
-	// framework default (320, 640, 1280); see images.DefaultWidths.
-	ImageWidths []int
 }
 
 // BuildResult summarizes one [Build] invocation. Routes counts every
@@ -157,11 +151,6 @@ func Build(ctx context.Context, opts BuildOptions) (*BuildResult, error) {
 		logger.Warn("routescan diagnostic", logKeyDiagnostic, d.String())
 	}
 
-	imageVariants, err := buildImageVariants(opts.ProjectRoot, opts.ImageWidths)
-	if err != nil {
-		return nil, err
-	}
-
 	// Resolve page-options cascade up front so per-route emission sees
 	// the resolved kit.PageOptions for manifest emission and SSG gating.
 	// RFC #379 phase 5 made "svelte" the only template pipeline so the
@@ -173,12 +162,6 @@ func Build(ctx context.Context, opts BuildOptions) (*BuildResult, error) {
 
 	routeCount := 0
 	emittedLayouts := make(map[string]struct{})
-	emittedErrors := make(map[string]struct{})
-	pageHeads := make(map[string]bool)
-	layoutHeads := make(map[string]bool)
-	// componentSeeds collects every .svelte file processed by the route/layout
-	// passes so the component discovery pass can scan them for relative imports.
-	var componentSeeds []string
 	// clientRouteKeys collects the Vite input key for every page route.
 	var clientRouteKeys []string
 	clientKeysByPkg := make(map[string]string)
@@ -191,43 +174,8 @@ func Build(ctx context.Context, opts BuildOptions) (*BuildResult, error) {
 	// `<script module>` so vite.GenerateRouter wires the snapshot capture
 	// + restore hooks (#84). Empty when no route opts in.
 	clientSnapshotRoutes := make(map[string]bool)
-	// Pre-compute which error boundaries and layouts will be
-	// SSR-transpiled (#412, #456, #478) so we can skip the legacy
-	// Mustache-Go emit for those packages. Mustache-Go's literal
-	// expression substitution does not align with pure-Svelte sources:
-	// `data.code` lowering differs (literal vs JSON-tag-mapped), and
-	// inline JS handlers like `onclick={toggleDark}` reference
-	// identifiers that exist only in the .svelte source — Mustache-Go
-	// would emit `WriteEscapeAttr(toggleDark)` against a missing Go
-	// symbol. Emitting both side-by-side breaks compilation.
-	ssrErrorPlans := planSSRErrors(scan, routeOptions)
-	ssrErrorPkgs := make(map[string]struct{}, len(ssrErrorPlans))
-	for _, ep := range ssrErrorPlans {
-		ssrErrorPkgs[ep.pkgPath] = struct{}{}
-	}
-	ssrLayoutPlans := planSSRLayouts(scan, routeOptions)
-	ssrLayoutPkgs := make(map[string]struct{}, len(ssrLayoutPlans))
-	for _, lp := range ssrLayoutPlans {
-		ssrLayoutPkgs[lp.pkgPath] = struct{}{}
-	}
 
 	for _, route := range scan.Routes {
-		if route.HasError {
-			if _, done := emittedErrors[route.Dir]; !done {
-				// Skip Mustache-Go error.gen.go emit when the boundary
-				// will be SSR-transpiled via #412. Mustache-Go and the
-				// SSR transpile path lower `data.<field>` differently
-				// (literal vs JSON-tag-mapped), so emitting both for the
-				// same template breaks compilation when authors use
-				// JS-camelCase access.
-				if _, isSSRError := ssrErrorPkgs[route.PackagePath]; !isSSRError {
-					if err := emitErrorPage(opts.ProjectRoot, outDir, route.Dir, route.PackagePath, route.PackageName, opts.Provenance, start); err != nil {
-						return nil, err
-					}
-				}
-				emittedErrors[route.Dir] = struct{}{}
-			}
-		}
 		switch {
 		case route.HasPage:
 			pageName := "_page.svelte"
@@ -244,7 +192,6 @@ func Build(ctx context.Context, opts BuildOptions) (*BuildResult, error) {
 				return nil, err
 			}
 			routeCount++
-			componentSeeds = append(componentSeeds, pagePath)
 
 			if !opts.NoClient {
 				ck, relSvelteFromRouter, cerr := emitClientEntry(opts.ProjectRoot, outDir, routesDir, route, pageName, hasSnapshot)
@@ -283,35 +230,13 @@ func Build(ctx context.Context, opts BuildOptions) (*BuildResult, error) {
 			if i < len(route.LayoutServerFiles) {
 				serverFile = route.LayoutServerFiles[i]
 			}
-			// Skip Mustache-Go layout.gen.go emit when the layout will
-			// be SSR-transpiled via #456/#478. The SSR Option B path
-			// emits `.gen/layoutsrc/<pkg>/layout_render.gen.go` and a
-			// `<svelte:head>` is folded into the Render adapter via
-			// `payload.HeadHTML()`; the legacy `Layout{}.Head` adapter
-			// is not needed.
-			if _, isSSRLayout := ssrLayoutPkgs[pkgPath]; !isSSRLayout {
-				hasHead, err := emitLayout(opts.ProjectRoot, outDir, modulePath, layoutDir, pkgPath, pkgName, serverFile, opts.Release, opts.EnvLookup, opts.Provenance, start, imageVariants)
-				if err != nil {
-					return nil, err
-				}
-				if hasHead {
-					layoutHeads[pkgPath] = true
-				}
-			}
 			if serverFile != "" {
 				if err := emitLayoutMirrorAndWire(opts.ProjectRoot, outDir, modulePath, pkgPath, pkgName, serverFile); err != nil {
 					return nil, err
 				}
 			}
 			emittedLayouts[layoutDir] = struct{}{}
-			layoutPath, lerr := resolveLayoutSource(layoutDir)
-			if lerr == nil {
-				componentSeeds = append(componentSeeds, layoutPath)
-			}
 		}
-	}
-	if _, err := emitComponentTree(opts.ProjectRoot, outDir, componentSeeds); err != nil {
-		return nil, fmt.Errorf("codegen: component tree: %w", err)
 	}
 
 	// RFC #379 phase 2: emit `_page.svelte.d.ts` / `_layout.svelte.d.ts`
@@ -360,8 +285,6 @@ func Build(ctx context.Context, opts BuildOptions) (*BuildResult, error) {
 		ModulePath:        modulePath,
 		GenRoot:           outDir,
 		RouteOptions:      routeOptions,
-		PageHeads:         pageHeads,
-		LayoutHeads:       layoutHeads,
 		ClientKeys:        clientKeysByPkg,
 		HasServiceWorker:  hasServiceWorker,
 		SSRRenderRoutes:   ssrPlan.Transpiled,
@@ -692,104 +615,6 @@ func dirExists(path string) bool {
 		return false
 	}
 	return info.IsDir()
-}
-
-// emitErrorPage parses one _error.svelte and writes the generated
-// error.gen.go into the route's encoded gen package directory. The
-// package may also host a layout.gen.go and/or page.gen.go from the
-// same directory; the distinct filename keeps them separate.
-func emitErrorPage(projectRoot, outDir, errorDir, pkgPath, pkgName string, provenance bool, generatedAt time.Time) error {
-	errPath := filepath.Join(errorDir, "_error.svelte")
-	src, err := os.ReadFile(errPath) //nolint:gosec // path comes from scanner walk under projectRoot
-	if err != nil {
-		return fmt.Errorf("codegen: read %s: %w", errPath, err)
-	}
-	frag, perrs := parser.Parse(src)
-	if len(perrs) > 0 {
-		return fmt.Errorf("codegen: parse %s: %w", errPath, perrs)
-	}
-	out, err := GenerateErrorPage(frag, ErrorPageOptions{
-		PackageName:   pkgName,
-		Filename:      errPath,
-		Provenance:    provenance,
-		SourceContent: src,
-		GeneratedAt:   generatedAt,
-	})
-	if err != nil {
-		return fmt.Errorf("codegen: generate %s: %w", errPath, err)
-	}
-	relPkg := strings.TrimPrefix(pkgPath, ".gen/")
-	target := filepath.Join(projectRoot, outDir, filepath.FromSlash(relPkg), "error.gen.go")
-	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-		return fmt.Errorf("codegen: mkdir %s: %w", filepath.Dir(target), err)
-	}
-	if err := os.WriteFile(target, out, genFileMode); err != nil {
-		return fmt.Errorf("codegen: write %s: %w", target, err)
-	}
-	return nil
-}
-
-// emitLayout parses one _layout.svelte and writes the generated
-// layout.gen.go into the encoded layout package directory. Layout files
-// share the directory with any _page.svelte / wire.gen.go for the same
-// dir; the distinct filename keeps them in separate generated artifacts.
-// The generated filename layout.gen.go has no leading underscore; the
-// `_layout.gen.go` form would be silently dropped by Go's build system.
-// serverFile, when non-empty, points at a sibling _layout.server.go
-// whose Load() inline struct return is used to infer LayoutData fields.
-// When release is true,
-// any $lib/dev/** import is a fatal error. lookup resolves env.Static*
-// calls to literal string values at build time.
-func emitLayout(projectRoot, outDir, modulePath, layoutDir, pkgPath, pkgName, serverFile string, release bool, lookup EnvLookup, provenance bool, generatedAt time.Time, imageVariants map[string]images.Result) (bool, error) {
-	layoutPath, err := resolveLayoutSource(layoutDir)
-	if err != nil {
-		return false, err
-	}
-	src, err := os.ReadFile(layoutPath) //nolint:gosec // path comes from scanner walk under projectRoot
-	if err != nil {
-		return false, fmt.Errorf("codegen: read %s: %w", layoutPath, err)
-	}
-	if release {
-		if err := checkLibDevImports(string(src), layoutPath); err != nil {
-			return false, err
-		}
-	}
-	substituted, err := substituteStaticEnv(string(src), lookup)
-	if err != nil {
-		return false, fmt.Errorf("codegen: %s: %w", layoutPath, err)
-	}
-	frag, perrs := parser.Parse([]byte(substituted))
-	if len(perrs) > 0 {
-		return false, fmt.Errorf("codegen: parse %s: %w", layoutPath, perrs)
-	}
-	mirrorImportPath := ""
-	if serverFile != "" {
-		encodedSub := strings.TrimPrefix(pkgPath, ".gen/")
-		mirrorImportPath = modulePath + "/" + outDir + "/layoutsrc/" + encodedSub
-	}
-	out, err := GenerateLayout(frag, LayoutOptions{
-		PackageName:      pkgName,
-		ServerFilePath:   serverFile,
-		Filename:         layoutPath,
-		Provenance:       provenance,
-		SourceContent:    src,
-		GeneratedAt:      generatedAt,
-		ImageVariants:    imageVariants,
-		MirrorImportPath: mirrorImportPath,
-	})
-	if err != nil {
-		return false, fmt.Errorf("codegen: generate %s: %w", layoutPath, err)
-	}
-	hasHead, _ := extractHeadChildren(frag.Children)
-	relPkg := strings.TrimPrefix(pkgPath, ".gen/")
-	target := filepath.Join(projectRoot, outDir, filepath.FromSlash(relPkg), "layout.gen.go")
-	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-		return false, fmt.Errorf("codegen: mkdir %s: %w", filepath.Dir(target), err)
-	}
-	if err := os.WriteFile(target, out, genFileMode); err != nil {
-		return false, fmt.Errorf("codegen: write %s: %w", target, err)
-	}
-	return len(hasHead) > 0, nil
 }
 
 // emitLayoutMirrorAndWire writes the user-source mirror for one layout

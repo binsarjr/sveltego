@@ -25,22 +25,35 @@ const (
 	RouteIDDashBilling = `/dash/billing`
 )
 
-// render__layout__page_routes adapts page_routes.Layout{}.Render to router.LayoutHandler.
-// The trailing pageState parameter is the $app/state surface (#466);
-// legacy Mustache-Go layouts ignore it but accept the trailing arg so
-// the per-route renderChain__<routeIdent> emit can pass pageState
-// uniformly across SSR-bridged and Mustache-Go layouts.
+// render__layout__page_routes bridges page_routes.RenderLayoutSSR (Svelte SSR Option B,
+// children-callback ABI from #453) into router.LayoutHandler.
 func render__layout__page_routes(w *render.Writer, ctx *kit.RenderCtx, data any, children func(*render.Writer) error, pageState server.PageState) error {
-	_ = pageState
-	var typed page_routes.LayoutData
-	if data != nil {
-		v, ok := data.(page_routes.LayoutData)
-		if !ok {
-			return fmt.Errorf("sveltego: layout %q: LayoutData type mismatch (got %T, want page_routes.LayoutData)", `.gen/routes`, data)
+	_ = ctx
+	var payload server.Payload
+	var childErr error
+	inner := func(p *server.Payload) {
+		if childErr != nil {
+			return
 		}
-		typed = v
+		buf := render.Acquire()
+		defer render.Release(buf)
+		if err := children(buf); err != nil {
+			childErr = err
+			return
+		}
+		p.Push(string(buf.Bytes()))
 	}
-	return page_routes.Layout{}.Render(w, ctx, typed, children)
+	if err := page_routes.RenderLayoutSSR(&payload, data, inner, pageState); err != nil {
+		return err
+	}
+	if childErr != nil {
+		return childErr
+	}
+	if head := payload.HeadHTML(); head != "" {
+		w.WriteString(head)
+	}
+	w.WriteString(payload.Body())
+	return nil
 }
 
 // loadLayout__page_routes adapts page_routes.LayoutLoad to router.LayoutLoadHandler.

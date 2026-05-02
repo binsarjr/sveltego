@@ -23,15 +23,12 @@ type entry struct {
 // layoutImport pairs a layout package path with the import alias used
 // for it inside the generated manifest. hasServer reports whether the
 // layout dir owns a layout.server.go; the manifest emits a load adapter
-// only for those. hasHead reports whether the layout template emits a
-// Head method; the manifest emits a head adapter and a LayoutHeads slot
-// for it. Hoisted to package scope so the adapter emitter can consume
-// the same slice.
+// only for those. Hoisted to package scope so the adapter emitter can
+// consume the same slice.
 type layoutImport struct {
 	pkgPath   string
 	alias     string
 	hasServer bool
-	hasHead   bool
 	// hasSSR is set for layouts in SSRRenderLayouts: the manifest emits
 	// the payload-bridge form of render__layout__<alias> that dispatches
 	// to <alias>.RenderLayoutSSR (children-callback ABI from #453).
@@ -69,15 +66,6 @@ type ManifestOptions struct {
 	// (the manifest defaults at runtime). Build resolves the cascade
 	// ahead of time so the manifest emitter does no I/O.
 	RouteOptions map[string]kit.PageOptions
-	// PageHeads tracks every page package that emits a Head method.
-	// Keys are ScannedRoute.PackagePath; manifest emits a head__<alias>
-	// adapter and a Head field on the route entry only for keys present
-	// here.
-	PageHeads map[string]bool
-	// LayoutHeads tracks every layout package that emits a Head method.
-	// Keys are layout PackagePath; the manifest emits a head__layout__
-	// <alias> adapter and a LayoutHeads slot for keys present here.
-	LayoutHeads map[string]bool
 	// ClientKeys maps ScannedRoute.PackagePath to the Vite client entry
 	// key (e.g. "routes/_page"). When present the manifest emits a
 	// ClientKey field on each matching router.Route.
@@ -201,7 +189,6 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 	}
 	for i := range layoutImports {
 		layoutImports[i].hasServer = layoutHasServer[layoutImports[i].pkgPath]
-		layoutImports[i].hasHead = opts.LayoutHeads[layoutImports[i].pkgPath]
 		if opts.SSRRenderLayouts != nil {
 			_, ok := opts.SSRRenderLayouts[layoutImports[i].pkgPath]
 			layoutImports[i].hasSSR = ok
@@ -444,9 +431,7 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 	emitRenderAdapters(&b, entries, opts.RouteOptions, ssrRoutes)
 	emitFallbackAdapters(&b, entries, opts.RouteOptions, fallbackByRoute)
 	emitFallbackInit(&b, opts.SSRFallbackRoutes)
-	emitHeadAdapters(&b, entries, opts.PageHeads, opts.RouteOptions)
 	emitLayoutAdapters(&b, layoutImports)
-	emitLayoutHeadAdapters(&b, layoutImports)
 	emitErrorAdapters(&b, errorImports)
 	layoutByPathForChain := make(map[string]layoutImport, len(layoutImports))
 	for _, li := range layoutImports {
@@ -475,7 +460,7 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 			errorAliasByPath[ei.pkgPath] = ei.alias
 		}
 		for _, e := range entries {
-			emitRouteEntry(&b, e.route, e.alias, layoutByPath, errorAliasByPath, opts.RouteOptions, opts.PageHeads, opts.ClientKeys, ssrRoutes, fallbackByRoute)
+			emitRouteEntry(&b, e.route, e.alias, layoutByPath, errorAliasByPath, opts.RouteOptions, opts.ClientKeys, ssrRoutes, fallbackByRoute)
 		}
 		b.Dedent()
 		b.Line("}")
@@ -740,34 +725,7 @@ func emitFallbackInit(b *Builder, fallback []SSRFallbackRoute) {
 // emitted LayoutLoad to satisfy router.LayoutLoadHandler.
 func emitLayoutAdapters(b *Builder, imports []layoutImport) {
 	for _, li := range imports {
-		if li.hasSSR {
-			emitSSRLayoutAdapter(b, li)
-		} else {
-			b.Linef("// render__layout__%s adapts %s.Layout{}.Render to router.LayoutHandler.", li.alias, li.alias)
-			b.Linef("// The trailing pageState parameter is the $app/state surface (#466);")
-			b.Linef("// legacy Mustache-Go layouts ignore it but accept the trailing arg so")
-			b.Linef("// the per-route renderChain__<routeIdent> emit can pass pageState")
-			b.Linef("// uniformly across SSR-bridged and Mustache-Go layouts.")
-			b.Linef("func render__layout__%s(w *render.Writer, ctx *kit.RenderCtx, data any, children func(*render.Writer) error, pageState server.PageState) error {", li.alias)
-			b.Indent()
-			b.Line("_ = pageState")
-			b.Linef("var typed %s.LayoutData", li.alias)
-			b.Line("if data != nil {")
-			b.Indent()
-			b.Linef("v, ok := data.(%s.LayoutData)", li.alias)
-			b.Line("if !ok {")
-			b.Indent()
-			b.Linef(`return fmt.Errorf("sveltego: layout %%q: LayoutData type mismatch (got %%T, want %s.LayoutData)", %s, data)`, li.alias, quoteGo(li.pkgPath))
-			b.Dedent()
-			b.Line("}")
-			b.Line("typed = v")
-			b.Dedent()
-			b.Line("}")
-			b.Linef("return %s.Layout{}.Render(w, ctx, typed, children)", li.alias)
-			b.Dedent()
-			b.Line("}")
-			b.Line("")
-		}
+		emitSSRLayoutAdapter(b, li)
 
 		if li.hasServer {
 			b.Linef("// loadLayout__%s adapts %s.LayoutLoad to router.LayoutLoadHandler.", li.alias, li.alias)
@@ -847,92 +805,14 @@ func isSvelteRoute(pattern string, routeOptions map[string]kit.PageOptions) bool
 	return routeOptions[pattern].Templates == kit.TemplatesSvelte
 }
 
-// emitHeadAdapters writes one `head__<alias>` function per Page
-// route whose template emits a Head method. Each adapter widens the
-// typed PageData parameter to router.PageHeadHandler shape using the
-// same type-assert-or-error pattern as render__<alias>. Svelte-mode
-// routes are skipped: Head is part of the .svelte body that Vite owns.
-func emitHeadAdapters(b *Builder, entries []entry, pageHeads map[string]bool, routeOptions map[string]kit.PageOptions) {
-	if len(pageHeads) == 0 {
-		return
-	}
-	for _, e := range entries {
-		if !e.route.HasPage || !pageHeads[e.route.PackagePath] || isSvelteRoute(e.route.Pattern, routeOptions) {
-			continue
-		}
-		b.Linef("// head__%s adapts %s.Page{}.Head to router.PageHeadHandler.", e.alias, e.alias)
-		b.Linef("func head__%s(w *render.Writer, ctx *kit.RenderCtx, data any) error {", e.alias)
-		b.Indent()
-		b.Linef("var typed %s.PageData", e.alias)
-		b.Line("if data != nil {")
-		b.Indent()
-		b.Linef("v, ok := data.(%s.PageData)", e.alias)
-		b.Line("if !ok {")
-		b.Indent()
-		b.Linef(`return fmt.Errorf("sveltego: route %%q: PageData type mismatch (got %%T, want %s.PageData)", %s, data)`, e.alias, quoteGo(e.route.Pattern))
-		b.Dedent()
-		b.Line("}")
-		b.Line("typed = v")
-		b.Dedent()
-		b.Line("}")
-		b.Linef("return %s.Page{}.Head(w, ctx, typed)", e.alias)
-		b.Dedent()
-		b.Line("}")
-		b.Line("")
-	}
-}
-
-// emitLayoutHeadAdapters writes one `head__layout__<alias>` function per
-// layout package whose template emits a Head method. Mirrors the layout
-// render adapter but binds Layout{}.Head and the LayoutData type.
-func emitLayoutHeadAdapters(b *Builder, imports []layoutImport) {
-	for _, li := range imports {
-		if !li.hasHead {
-			continue
-		}
-		b.Linef("// head__layout__%s adapts %s.Layout{}.Head to router.LayoutHeadHandler.", li.alias, li.alias)
-		b.Linef("func head__layout__%s(w *render.Writer, ctx *kit.RenderCtx, data any) error {", li.alias)
-		b.Indent()
-		b.Linef("var typed %s.LayoutData", li.alias)
-		b.Line("if data != nil {")
-		b.Indent()
-		b.Linef("v, ok := data.(%s.LayoutData)", li.alias)
-		b.Line("if !ok {")
-		b.Indent()
-		b.Linef(`return fmt.Errorf("sveltego: layout %%q: LayoutData type mismatch (got %%T, want %s.LayoutData)", %s, data)`, li.alias, quoteGo(li.pkgPath))
-		b.Dedent()
-		b.Line("}")
-		b.Line("typed = v")
-		b.Dedent()
-		b.Line("}")
-		b.Linef("return %s.Layout{}.Head(w, ctx, typed)", li.alias)
-		b.Dedent()
-		b.Line("}")
-		b.Line("")
-	}
-}
-
 // emitErrorAdapters writes one `renderError__<alias>` function per
-// unique error-page package. The default form forwards (ctx, w, safe)
-// to the legacy `<alias>.ErrorPage{}.Render` (Mustache-Go path).
-// Boundaries in SSRRenderErrors swap to the payload-bridge form from
-// #412: dispatch to the wire-emitted RenderErrorSSR through a fresh
-// server.Payload and copy payload.Body() into the outer writer at the
-// end. kit.SafeError is shared across the framework so the typed and
-// erased forms match.
+// unique error-page package. Each adapter dispatches to the wire-emitted
+// RenderErrorSSR through a fresh server.Payload and copies payload.Body()
+// into the outer writer (#412). kit.SafeError is shared across the
+// framework so the typed and erased forms match.
 func emitErrorAdapters(b *Builder, imports []errorImport) {
 	for _, ei := range imports {
-		if ei.hasSSR {
-			emitSSRErrorAdapter(b, ei)
-			continue
-		}
-		b.Linef("// renderError__%s adapts %s.ErrorPage{}.Render to router.ErrorHandler.", ei.alias, ei.alias)
-		b.Linef("func renderError__%s(w *render.Writer, ctx *kit.RenderCtx, safe kit.SafeError) error {", ei.alias)
-		b.Indent()
-		b.Linef("return %s.ErrorPage{}.Render(w, ctx, safe)", ei.alias)
-		b.Dedent()
-		b.Line("}")
-		b.Line("")
+		emitSSRErrorAdapter(b, ei)
 	}
 }
 
@@ -1154,12 +1034,11 @@ func openLayoutCalls(b *Builder, layoutPaths []string, layoutByPath map[string]l
 	}
 }
 
-func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutByPath map[string]layoutImport, errorAliasByPath map[string]string, routeOptions map[string]kit.PageOptions, pageHeads map[string]bool, clientKeys map[string]string, ssrRoutes map[string]string, fallbackByRoute map[string]string) {
+func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutByPath map[string]layoutImport, errorAliasByPath map[string]string, routeOptions map[string]kit.PageOptions, clientKeys map[string]string, ssrRoutes map[string]string, fallbackByRoute map[string]string) {
 	b.Line("{")
 	b.Indent()
 	b.Linef("Pattern: %s,", quoteGo(r.Pattern))
 	emitSegments(b, r.Segments)
-	svelteMode := isSvelteRoute(r.Pattern, routeOptions)
 	_, hasSSR := ssrRoutes[r.Pattern]
 	_, isFallback := fallbackByRoute[r.Pattern]
 	switch {
@@ -1167,11 +1046,6 @@ func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutBy
 		b.Linef("Server: %s.Handlers,", alias)
 	case r.HasPage:
 		switch {
-		case !svelteMode:
-			b.Linef("Page: render__%s,", alias)
-			if pageHeads[r.PackagePath] {
-				b.Linef("Head: head__%s,", alias)
-			}
 		case hasSSR:
 			// Phase 6 (#428): Svelte-mode route with a Render emit.
 			// The bridge adapter wraps the typed RenderSSR into the
@@ -1206,7 +1080,6 @@ func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutBy
 		}
 
 		anyServer := false
-		anyHead := false
 		for _, p := range r.LayoutPackagePaths {
 			li, ok := layoutByPath[p]
 			if !ok {
@@ -1214,9 +1087,6 @@ func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutBy
 			}
 			if li.hasServer {
 				anyServer = true
-			}
-			if li.hasHead {
-				anyHead = true
 			}
 		}
 		if anyServer {
@@ -1229,23 +1099,6 @@ func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutBy
 				}
 				if li.hasServer {
 					b.Linef("loadLayout__%s,", li.alias)
-				} else {
-					b.Line("nil,")
-				}
-			}
-			b.Dedent()
-			b.Line("},")
-		}
-		if anyHead {
-			b.Line("LayoutHeads: []router.LayoutHeadHandler{")
-			b.Indent()
-			for _, p := range r.LayoutPackagePaths {
-				li, ok := layoutByPath[p]
-				if !ok {
-					continue
-				}
-				if li.hasHead {
-					b.Linef("head__layout__%s,", li.alias)
 				} else {
 					b.Line("nil,")
 				}

@@ -1,1 +1,0 @@
-{#if Data.Ok}<p>yes</p>{/if}

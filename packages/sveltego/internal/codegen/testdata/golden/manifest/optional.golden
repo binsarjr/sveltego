@@ -44,7 +44,6 @@ func Routes() []router.Route {
 				{Kind: router.SegmentOptional, Name: `lang`},
 				{Kind: router.SegmentStatic, Value: `about`},
 			},
-			Page: render__page_routes___lang___about,
 		},
 	}
 }

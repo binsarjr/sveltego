@@ -1,1 +1,0 @@
-{#key Data.A}<a>{Data.A}</a>{/key}{#key Data.B}<b>{Data.B}</b>{/key}

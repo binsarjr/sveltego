@@ -1,1 +1,0 @@
-{#if Data.HasItems}{#each Data.Items as item}{item}{/each}{/if}

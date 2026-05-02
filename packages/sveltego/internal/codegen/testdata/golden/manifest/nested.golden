@@ -71,14 +71,12 @@ func Routes() []router.Route {
 		{
 			Pattern:  `/`,
 			Segments: []router.Segment{},
-			Page:     render__page_routes,
 		},
 		{
 			Pattern: `/about`,
 			Segments: []router.Segment{
 				{Kind: router.SegmentStatic, Value: `about`},
 			},
-			Page: render__page_routes_about,
 		},
 		{
 			Pattern: `/posts/[slug]`,
@@ -86,7 +84,6 @@ func Routes() []router.Route {
 				{Kind: router.SegmentStatic, Value: `posts`},
 				{Kind: router.SegmentParam, Name: `slug`},
 			},
-			Page:    render__page_routes_posts__slug_,
 			Load:    page_routes_posts__slug_.Load,
 			Actions: page_routes_posts__slug_.Actions,
 		},

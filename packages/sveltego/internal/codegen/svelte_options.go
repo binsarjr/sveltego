@@ -306,20 +306,3 @@ func svelteOptionString(a *ast.Attribute, pos ast.Pos) (string, error) {
 		Msg: fmt.Sprintf("<svelte:options> %s: expected a static string value", a.Name),
 	}
 }
-
-// validateRunesOption checks the runes opt-in/opt-out against the script
-// body. When `runes={false}`, the script must not call any rune. When
-// `runes={true}` (or absent), the script may use runes freely; runes are
-// the project default.
-func validateRunesOption(opts svelteOptions, scripts scriptOutput) error {
-	if opts.Runes == nil || *opts.Runes {
-		return nil
-	}
-	if len(scripts.Runes) > 0 {
-		return &CodegenError{
-			Pos: opts.Pos,
-			Msg: fmt.Sprintf("<svelte:options runes={false}>: script uses rune %s; remove the rune or set runes={true}", scripts.Runes[0]),
-		}
-	}
-	return nil
-}

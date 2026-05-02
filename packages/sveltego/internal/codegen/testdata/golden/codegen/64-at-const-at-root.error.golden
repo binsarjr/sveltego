@@ -1,1 +1,0 @@
-1:1: {@const} not allowed at template root; place inside {#each}, {#if}, or another block

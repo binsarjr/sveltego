@@ -1,1 +1,0 @@
-{#await fetchUsers()}{:then users}<ul>{#each users as u}<li>{u.Name}</li>{/each}</ul>{:catch err}<p class="error">{err.Error()}</p>{/await}

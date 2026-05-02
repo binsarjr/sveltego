@@ -1,1 +1,0 @@
-<div>standalone</div>

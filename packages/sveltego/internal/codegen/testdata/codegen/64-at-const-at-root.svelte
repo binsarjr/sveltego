@@ -1,1 +1,0 @@
-{@const total := a + b}{total}

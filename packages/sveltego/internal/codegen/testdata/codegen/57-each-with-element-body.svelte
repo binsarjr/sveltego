@@ -1,1 +1,0 @@
-{#each Posts as p}<li>{p.Title}</li>{/each}

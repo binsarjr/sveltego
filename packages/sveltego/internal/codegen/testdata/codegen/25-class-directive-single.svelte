@@ -1,1 +1,0 @@
-<div class:active={IsActive}>x</div>

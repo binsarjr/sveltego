@@ -1,1 +1,0 @@
-{#each Items as item}{item}{/each}
