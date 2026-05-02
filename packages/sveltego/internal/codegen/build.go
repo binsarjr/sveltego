@@ -526,7 +526,11 @@ func emitClientRouter(projectRoot, outDir string, routeMap map[string]string, sn
 	if err := os.WriteFile(navTarget, []byte(vite.GenerateNavigationModule()), genFileMode); err != nil {
 		return fmt.Errorf("codegen: write client navigation %s: %w", navTarget, err)
 	}
-	stateTarget := filepath.Join(dir, "state.ts")
+	// Emit with the `.svelte.ts` extension so vite-plugin-svelte runs
+	// the file through the Svelte compiler — `state.svelte.ts` contains
+	// `$state(...)` rune calls that a plain `.ts` would ship raw to the
+	// browser (#471).
+	stateTarget := filepath.Join(dir, "state.svelte.ts")
 	if err := os.WriteFile(stateTarget, []byte(vite.GenerateStateModule()), genFileMode); err != nil {
 		return fmt.Errorf("codegen: write client state %s: %w", stateTarget, err)
 	}

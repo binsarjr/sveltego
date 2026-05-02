@@ -1,7 +1,12 @@
 package vite
 
 // GenerateStateModule returns the contents of the public-facing
-// `$app/state` runtime module emitted to .gen/client/__router/state.ts.
+// `$app/state` runtime module emitted to
+// .gen/client/__router/state.svelte.ts. The `.svelte.ts` extension
+// routes the file through vite-plugin-svelte so the `$state` runes
+// inside compile to reactive implementations; a plain `.ts` extension
+// would ship the literal `$state(...)` calls to the browser, which
+// throws `ReferenceError: $state is not defined` at hydration (#471).
 //
 // Surface mirrors SvelteKit's `$app/state` (Svelte 5 runes idiom):
 //

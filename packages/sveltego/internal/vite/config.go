@@ -68,10 +68,14 @@ func GenerateConfig(opts ConfigOptions) string {
 	}
 	// Alias the SvelteKit-style `$app/*` virtual modules to the codegen
 	// outputs under `<genDir>/__router/`. User code imports `$app/state`
-	// and `$app/navigation` exactly as they would on SvelteKit.
+	// and `$app/navigation` exactly as they would on SvelteKit. The
+	// `$app/state` target keeps the `.svelte` half so Vite resolves to
+	// `state.svelte.ts` and vite-plugin-svelte transforms the runes
+	// (#471) — without the `.svelte` segment Vite would prefer a bare
+	// `state.ts` if both ever shipped.
 	b.WriteString("  resolve: {\n")
 	b.WriteString("    alias: {\n")
-	fmt.Fprintf(&b, "      %q: path.resolve(__dirname, %q),\n", "$app/state", genDir+"/__router/state")
+	fmt.Fprintf(&b, "      %q: path.resolve(__dirname, %q),\n", "$app/state", genDir+"/__router/state.svelte")
 	fmt.Fprintf(&b, "      %q: path.resolve(__dirname, %q),\n", "$app/navigation", genDir+"/__router/navigation")
 	b.WriteString("    },\n")
 	b.WriteString("  },\n")
