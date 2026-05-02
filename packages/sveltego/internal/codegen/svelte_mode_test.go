@@ -94,6 +94,63 @@ func TestGenerateManifest_SvelteMode_SSRRender(t *testing.T) {
 	}
 }
 
+// TestGenerateManifest_SvelteMode_SSRLayout verifies #456: when a
+// layout package is in SSRRenderLayouts, the manifest swaps its
+// `render__layout__<alias>` adapter from the legacy
+// `Layout{}.Render(*render.Writer, ...)` call to the children-callback
+// payload bridge that dispatches `<alias>.RenderLayoutSSR`.
+func TestGenerateManifest_SvelteMode_SSRLayout(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	mustWrite := func(path, body string) {
+		t.Helper()
+		full := filepath.Join(root, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustWrite("routes/_layout.svelte", "{@render children()}")
+	mustWrite("routes/_page.svelte", "<h1>home</h1>")
+
+	scan, err := routescan.Scan(routescan.ScanInput{RoutesDir: filepath.Join(root, "routes")})
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	pattern := scan.Routes[0].Pattern
+	pkgPath := scan.Routes[0].PackagePath
+	routeOpts := map[string]kit.PageOptions{
+		pattern: {SSR: true, CSR: true, CSRF: true, TrailingSlash: kit.TrailingSlashNever, Templates: kit.TemplatesSvelte},
+	}
+	out, err := GenerateManifest(scan, ManifestOptions{
+		PackageName:  "gen",
+		ModulePath:   "myapp",
+		GenRoot:      ".gen",
+		RouteOptions: routeOpts,
+		SSRRenderRoutes: map[string]string{
+			pattern: "routes",
+		},
+		SSRRenderLayouts: map[string]struct{}{
+			pkgPath: {},
+		},
+	})
+	if err != nil {
+		t.Fatalf("GenerateManifest: %v", err)
+	}
+	s := string(out)
+	if !bytes.Contains(out, []byte(".RenderLayoutSSR(&payload, data, inner)")) {
+		t.Errorf("expected RenderLayoutSSR call inside layout bridge:\n%s", s)
+	}
+	if bytes.Contains(out, []byte(".Layout{}.Render(w, ctx, typed, children)")) {
+		t.Errorf("legacy Layout{}.Render call should not appear when layout is SSR-bridged:\n%s", s)
+	}
+	if !bytes.Contains(out, []byte("inner := func(p *server.Payload) {")) {
+		t.Errorf("expected children-bridge closure:\n%s", s)
+	}
+}
+
 // TestNeedsNodeForSvelteSSG verifies the SSG sidecar trigger fires
 // only when at least one route combines Templates: "svelte" with
 // Prerender: true.
