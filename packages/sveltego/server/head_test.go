@@ -113,11 +113,11 @@ func TestServer_SvelteHeadInjection(t *testing.T) {
 				return nil
 			},
 		},
-		LayoutChain: []router.LayoutHandler{
+		RenderChain: composeChain([]router.LayoutHandler{
 			func(w *render.Writer, _ *kit.RenderCtx, _ any, children func(*render.Writer) error) error {
 				return children(w)
 			},
-		},
+		}),
 	}})
 	ts := httptest.NewServer(srv)
 	defer ts.Close()

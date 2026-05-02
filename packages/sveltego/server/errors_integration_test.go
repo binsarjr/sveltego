@@ -56,8 +56,7 @@ func TestErrorBoundary_RouteLocalOverridesGlobal(t *testing.T) {
 			Load: func(_ *kit.LoadCtx) (any, error) {
 				return nil, errors.New("home boom")
 			},
-			Error:            rootError,
-			ErrorLayoutDepth: 0,
+			RenderError: composeErrorChain(nil, rootError),
 		},
 		{
 			Pattern:  "/about",
@@ -66,8 +65,7 @@ func TestErrorBoundary_RouteLocalOverridesGlobal(t *testing.T) {
 			Load: func(_ *kit.LoadCtx) (any, error) {
 				return nil, errors.New("about boom")
 			},
-			Error:            adminError,
-			ErrorLayoutDepth: 0,
+			RenderError: composeErrorChain(nil, adminError),
 		},
 	})
 
@@ -102,20 +100,21 @@ func TestErrorBoundary_RouteLocalOverridesGlobal(t *testing.T) {
 func TestErrorBoundary_OuterLayoutsRetained(t *testing.T) {
 	t.Parallel()
 
+	layouts := []router.LayoutHandler{
+		wrappingLayout("outer"),
+		wrappingLayout("middle"),
+		wrappingLayout("inner"),
+	}
 	srv := newTestServer(t, []router.Route{{
-		Pattern:  "/about",
-		Segments: segmentsFor("/about"),
-		Page:     staticPage("about"),
-		LayoutChain: []router.LayoutHandler{
-			wrappingLayout("outer"),
-			wrappingLayout("middle"),
-			wrappingLayout("inner"),
-		},
+		Pattern:     "/about",
+		Segments:    segmentsFor("/about"),
+		Page:        staticPage("about"),
+		RenderChain: composeChain(layouts),
 		Load: func(_ *kit.LoadCtx) (any, error) {
 			return nil, errors.New("kaboom")
 		},
-		Error:            errorBoundary("middle"),
-		ErrorLayoutDepth: 2,
+		// ErrorLayoutDepth=2 → outer-2 layouts wrap the boundary template.
+		RenderError: composeErrorChain(layouts[:2], errorBoundary("middle")),
 	}})
 
 	hooks := kit.Hooks{
@@ -171,7 +170,7 @@ func TestErrorBoundary_StatusFollowsSafeError(t *testing.T) {
 		Load: func(_ *kit.LoadCtx) (any, error) {
 			return nil, errors.New("nope")
 		},
-		Error: errorBoundary("root"),
+		RenderError: composeErrorChain(nil, errorBoundary("root")),
 	}})
 
 	hooks := kit.Hooks{
@@ -248,7 +247,7 @@ func TestErrorBoundary_BoundaryRenderFailureFallsBack(t *testing.T) {
 		Load: func(_ *kit.LoadCtx) (any, error) {
 			return nil, errors.New("primary")
 		},
-		Error: failing,
+		RenderError: composeErrorChain(nil, failing),
 	}})
 
 	hooks := kit.Hooks{
@@ -338,7 +337,7 @@ func TestErrorPreservesHeadersAndCookies_BoundaryPath(t *testing.T) {
 			lctx.Header().Set("WWW-Authenticate", "Bearer")
 			return nil, errors.New("unauthorized internal")
 		},
-		Error: errorBoundary("root"),
+		RenderError: composeErrorChain(nil, errorBoundary("root")),
 	}})
 	hooks := kit.Hooks{
 		HandleError: func(_ *kit.RequestEvent, _ error) (kit.SafeError, error) {
@@ -458,7 +457,7 @@ func TestErrorBoundary_RawParamsPreserved(t *testing.T) {
 		Load: func(_ *kit.LoadCtx) (any, error) {
 			return nil, errors.New("load failed")
 		},
-		Error: boundary,
+		RenderError: composeErrorChain(nil, boundary),
 	}})
 	hooks := kit.Hooks{
 		HandleError: func(_ *kit.RequestEvent, err error) (kit.SafeError, error) {
@@ -562,7 +561,7 @@ func TestErrorBoundary_OriginalURL_PreservedThroughReroute(t *testing.T) {
 		Load: func(_ *kit.LoadCtx) (any, error) {
 			return nil, errors.New("load failed")
 		},
-		Error: boundary,
+		RenderError: composeErrorChain(nil, boundary),
 	}})
 
 	ts := httptest.NewServer(srv)

@@ -449,7 +449,7 @@ func TestDataJSON_layoutChain(t *testing.T) {
 		Pattern:     "/chain",
 		Segments:    []router.Segment{{Kind: router.SegmentStatic, Value: "chain"}},
 		Page:        staticPage(""),
-		LayoutChain: []router.LayoutHandler{identityLayout},
+		RenderChain: composeChain([]router.LayoutHandler{identityLayout}),
 		LayoutLoaders: []router.LayoutLoadHandler{
 			func(_ *kit.LoadCtx) (any, error) {
 				return rootData{Root: "rootval"}, nil

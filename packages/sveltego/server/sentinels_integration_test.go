@@ -257,7 +257,7 @@ func TestPipeline_UserHTTPError_RendersStatus(t *testing.T) {
 			w.WriteString("<p>should not render</p>")
 			return nil
 		},
-		Error: errorBoundary("user-http-error"),
+		RenderError: composeErrorChain(nil, errorBoundary("user-http-error")),
 	}}
 	srv := newTestServer(t, routes)
 	ts := httptest.NewServer(srv)
@@ -298,7 +298,7 @@ func TestPipeline_UserHTTPError_WrappedDetected(t *testing.T) {
 			w.WriteString("nope")
 			return nil
 		},
-		Error: errorBoundary("wrapped"),
+		RenderError: composeErrorChain(nil, errorBoundary("wrapped")),
 	}}
 	srv := newTestServer(t, routes)
 	ts := httptest.NewServer(srv)

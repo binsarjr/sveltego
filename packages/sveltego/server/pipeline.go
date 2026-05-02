@@ -524,7 +524,7 @@ func (s *Server) renderDataJSON(r *http.Request, ev *kit.RequestEvent, route *ro
 		lctx.Locals = ev.Locals
 		lctx.Cookies = ev.Cookies
 		lctx.RawParams = ev.RawParams
-		layoutDatas = make([]any, len(route.LayoutChain))
+		layoutDatas = make([]any, len(route.LayoutLoaders))
 		for i, layoutLoad := range route.LayoutLoaders {
 			if layoutLoad == nil {
 				continue
@@ -631,7 +631,7 @@ func (s *Server) renderSvelteShell(r *http.Request, ev *kit.RequestEvent, route 
 		lctx.Locals = ev.Locals
 		lctx.Cookies = ev.Cookies
 		lctx.RawParams = ev.RawParams
-		layoutDatas = make([]any, len(route.LayoutChain))
+		layoutDatas = make([]any, len(route.LayoutLoaders))
 		for i, layoutLoad := range route.LayoutLoaders {
 			if layoutLoad == nil {
 				continue
@@ -729,7 +729,7 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 		lctx.Locals = ev.Locals
 		lctx.Cookies = ev.Cookies
 		lctx.RawParams = ev.RawParams
-		layoutDatas = make([]any, len(route.LayoutChain))
+		layoutDatas = make([]any, len(route.LayoutLoaders))
 		for i, layoutLoad := range route.LayoutLoaders {
 			if layoutLoad == nil {
 				continue
@@ -773,18 +773,17 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 		Cookies:     ev.Cookies,
 		Request:     r,
 	}
-	inner := func(buf *render.Writer) error {
-		return route.Page(buf, rctx, data)
-	}
-	for i := len(route.LayoutChain) - 1; i >= 0; i-- {
-		layout := route.LayoutChain[i]
-		var layoutData any
-		if i < len(layoutDatas) {
-			layoutData = layoutDatas[i]
-		}
-		next := inner
+	// inner composes the route's render closure. RenderChain (when non-nil)
+	// embeds the layout chain composition — generated at codegen time, no
+	// per-request closure stack. Routes without layouts call Page directly.
+	var inner func(buf *render.Writer) error
+	if route.RenderChain != nil {
 		inner = func(buf *render.Writer) error {
-			return layout(buf, rctx, layoutData, next)
+			return route.RenderChain(buf, rctx, route.Page, data, layoutDatas)
+		}
+	} else {
+		inner = func(buf *render.Writer) error {
+			return route.Page(buf, rctx, data)
 		}
 	}
 

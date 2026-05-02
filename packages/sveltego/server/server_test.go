@@ -36,6 +36,62 @@ func staticPage(body string) router.PageHandler {
 	}
 }
 
+// composeChain wraps a slice of LayoutHandlers (outer→inner) around a
+// PageHandler and returns a router.RenderChainFn — the test-time analogue
+// of the per-route renderChain__<routeIdent> codegen produces. Used by
+// integration tests that previously assigned a literal LayoutChain slice
+// on Route.
+func composeChain(layouts []router.LayoutHandler) router.RenderChainFn {
+	if len(layouts) == 0 {
+		return nil
+	}
+	return func(w *render.Writer, ctx *kit.RenderCtx, page router.PageHandler, pageData any, layoutDatas []any) error {
+		dataAt := func(i int) any {
+			if i < len(layoutDatas) {
+				return layoutDatas[i]
+			}
+			return nil
+		}
+		var build func(i int) func(*render.Writer) error
+		build = func(i int) func(*render.Writer) error {
+			if i == len(layouts) {
+				return func(buf *render.Writer) error {
+					return page(buf, ctx, pageData)
+				}
+			}
+			return func(buf *render.Writer) error {
+				return layouts[i](buf, ctx, dataAt(i), build(i+1))
+			}
+		}
+		return build(0)(w)
+	}
+}
+
+// composeErrorChain wraps a slice of LayoutHandlers (outer-N prefix
+// surviving a boundary) around an ErrorHandler and returns a
+// router.RenderErrorFn — the test-time analogue of renderErrorChain__
+// <routeIdent>. layoutData is intentionally nil per the legacy
+// renderErrorBoundary behavior.
+func composeErrorChain(layouts []router.LayoutHandler, errorH router.ErrorHandler) router.RenderErrorFn {
+	if errorH == nil {
+		return nil
+	}
+	return func(w *render.Writer, ctx *kit.RenderCtx, safe kit.SafeError, _ []any) error {
+		var build func(i int) func(*render.Writer) error
+		build = func(i int) func(*render.Writer) error {
+			if i == len(layouts) {
+				return func(buf *render.Writer) error {
+					return errorH(buf, ctx, safe)
+				}
+			}
+			return func(buf *render.Writer) error {
+				return layouts[i](buf, ctx, nil, build(i+1))
+			}
+		}
+		return build(0)(w)
+	}
+}
+
 func paramPage() router.PageHandler {
 	return func(w *render.Writer, ctx *kit.RenderCtx, _ any) error {
 		w.WriteString("<h1>id=")
@@ -476,11 +532,11 @@ func TestServeHTTP_layoutChainComposition(t *testing.T) {
 		Pattern:  "/",
 		Segments: segmentsFor("/"),
 		Page:     page,
-		LayoutChain: []router.LayoutHandler{
+		RenderChain: composeChain([]router.LayoutHandler{
 			makeLayout("root"),
 			makeLayout("app"),
 			makeLayout("section"),
-		},
+		}),
 	}})
 	ts := httptest.NewServer(srv)
 	defer ts.Close()
@@ -557,7 +613,7 @@ func TestServeHTTP_layoutLoadParentChain(t *testing.T) {
 		Segments:    segmentsFor("/"),
 		Page:        page,
 		Load:        pageLoad,
-		LayoutChain: []router.LayoutHandler{rootLayout, sectionLayout},
+		RenderChain: composeChain([]router.LayoutHandler{rootLayout, sectionLayout}),
 		LayoutLoaders: []router.LayoutLoadHandler{
 			rootLoad,
 			sectionLoad,
@@ -596,10 +652,12 @@ func TestServeHTTP_layoutLoadErrorShortCircuits(t *testing.T) {
 		return nil, errors.New("layout load boom")
 	}
 	srv := newTestServer(t, []router.Route{{
-		Pattern:     "/",
-		Segments:    segmentsFor("/"),
-		Page:        page,
-		LayoutChain: []router.LayoutHandler{func(w *render.Writer, _ *kit.RenderCtx, _ any, c func(*render.Writer) error) error { return c(w) }},
+		Pattern:  "/",
+		Segments: segmentsFor("/"),
+		Page:     page,
+		RenderChain: composeChain([]router.LayoutHandler{
+			func(w *render.Writer, _ *kit.RenderCtx, _ any, c func(*render.Writer) error) error { return c(w) },
+		}),
 		LayoutLoaders: []router.LayoutLoadHandler{
 			failing,
 		},
@@ -633,7 +691,7 @@ func TestServeHTTP_layoutErrorAborts(t *testing.T) {
 		Pattern:     "/",
 		Segments:    segmentsFor("/"),
 		Page:        page,
-		LayoutChain: []router.LayoutHandler{failing},
+		RenderChain: composeChain([]router.LayoutHandler{failing}),
 	}})
 	ts := httptest.NewServer(srv)
 	defer ts.Close()
@@ -1017,7 +1075,7 @@ func TestServeHTTP_localsReachableWithoutParent(t *testing.T) {
 			Segments:    segmentsFor("/dashboard"),
 			Page:        page,
 			Load:        pageLoad,
-			LayoutChain: []router.LayoutHandler{identityLayout, identityLayout},
+			RenderChain: composeChain([]router.LayoutHandler{identityLayout, identityLayout}),
 			LayoutLoaders: []router.LayoutLoadHandler{
 				rootLoad,
 				leafLoad,
