@@ -151,6 +151,69 @@ func TestGenerateManifest_SvelteMode_SSRLayout(t *testing.T) {
 	}
 }
 
+// TestGenerateManifest_SvelteMode_SSRError verifies #412: when an
+// error-boundary package is in SSRRenderErrors, the manifest swaps its
+// `renderError__<alias>` adapter from the legacy
+// `<alias>.ErrorPage{}.Render(...)` call to the payload bridge that
+// dispatches `<alias>.RenderErrorSSR(&payload, safe)`.
+func TestGenerateManifest_SvelteMode_SSRError(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	mustWrite := func(path, body string) {
+		t.Helper()
+		full := filepath.Join(root, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustWrite("routes/_error.svelte", "<h1>boom</h1>")
+	mustWrite("routes/_page.svelte", "<h1>home</h1>")
+
+	scan, err := routescan.Scan(routescan.ScanInput{RoutesDir: filepath.Join(root, "routes")})
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	pattern := scan.Routes[0].Pattern
+	errorPkg := scan.Routes[0].ErrorBoundaryPackagePath
+	if errorPkg == "" {
+		t.Fatalf("expected ErrorBoundaryPackagePath to be set")
+	}
+	routeOpts := map[string]kit.PageOptions{
+		pattern: {SSR: true, CSR: true, CSRF: true, TrailingSlash: kit.TrailingSlashNever, Templates: kit.TemplatesSvelte},
+	}
+	out, err := GenerateManifest(scan, ManifestOptions{
+		PackageName:  "gen",
+		ModulePath:   "myapp",
+		GenRoot:      ".gen",
+		RouteOptions: routeOpts,
+		SSRRenderRoutes: map[string]string{
+			pattern: "routes",
+		},
+		SSRRenderErrors: map[string]struct{}{
+			errorPkg: {},
+		},
+	})
+	if err != nil {
+		t.Fatalf("GenerateManifest: %v", err)
+	}
+	s := string(out)
+	if !bytes.Contains(out, []byte(".RenderErrorSSR(&payload, safe)")) {
+		t.Errorf("expected RenderErrorSSR call inside error bridge:\n%s", s)
+	}
+	if bytes.Contains(out, []byte(".ErrorPage{}.Render(w, ctx, safe)")) {
+		t.Errorf("legacy ErrorPage{}.Render call should not appear when boundary is SSR-bridged:\n%s", s)
+	}
+	if !bytes.Contains(out, []byte("var payload server.Payload")) {
+		t.Errorf("expected payload allocation in error bridge:\n%s", s)
+	}
+	if !bytes.Contains(out, []byte("w.WriteString(payload.Body())")) {
+		t.Errorf("expected payload.Body() copy in error bridge:\n%s", s)
+	}
+}
+
 // TestNeedsNodeForSvelteSSG verifies the SSG sidecar trigger fires
 // only when at least one route combines Templates: "svelte" with
 // Prerender: true.

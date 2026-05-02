@@ -41,9 +41,15 @@ type layoutImport struct {
 // errorImport pairs an error-page package path with the import alias
 // used for it inside the generated manifest. The manifest emits one
 // renderError__<alias> adapter per unique error package.
+//
+// hasSSR is set for boundaries in SSRRenderErrors: the manifest emits
+// the payload-bridge form of renderError__<alias> that dispatches to
+// `<alias>.RenderErrorSSR` (the wire shipped per #412) instead of the
+// legacy `ErrorPage{}.Render` adapter.
 type errorImport struct {
 	pkgPath string
 	alias   string
+	hasSSR  bool
 }
 
 // ManifestOptions configures [GenerateManifest].
@@ -104,6 +110,15 @@ type ManifestOptions struct {
 	// `RenderLayoutSSR(payload, data, inner)` from the wire — instead of
 	// the legacy `Layout{}.Render(*render.Writer, ..., children)` shape.
 	SSRRenderLayouts map[string]struct{}
+	// SSRRenderErrors is the set of error-boundary package paths
+	// (".gen/..." prefix preserved) whose `_error.svelte` received an
+	// SSR transpile emit under `.gen/errorsrc/<encoded>/` plus a sibling
+	// `wire_error_render.gen.go` (#412). For these boundaries the
+	// manifest emits the payload-bridge form of `renderError__<alias>`
+	// that dispatches `RenderErrorSSR(payload, safe)` instead of the
+	// legacy `ErrorPage{}.Render` Mustache-Go adapter, so SSR error
+	// rendering travels the same Option B transpile path as page bodies.
+	SSRRenderErrors map[string]struct{}
 }
 
 // GenerateManifest emits a deterministic, gofmt-clean Go source file
@@ -214,6 +229,12 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 		alias := uniqueAlias(p)
 		errorImports = append(errorImports, errorImport{pkgPath: p, alias: alias})
 	}
+	for i := range errorImports {
+		if opts.SSRRenderErrors != nil {
+			_, ok := opts.SSRRenderErrors[errorImports[i].pkgPath]
+			errorImports[i].hasSSR = ok
+		}
+	}
 	sort.Slice(errorImports, func(i, j int) bool {
 		return errorImports[i].pkgPath < errorImports[j].pkgPath
 	})
@@ -269,6 +290,14 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 	if !hasSvelte {
 		for _, li := range layoutImports {
 			if li.hasSSR {
+				hasSvelte = true
+				break
+			}
+		}
+	}
+	if !hasSvelte {
+		for _, ei := range errorImports {
+			if ei.hasSSR {
 				hasSvelte = true
 				break
 			}
@@ -830,11 +859,19 @@ func emitLayoutHeadAdapters(b *Builder, imports []layoutImport) {
 }
 
 // emitErrorAdapters writes one `renderError__<alias>` function per
-// unique error-page package. The adapter forwards (ctx, w, safe) to
-// ErrorPage{}.Render with no widening; kit.SafeError is shared across
-// the framework so the typed and erased forms match.
+// unique error-page package. The default form forwards (ctx, w, safe)
+// to the legacy `<alias>.ErrorPage{}.Render` (Mustache-Go path).
+// Boundaries in SSRRenderErrors swap to the payload-bridge form from
+// #412: dispatch to the wire-emitted RenderErrorSSR through a fresh
+// server.Payload and copy payload.Body() into the outer writer at the
+// end. kit.SafeError is shared across the framework so the typed and
+// erased forms match.
 func emitErrorAdapters(b *Builder, imports []errorImport) {
 	for _, ei := range imports {
+		if ei.hasSSR {
+			emitSSRErrorAdapter(b, ei)
+			continue
+		}
 		b.Linef("// renderError__%s adapts %s.ErrorPage{}.Render to router.ErrorHandler.", ei.alias, ei.alias)
 		b.Linef("func renderError__%s(w *render.Writer, ctx *kit.RenderCtx, safe kit.SafeError) error {", ei.alias)
 		b.Indent()
@@ -843,6 +880,34 @@ func emitErrorAdapters(b *Builder, imports []errorImport) {
 		b.Line("}")
 		b.Line("")
 	}
+}
+
+// emitSSRErrorAdapter writes the payload-bridge form of
+// renderError__<alias> introduced by #412. The emitted adapter
+// allocates a fresh server.Payload, dispatches to the wire-emitted
+// RenderErrorSSR (which calls the typed Render(payload, kit.SafeError)
+// from the errorsrc package), and copies the rendered head + body into
+// the outer writer. The shape mirrors emitSSRLayoutAdapter so the SSR
+// pipeline composes consistently across page, layout, and error
+// rendering paths.
+func emitSSRErrorAdapter(b *Builder, ei errorImport) {
+	b.Linef("// renderError__%s bridges %s.RenderErrorSSR (Svelte SSR Option B,", ei.alias, ei.alias)
+	b.Linef("// payload-bridge from #412) into router.ErrorHandler.")
+	b.Linef("func renderError__%s(w *render.Writer, ctx *kit.RenderCtx, safe kit.SafeError) error {", ei.alias)
+	b.Indent()
+	b.Line("_ = ctx")
+	b.Line("var payload server.Payload")
+	b.Linef("%s.RenderErrorSSR(&payload, safe)", ei.alias)
+	b.Line("if head := payload.HeadHTML(); head != \"\" {")
+	b.Indent()
+	b.Line("w.WriteString(head)")
+	b.Dedent()
+	b.Line("}")
+	b.Line("w.WriteString(payload.Body())")
+	b.Line("return nil")
+	b.Dedent()
+	b.Line("}")
+	b.Line("")
 }
 
 func emitRouteEntry(b *Builder, r routescan.ScannedRoute, alias string, layoutByPath map[string]layoutImport, errorAliasByPath map[string]string, routeOptions map[string]kit.PageOptions, pageHeads map[string]bool, clientKeys map[string]string, ssrRoutes map[string]string, fallbackByRoute map[string]string) {

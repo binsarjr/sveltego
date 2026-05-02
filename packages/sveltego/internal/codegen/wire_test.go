@@ -150,6 +150,50 @@ func TestEmitSSRLayoutWire(t *testing.T) {
 	assertParsesAsGo(t, target)
 }
 
+// TestEmitSSRErrorWire verifies issue #412's error-boundary wire
+// helper writes a Go file with `RenderErrorSSR(payload, safe)` that
+// bridges the typed errorsrc.Render to the manifest's payload-shaped
+// ErrorHandler dispatch. Both the kit and runtime/svelte/server
+// imports must be present so SafeError and Payload resolve at compile
+// time.
+func TestEmitSSRErrorWire(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	r := mirrorRoute{
+		encodedSubpath: "routes",
+		packageName:    "routes",
+		wireDir:        dir,
+	}
+	if err := emitSSRErrorWire(".gen", "example.com/app", r); err != nil {
+		t.Fatalf("emitSSRErrorWire: %v", err)
+	}
+	target := filepath.Join(dir, "wire_error_render.gen.go")
+	src, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("read wire: %v", err)
+	}
+	got := string(src)
+	if !strings.Contains(got, "package routes") {
+		t.Errorf("missing package clause:\n%s", got)
+	}
+	if !strings.Contains(got, `errorsrc "example.com/app/.gen/errorsrc/routes"`) {
+		t.Errorf("missing errorsrc import:\n%s", got)
+	}
+	if !strings.Contains(got, `"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"`) {
+		t.Errorf("missing kit import:\n%s", got)
+	}
+	if !strings.Contains(got, `server "github.com/binsarjr/sveltego/packages/sveltego/runtime/svelte/server"`) {
+		t.Errorf("missing server import:\n%s", got)
+	}
+	if !strings.Contains(got, "func RenderErrorSSR(payload *server.Payload, safe kit.SafeError) {") {
+		t.Errorf("missing RenderErrorSSR signature:\n%s", got)
+	}
+	if !strings.Contains(got, "errorsrc.Render(payload, safe)") {
+		t.Errorf("expected typed Render dispatch:\n%s", got)
+	}
+	assertParsesAsGo(t, target)
+}
+
 func TestMirrorUserSource_NoActions(t *testing.T) {
 	t.Parallel()
 	src := []byte(`//go:build sveltego
