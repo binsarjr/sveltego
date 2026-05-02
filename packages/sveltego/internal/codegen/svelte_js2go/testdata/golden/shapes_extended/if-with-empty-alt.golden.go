@@ -11,7 +11,7 @@ import (
 // Generated from route /test/if-with-empty-alt.
 func Render(payload *server.Payload, props map[string]any) {
 	data, _ := props["data"].(map[string]any)
-	if data.toggle {
+	if server.Truthy(data.toggle) {
 		payload.Push("<p>on</p>")
 	} else {
 	}

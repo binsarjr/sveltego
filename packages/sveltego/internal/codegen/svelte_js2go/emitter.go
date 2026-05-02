@@ -51,6 +51,19 @@ type Options struct {
 	// Empty string preserves the legacy `props map[string]any` shape so
 	// the existing 30-shape priority goldens remain byte-identical.
 	TypedDataParam string
+
+	// EmitChildrenParam, when true, appends a `children
+	// func(*<server>.Payload)` parameter to the generated render
+	// function. Issue #440 (children-callback ABI) sets this for layout
+	// SSR emit so the manifest can compose the layout chain through
+	// payload-shaped callbacks. The emitter additionally registers
+	// `children` as a [LocalCallback] in the render-function scope so
+	// Phase 5's [Lowerer] does not rewrite `children(...)` invocations
+	// through the JSON-tag map.
+	//
+	// Defaults to false — page Render() emits stay byte-identical for
+	// the 30 priority + 50+ extended goldens that pre-date this issue.
+	EmitChildrenParam bool
 }
 
 // ExprRewriter is the extension point Phase 5 uses to lower JS
@@ -102,6 +115,11 @@ const (
 	LocalScratch
 	// LocalSnippet marks a {#snippet}-bound closure.
 	LocalSnippet
+	// LocalCallback marks a callback prop the layout receives from the
+	// outer render call (e.g. `children` for {@render children()} or a
+	// named-snippet prop). Phase 5 leaves these alone because they
+	// dispatch to a Go func value, not a user-data subtree.
+	LocalCallback
 )
 
 func newScope(parent *Scope) *Scope {
@@ -271,9 +289,14 @@ func (e *emitter) run() ([]byte, error) {
 	out.Line("")
 	out.Line("// %s mirrors the Svelte component's compiled server output.", e.opts.FuncName)
 	out.Line("// Generated from route %s.", e.route)
-	if e.opts.TypedDataParam != "" {
+	switch {
+	case e.opts.TypedDataParam != "" && e.opts.EmitChildrenParam:
+		out.Line("func %s(payload *%s.Payload, data %s, children func(*%s.Payload)) {", e.opts.FuncName, e.opts.HelperAlias, e.opts.TypedDataParam, e.opts.HelperAlias)
+	case e.opts.TypedDataParam != "":
 		out.Line("func %s(payload *%s.Payload, data %s) {", e.opts.FuncName, e.opts.HelperAlias, e.opts.TypedDataParam)
-	} else {
+	case e.opts.EmitChildrenParam:
+		out.Line("func %s(payload *%s.Payload, props map[string]any, children func(*%s.Payload)) {", e.opts.FuncName, e.opts.HelperAlias, e.opts.HelperAlias)
+	default:
 		out.Line("func %s(payload *%s.Payload, props map[string]any) {", e.opts.FuncName, e.opts.HelperAlias)
 	}
 	out.Write(body.Bytes())
@@ -356,20 +379,169 @@ func (e *emitter) emitRenderFunction(b *Buf, fn *Node) error {
 	if fn.FuncBody == nil || fn.FuncBody.Type != "BlockStatement" {
 		return unknownShape(fn, "render-fn:body")
 	}
+	if e.opts.EmitChildrenParam {
+		// Issue #440: register the `children` parameter as a callback
+		// local so the lowerer leaves invocations alone. The destructured
+		// prop binding (handled in emitPropsDestructure) reclassifies it
+		// when `children` shows up in the prop pattern; declaring up
+		// front covers the bare-callable shape too.
+		e.scope.declare("children", LocalCallback)
+	}
 	return e.emitBlock(b, fn.FuncBody, true)
 }
 
 // emitBlock walks a BlockStatement. When isRoot the renderer is the
 // outer one; nested blocks (slot fragments, control flow arms) inherit
 // scope but reuse the same renderer reference.
+//
+// Issue #443 (snippet hoisting): when a snippet declaration —
+// `const <name> = ($$renderer, …) => { … }` — appears *after* a call
+// to that name in the same block, we lift the declaration above its
+// first call site so Go's declare-before-use rule for `:=` is
+// satisfied. When source order is already declare-before-use the
+// hoist is a no-op so the 80+ Phase 7 corpus goldens stay
+// byte-identical.
 func (e *emitter) emitBlock(b *Buf, block *Node, isRoot bool) error {
-	for _, stmt := range block.Body {
+	body := hoistForwardSnippets(block.Body)
+	for _, stmt := range body {
 		if err := e.emitStatement(b, stmt); err != nil {
 			return err
 		}
 	}
 	_ = isRoot
 	return nil
+}
+
+// hoistForwardSnippets reorders block statements to satisfy Go's
+// declare-before-use rule for snippet bindings. Walks the body left
+// to right tracking `seenCalls`, the set of bare-identifier callees
+// that have appeared so far. When a snippet declaration's name is
+// already in seenCalls, the declaration is moved before the first
+// statement that called it; otherwise statements stay in source
+// order. Issue #443.
+func hoistForwardSnippets(stmts []*Node) []*Node {
+	if len(stmts) == 0 {
+		return stmts
+	}
+	// Index of the first statement that calls each candidate snippet.
+	firstCall := map[string]int{}
+	for i, s := range stmts {
+		for name := range collectBareCallees(s) {
+			if _, ok := firstCall[name]; !ok {
+				firstCall[name] = i
+			}
+		}
+	}
+	if len(firstCall) == 0 {
+		return stmts
+	}
+	out := make([]*Node, len(stmts))
+	copy(out, stmts)
+	for i := 0; i < len(out); i++ {
+		s := out[i]
+		name, ok := snippetDeclName(s)
+		if !ok {
+			continue
+		}
+		ci, ok := firstCall[name]
+		if !ok || ci >= i {
+			continue
+		}
+		// Move out[i] to position ci, shifting [ci..i-1] one slot right.
+		decl := out[i]
+		copy(out[ci+1:i+1], out[ci:i])
+		out[ci] = decl
+		// Re-scan firstCall — relative shift may have changed indices.
+		// Cheaper to recompute than to track per-name deltas because
+		// blocks rarely carry more than a handful of statements.
+		firstCall = map[string]int{}
+		for j, ss := range out {
+			for n := range collectBareCallees(ss) {
+				if _, ok := firstCall[n]; !ok {
+					firstCall[n] = j
+				}
+			}
+		}
+	}
+	return out
+}
+
+// snippetDeclName returns the declared name when s is a single-
+// declarator variable declaration with an arrow / function init —
+// the structural shape Svelte 5 lowers `{#snippet}` into.
+func snippetDeclName(s *Node) (string, bool) {
+	if s == nil || s.Type != "VariableDeclaration" || len(s.Declarations) != 1 {
+		return "", false
+	}
+	d := s.Declarations[0]
+	if d == nil || d.ID == nil || d.ID.Type != "Identifier" || d.Init == nil {
+		return "", false
+	}
+	if d.Init.Type != "ArrowFunctionExpression" && d.Init.Type != "FunctionExpression" {
+		return "", false
+	}
+	return d.ID.Name, true
+}
+
+// collectBareCallees walks a statement collecting the names of every
+// `<ident>(...)` call site (statement or expression position) where
+// the callee is a bare identifier — the shape `{@render name(...)}`
+// lowers into. Member calls (`obj.fn()`), helper-namespace calls
+// (`$.x(...)`), and renderer dispatch (`$$renderer.push(...)`) are
+// skipped because none of those refer to a snippet binding.
+func collectBareCallees(n *Node) map[string]struct{} {
+	out := map[string]struct{}{}
+	var walk func(*Node)
+	walk = func(n *Node) {
+		if n == nil {
+			return
+		}
+		if n.Type == "CallExpression" && n.Callee != nil && n.Callee.Type == "Identifier" {
+			out[n.Callee.Name] = struct{}{}
+		}
+		walk(n.Expression)
+		walk(n.Callee)
+		walk(n.Object)
+		walk(n.Property)
+		walk(n.Argument)
+		walk(n.Left)
+		walk(n.Right)
+		walk(n.Test)
+		walk(n.Consequent)
+		walk(n.Alternate)
+		walk(n.Init)
+		walk(n.Update)
+		walk(n.FuncBody)
+		walk(n.ID)
+		walk(n.Source)
+		walk(n.Declaration)
+		for _, c := range n.Body {
+			walk(c)
+		}
+		for _, c := range n.Arguments {
+			walk(c)
+		}
+		for _, c := range n.Params {
+			walk(c)
+		}
+		for _, c := range n.Declarations {
+			walk(c)
+		}
+		for _, c := range n.Properties {
+			walk(c)
+		}
+		for _, c := range n.Specifiers {
+			walk(c)
+		}
+		for _, c := range n.Quasis {
+			walk(c)
+		}
+		for _, c := range n.Expressions {
+			walk(c)
+		}
+	}
+	walk(n)
+	return out
 }
 
 func (e *emitter) emitStatement(b *Buf, stmt *Node) error {
@@ -440,15 +612,28 @@ func (e *emitter) emitCallStatement(b *Buf, call *Node) error {
 			if e.rendererName != "" && obj.Name == e.rendererName && prop.Name == "component" {
 				return e.emitRendererComponent(b, call.Arguments)
 			}
+			// $$props.children($$renderer) — issue #440 children-callback
+			// ABI. Svelte's compiled output for {@render children()}
+			// dispatches through the props bag when the layout did not
+			// destructure `children`. Emit the same nil-guarded callback
+			// invocation the destructured shape lowers to.
+			if e.opts.EmitChildrenParam && obj.Name == "$$props" {
+				return e.emitChildrenCallback(b, prop.Name, call.Arguments, call)
+			}
 			// $.head(...) and other helper-as-statement entries
 			if e.helperNS != "" && obj.Name == e.helperNS {
 				return e.emitHelperStatement(b, prop.Name, call.Arguments, call)
 			}
 		}
 	}
-	// Bare-identifier call: locally-bound snippet or other lowered
-	// closure invocation. Rendered as a Go function-call statement.
+	// Bare-identifier call: locally-bound snippet, callback prop, or
+	// other lowered closure invocation. Rendered as a Go function-call
+	// statement; LocalCallback identifiers (e.g. `children` after
+	// destructure) get a nil guard since callback props are optional.
 	if call.Callee != nil && call.Callee.Type == "Identifier" {
+		if e.opts.EmitChildrenParam && e.scope.Lookup(call.Callee.Name) == LocalCallback {
+			return e.emitChildrenCallback(b, call.Callee.Name, call.Arguments, call)
+		}
 		expr, err := e.formatCall(call)
 		if err != nil {
 			return err
@@ -457,6 +642,26 @@ func (e *emitter) emitCallStatement(b *Buf, call *Node) error {
 		return nil
 	}
 	return unknownShape(call, "call-stmt")
+}
+
+// emitChildrenCallback lowers an invocation of the layout's children
+// (or named-snippet) callback prop. The compiled-server output passes
+// the renderer (`$$payload` after rename) as the sole argument; we
+// translate that to the Go-side `payload` parameter and guard against
+// nil because callback props are optional. Issue #440.
+func (e *emitter) emitChildrenCallback(b *Buf, name string, args []*Node, call *Node) error {
+	if len(args) > 1 {
+		return unknownShape(call, fmt.Sprintf("children-callback args=%d", len(args)))
+	}
+	// The compiled output passes either the outer renderer (`$$renderer`
+	// → `payload` on the Go side) or no argument at all. Either way the
+	// Go-side bridge takes a single `*server.Payload`.
+	b.Line("if %s != nil {", name)
+	b.In(func() {
+		b.Line("%s(payload)", name)
+	})
+	b.Line("}")
+	return nil
 }
 
 func (e *emitter) emitRendererPush(b *Buf, args []*Node) error {
@@ -604,13 +809,26 @@ func (e *emitter) emitDeclarator(b *Buf, kind string, d *Node) error {
 		return nil
 	}
 
-	// Pattern 6: generic declaration with computable init.
+	// Pattern 6: generic declaration with computable init. Arrow /
+	// function expressions land as snippets (issue #443) so the lowerer
+	// can refuse to rewrite their bodies through the JSON-tag map and
+	// callers see them as closure values.
 	if d.Init != nil {
+		kindLocal := LocalUnknown
+		if d.Init.Type == "ArrowFunctionExpression" || d.Init.Type == "FunctionExpression" {
+			kindLocal = LocalSnippet
+			// Pre-register the snippet name BEFORE walking its body so
+			// the body can recurse into a self-reference (rare but
+			// emitted by Svelte for recursive snippet shapes).
+			e.scope.declare(name, kindLocal)
+		}
 		expr, err := e.formatExpression(d.Init)
 		if err != nil {
 			return err
 		}
-		e.scope.declare(name, LocalUnknown)
+		if kindLocal != LocalSnippet {
+			e.scope.declare(name, kindLocal)
+		}
 		b.Line("%s := %s", name, expr)
 		_ = kind
 		return nil
@@ -651,6 +869,15 @@ func (e *emitter) emitPropsDestructure(b *Buf, pat *Node) error {
 		}
 		jsName := p.Key.Name
 		goName := mangleIdent(jsName)
+		// Issue #440 children-callback ABI: when the layout destructures
+		// `children` from $$props the function signature already binds
+		// it as a typed `func(*server.Payload)` parameter. Reclassify
+		// the local so Phase 5 leaves callback invocations alone, and
+		// skip the map cast that would shadow the parameter.
+		if e.opts.EmitChildrenParam && jsName == "children" {
+			e.scope.declare(goName, LocalCallback)
+			continue
+		}
 		// The destructured root variable is what Svelte wraps with
 		// $props(); typically "data". Phase 5 hooks this slot via
 		// scope.dataVar.
@@ -819,28 +1046,85 @@ func (e *emitter) emitForOf(b *Buf, stmt *Node) error {
 }
 
 // formatTruthy wraps a JS condition in the JS-truthy semantics Svelte
-// generated. For the common boolean and comparison cases we lower
-// directly; otherwise we fall back to the runtime IsTruthy helper.
-// Note IsTruthy isn't part of the Phase-4 helpers package (#426
-// limits the surface area); for now we emit pessimistic bool-only
-// guards and surface anything unfamiliar as unknown.
+// generated. Issue #443 wires the runtime `server.Truthy` helper in
+// for non-bool-shaped expressions (bare identifier, member-access
+// chain, function call) so `{@const x = data.name}` followed by
+// `{#if x}` lowers to `if server.Truthy(x) {` rather than the
+// non-compiling `if x {` against a typed string field.
+//
+// Already-bool-shaped expressions — comparisons, logical operators
+// over bool-shaped operands, `!expr` — pass through directly so the
+// 80+ Phase 7 corpus shapes that already lean on bool-typed conditions
+// stay byte-identical.
 func (e *emitter) formatTruthy(test *Node) (string, error) {
 	if test == nil {
 		return "true", nil
 	}
+	expr, err := e.formatExpression(test)
+	if err != nil {
+		return "", err
+	}
+	if isBoolShaped(test) {
+		return expr, nil
+	}
 	switch test.Type {
-	case "Identifier":
-		return e.formatExpression(test)
-	case "BinaryExpression", "LogicalExpression", "UnaryExpression":
-		return e.formatExpression(test)
-	case "MemberExpression":
-		return e.formatExpression(test)
+	case "Identifier", "MemberExpression", "CallExpression", "ConditionalExpression":
+		return fmt.Sprintf("%s.Truthy(%s)", e.opts.HelperAlias, expr), nil
 	case "Literal":
-		return e.formatExpression(test)
-	case "CallExpression":
-		return e.formatExpression(test)
+		// Pure literal — Go accepts string/numeric/bool literals as
+		// conditions only when bool, so route through the helper to
+		// keep the emit consistent with the typed-data path.
+		if test.LitKind == litBool {
+			return expr, nil
+		}
+		return fmt.Sprintf("%s.Truthy(%s)", e.opts.HelperAlias, expr), nil
+	case "BinaryExpression", "LogicalExpression", "UnaryExpression":
+		// isBoolShaped returned false for these — operand mix is not
+		// statically bool. Wrap the whole expression rather than each
+		// operand: simpler to read, semantics match JS.
+		return fmt.Sprintf("%s.Truthy(%s)", e.opts.HelperAlias, expr), nil
 	}
 	return "", unknownShape(test, "truthy:"+test.Type)
+}
+
+// isBoolShaped reports whether an ESTree expression is statically
+// bool-typed in Go after lowering. Used by formatTruthy to skip the
+// runtime Truthy() wrap for conditions Svelte already emits in
+// already-bool form. The check is structural — not type-aware — but
+// catches the dominant compiler-emitted shapes:
+//
+//   - comparison binary ops (==, !=, <, >, <=, >=)
+//   - logical ops (&&, ||) when both operands are bool-shaped
+//   - logical-not unary (!)
+//   - bool literals
+//
+// Anything else (bare identifier, member access, function call,
+// ternary) is conservatively treated as non-bool and routed through
+// server.Truthy.
+func isBoolShaped(n *Node) bool {
+	if n == nil {
+		return false
+	}
+	switch n.Type {
+	case "BinaryExpression":
+		switch n.Operator {
+		case "==", "!=", "===", "!==", "<", ">", "<=", ">=":
+			return true
+		}
+		return false
+	case "LogicalExpression":
+		if n.Operator == "&&" || n.Operator == "||" {
+			return isBoolShaped(n.Left) && isBoolShaped(n.Right)
+		}
+		return false
+	case "UnaryExpression":
+		return n.Operator == "!"
+	case "Literal":
+		return n.LitKind == litBool
+	case "ChainExpression":
+		return isBoolShaped(n.Expression)
+	}
+	return false
 }
 
 // helperHandler maps a `$.helper(args...)` call (in expression position

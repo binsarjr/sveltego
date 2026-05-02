@@ -104,20 +104,30 @@ func TestCorpus_Total(t *testing.T) {
 	}
 }
 
-func TestTranspile_HTMLDeferred(t *testing.T) {
+func TestTranspile_HTMLRaw(t *testing.T) {
 	t.Parallel()
-	// {@html raw} is intentionally deferred per Phase 4 quirks.
+	// {@html raw} — issue #445. The compiled-server output emits
+	// $$renderer.push($.html(value)) for {@html value}; we expect the
+	// emitter to lower the inner expression through server.Stringify
+	// (no escape) so the raw markup round-trips.
 	root := buildProgram(buildBlock(
+		propsDestructure("data"),
 		callStmt(memExpr(ident("$$renderer"), ident("push")),
-			callExpr(memExpr(ident("$"), ident("html")), ident("raw")),
+			callExpr(memExpr(ident("$"), ident("html")),
+				memExpr(ident("data"), ident("body")),
+			),
 		),
 	))
-	_, err := TranspileNode(root, "/test/html-deferred", Options{})
-	if err == nil {
-		t.Fatal("expected unknown shape error for $.html")
+	got, err := TranspileNode(root, "/test/html-raw", Options{})
+	if err != nil {
+		t.Fatalf("TranspileNode: %v", err)
 	}
-	if !strings.Contains(err.Error(), "unknown emit shape") {
-		t.Fatalf("want unknown emit shape, got %q", err.Error())
+	src := string(got)
+	if !strings.Contains(src, "server.Stringify(data.body)") {
+		t.Fatalf("expected server.Stringify wrap (raw, no escape):\n%s", src)
+	}
+	if strings.Contains(src, "EscapeHTML") {
+		t.Fatalf("raw {@html} must NOT escape:\n%s", src)
 	}
 }
 

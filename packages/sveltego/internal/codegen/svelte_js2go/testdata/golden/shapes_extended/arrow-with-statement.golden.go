@@ -12,7 +12,7 @@ import (
 func Render(payload *server.Payload, props map[string]any) {
 	data, _ := props["data"].(map[string]any)
 	inner := func(v any) {
-		if v {
+		if server.Truthy(v) {
 			payload.Push("<p>truthy</p>")
 		} else {
 			payload.Push("<p>falsy</p>")

@@ -11,7 +11,7 @@ import (
 // Generated from route /test/if-only.
 func Render(payload *server.Payload, props map[string]any) {
 	data, _ := props["data"].(map[string]any)
-	if data.show {
+	if server.Truthy(data.show) {
 		payload.Push("<p>shown</p>")
 	}
 }

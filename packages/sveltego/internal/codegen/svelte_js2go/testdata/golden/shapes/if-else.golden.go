@@ -11,7 +11,7 @@ import (
 // Generated from route /test/if-else.
 func Render(payload *server.Payload, props map[string]any) {
 	data, _ := props["data"].(map[string]any)
-	if data.loggedIn {
+	if server.Truthy(data.loggedIn) {
 		payload.Push("<p>welcome back</p>")
 	} else {
 		payload.Push("<p>please sign in</p>")

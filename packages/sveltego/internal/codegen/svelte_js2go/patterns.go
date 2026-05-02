@@ -174,13 +174,28 @@ func (e *emitter) formatFunctionExprForHead(n *Node) (string, error) {
 }
 
 func helperHTML(e *emitter, b *Buf, args []*Node, asExpr bool, call *Node) (string, error) {
-	// {@html raw} — Phase 4 quirks list this as v1-skipped. Surface
-	// the unknown shape so a follow-up issue can land it explicitly.
-	_ = e
-	_ = b
-	_ = args
-	_ = asExpr
-	return "", unknownShape(call, "helper:html (deferred per Phase 4 quirks)")
+	// {@html raw} — Issue #445. Svelte 5's compiled output emits
+	// `$.html(value)` for `{@html value}`; semantically it stringifies
+	// the value WITHOUT the escape table, the only delta vs the
+	// regular interpolation path which wraps in `$.escape(...)`.
+	//
+	// In statement position the helper writes through payload directly
+	// via the shared raw-bytes path; in expression position it returns
+	// `server.Stringify(...)` so the surrounding template-literal split
+	// continues to dispatch each piece through `payload.Push(...)` and
+	// the absence of an escape wrap is what marks this as raw output.
+	if len(args) < 1 {
+		return "", unknownShape(call, "html:no-arg")
+	}
+	inner, err := e.formatExpression(args[0])
+	if err != nil {
+		return "", err
+	}
+	if asExpr {
+		return fmt.Sprintf("%s.Stringify(%s)", e.opts.HelperAlias, inner), nil
+	}
+	b.Line("%s.WriteRaw(payload, %s)", e.opts.HelperAlias, inner)
+	return "", nil
 }
 
 func helperEach(e *emitter, b *Buf, args []*Node, asExpr bool, call *Node) (string, error) {
