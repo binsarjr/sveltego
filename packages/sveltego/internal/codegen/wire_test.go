@@ -113,6 +113,43 @@ func Load(ctx *kit.LoadCtx) (any, error) { return nil, nil }
 	assertParsesAsGo(t, usf.MirrorPath)
 }
 
+// TestEmitSSRLayoutWire verifies issue #440's children-callback layout
+// wire helper writes a Go file with `RenderLayoutSSR(payload, data,
+// inner)` that bridges the typed usersrc.Render to the manifest's
+// future payload-shaped LayoutHandler dispatch.
+func TestEmitSSRLayoutWire(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	r := mirrorRoute{
+		encodedSubpath: "routes/_layout",
+		packageName:    "_layout",
+		wireDir:        dir,
+		hasSSRRender:   true,
+	}
+	if err := emitSSRLayoutWire(".gen", "example.com/app", r); err != nil {
+		t.Fatalf("emitSSRLayoutWire: %v", err)
+	}
+	target := filepath.Join(dir, "wire_layout_render.gen.go")
+	src, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("read wire: %v", err)
+	}
+	got := string(src)
+	if !strings.Contains(got, "package _layout") {
+		t.Errorf("missing package clause:\n%s", got)
+	}
+	if !strings.Contains(got, `usersrc "example.com/app/.gen/layoutsrc/routes/_layout"`) {
+		t.Errorf("missing layoutsrc import:\n%s", got)
+	}
+	if !strings.Contains(got, "func RenderLayoutSSR(payload *server.Payload, data any, inner func(*server.Payload)) error {") {
+		t.Errorf("missing RenderLayoutSSR signature:\n%s", got)
+	}
+	if !strings.Contains(got, "usersrc.Render(payload, typed, inner)") {
+		t.Errorf("expected typed Render dispatch with inner callback:\n%s", got)
+	}
+	assertParsesAsGo(t, target)
+}
+
 func TestMirrorUserSource_NoActions(t *testing.T) {
 	t.Parallel()
 	src := []byte(`//go:build sveltego
