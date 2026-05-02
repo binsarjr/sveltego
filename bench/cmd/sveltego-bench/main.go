@@ -33,6 +33,7 @@ const (
 type config struct {
 	duration time.Duration
 	scenario string
+	mode     string
 	stdout   *os.File
 	stderr   *os.File
 }
@@ -42,7 +43,8 @@ func main() {
 	fs := flag.NewFlagSet("sveltego-bench", flag.ContinueOnError)
 	fs.SetOutput(cfg.stderr)
 	fs.DurationVar(&cfg.duration, "duration", 3*time.Second, "wall-clock duration per scenario")
-	fs.StringVar(&cfg.scenario, "scenario", "", "single scenario to run (hello|list|detail|action); empty runs all")
+	fs.StringVar(&cfg.scenario, "scenario", "", "single scenario to run by name (e.g. hello, ssg-serve); empty runs all")
+	fs.StringVar(&cfg.mode, "mode", "all", "render mode subset: ssr | ssg | spa | static | all")
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		os.Exit(exitErr)
 	}
@@ -69,15 +71,40 @@ func run(cfg config) int {
 			return exitErr
 		}
 		selected = filtered
+	} else if cfg.mode != "" && cfg.mode != "all" {
+		want, ok := parseMode(cfg.mode)
+		if !ok {
+			_, _ = fmt.Fprintf(cfg.stderr, "sveltego-bench: unknown mode %q (want ssr|ssg|spa|static|all)\n", cfg.mode)
+			return exitErr
+		}
+		filtered := make([]scenarios.Scenario, 0, len(all))
+		for _, sc := range all {
+			if sc.Mode == want {
+				filtered = append(filtered, sc)
+			}
+		}
+		if len(filtered) == 0 {
+			_, _ = fmt.Fprintf(cfg.stderr, "sveltego-bench: no scenarios for mode %q\n", cfg.mode)
+			return exitErr
+		}
+		selected = filtered
 	}
 
-	_, _ = fmt.Fprintf(cfg.stdout, "scenario\tn\trps\tp50\tp99\n")
+	_, _ = fmt.Fprintf(cfg.stdout, "mode\tscenario\tn\trps\tp50\tp99\n")
 	for _, sc := range selected {
 		r := measure(sc, cfg.duration)
-		_, _ = fmt.Fprintf(cfg.stdout, "%s\t%d\t%.0f\t%s\t%s\n",
-			sc.Name, r.n, r.rps, r.p50, r.p99)
+		_, _ = fmt.Fprintf(cfg.stdout, "%s\t%s\t%d\t%.0f\t%s\t%s\n",
+			sc.Mode, sc.Name, r.n, r.rps, r.p50, r.p99)
 	}
 	return exitOK
+}
+
+func parseMode(s string) (scenarios.Mode, bool) {
+	switch scenarios.Mode(s) {
+	case scenarios.ModeSSR, scenarios.ModeSSG, scenarios.ModeSPA, scenarios.ModeStatic:
+		return scenarios.Mode(s), true
+	}
+	return "", false
 }
 
 type result struct {
