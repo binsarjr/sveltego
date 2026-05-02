@@ -3,8 +3,10 @@ package adapterstatic
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -92,11 +94,44 @@ func (r *subprocessRunner) Prerender(ctx context.Context, projectRoot, scratchDi
 	}
 	sort.Strings(prerendered)
 
-	// The subprocess runner does not have direct access to the user
-	// binary's full route table, so it cannot enumerate dynamic routes
-	// here. FailOnDynamic via the subprocess path is therefore a no-op
-	// today — see the package README for the in-process workaround.
-	return RunInfo{PrerenderedRoutes: prerendered}, nil
+	dynamic, err := readDynamicRoutes(scratchDir, seen)
+	if err != nil {
+		return RunInfo{}, err
+	}
+
+	return RunInfo{PrerenderedRoutes: prerendered, DynamicRoutes: dynamic}, nil
+}
+
+// readDynamicRoutes parses the routes.json sidecar the user binary's
+// MaybePrerenderFromEnv writes alongside manifest.json. Routes whose
+// pattern is not in the prerendered set are treated as dynamic. Returns
+// nil + nil when the sidecar is absent so older binaries (without #455)
+// keep producing the same RunInfo as before.
+func readDynamicRoutes(scratchDir string, prerendered map[string]struct{}) ([]string, error) {
+	routesPath := filepath.Join(scratchDir, "routes.json")
+	body, err := os.ReadFile(routesPath) //nolint:gosec // path is adapter-controlled
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("adapter-static: read routes manifest: %w", err)
+	}
+	var summaries []struct {
+		Pattern   string `json:"Pattern"`
+		Prerender bool   `json:"Prerender"`
+	}
+	if err := json.Unmarshal(body, &summaries); err != nil {
+		return nil, fmt.Errorf("adapter-static: parse routes manifest: %w", err)
+	}
+	out := make([]string, 0, len(summaries))
+	for _, s := range summaries {
+		if _, ok := prerendered[s.Pattern]; ok {
+			continue
+		}
+		out = append(out, s.Pattern)
+	}
+	sort.Strings(out)
+	return out, nil
 }
 
 // compile-time assertion: keep the runner satisfying the Runner contract.
