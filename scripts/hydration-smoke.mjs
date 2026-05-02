@@ -91,16 +91,20 @@ async function checkRoute(browser, baseUrl, route, { selfTest }) {
   const t0 = Date.now();
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: READY_TIMEOUT_MS });
-    await page.waitForFunction(() => window.__sveltego_hydrated === true, null, {
-      timeout: READY_TIMEOUT_MS,
-    });
-    await page.waitForTimeout(SETTLE_MS);
 
     if (selfTest) {
+      // Self-test does not require a hydrating client — it verifies the
+      // harness reacts to a synthetic hydration warning. Wait for the
+      // marker only when running against real routes.
       await page.evaluate(() => {
         console.warn('[svelte] hydration_mismatch synthetic regression');
       });
       await page.waitForTimeout(50);
+    } else {
+      await page.waitForFunction(() => window.__sveltego_hydrated === true, null, {
+        timeout: READY_TIMEOUT_MS,
+      });
+      await page.waitForTimeout(SETTLE_MS);
     }
 
     const mismatches = warnings.filter((w) => w.mismatch || looksLikeMismatch(w.text));
