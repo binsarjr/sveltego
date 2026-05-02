@@ -20,6 +20,9 @@ func TestGenerateClientEntry_ImportsEnhance(t *testing.T) {
 	if !strings.Contains(out, "import Page from \"../../../src/routes/_page.svelte\";") {
 		t.Errorf("expected Page import:\n%s", out)
 	}
+	if !strings.Contains(out, "(window as any).__sveltego_hydrated = true") {
+		t.Errorf("expected __sveltego_hydrated marker after mount (#446):\n%s", out)
+	}
 }
 
 func TestGenerateEnhanceRuntime_ShapeMatchesEnvelope(t *testing.T) {

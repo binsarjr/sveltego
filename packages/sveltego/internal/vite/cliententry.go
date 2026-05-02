@@ -46,6 +46,7 @@ func GenerateClientEntry(opts ClientEntryOptions) string {
 	b.WriteString("  target: document.body,\n")
 	b.WriteString("  props: { data: payload.data, form: payload.form ?? null },\n")
 	b.WriteString("});\n\n")
+	b.WriteString("(window as any).__sveltego_hydrated = true;\n\n")
 	if opts.HasSnapshot {
 		b.WriteString("startRouter({ component, payload, target: document.body, snapshot });\n")
 	} else {

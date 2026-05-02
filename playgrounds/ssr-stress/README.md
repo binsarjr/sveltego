@@ -50,6 +50,29 @@ curl -s localhost:3000/longlist
 curl -s localhost:3000/conditional
 ```
 
+## Hydration-parity smoke (#446)
+
+`scripts/hydration-smoke.mjs` is the Playwright harness that loads a
+route in headless Chromium, waits for `window.__sveltego_hydrated`,
+and fails on Svelte `hydration_mismatch` / `hydration_attribute_changed`
+warnings. CI currently runs only the synthetic `--self-test` (proves
+the gate fires). Live routes flip on once
+[#462](https://github.com/binsarjr/sveltego/issues/462) wires
+`ViteManifest` into `cmd/app/main.go` so the served HTML actually
+loads the client bundle. To run the harness locally against real
+routes post-#462:
+
+```bash
+cd playgrounds/ssr-stress
+npm install
+go run github.com/binsarjr/sveltego/packages/sveltego/cmd/sveltego compile
+go run github.com/binsarjr/sveltego/packages/sveltego/cmd/sveltego build --out ./build/app
+./build/app &
+npx playwright install --with-deps chromium
+node ../../scripts/hydration-smoke.mjs --base http://localhost:3000 \
+  --routes /,/longlist,/conditional
+```
+
 ## References
 
 - [ADR 0009](../../tasks/decisions/0009-ssr-option-b.md) — SSR Option
