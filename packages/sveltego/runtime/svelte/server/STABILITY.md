@@ -54,6 +54,12 @@ Promotion to `stable` is gated on v1.0 RC.
 - `server.Fallback` / `server.ExcludeFromObject` / `server.EnsureArrayLike`
 - `server.IsVoidElement` / `server.IsRawTextElement`
 - `server.EmptyComment` / `server.BlockOpen` / `server.BlockOpenElse` / `server.BlockClose`
+- `server.WriteRaw` — codegen target for `{@html expr}` (#445); writes the value to the
+  body buffer without escape. Caller is responsible for sanitization — mirrors Svelte's
+  `{@html}` semantics.
+- `server.Truthy` — codegen target for `{#if expr}` when expr is not statically bool
+  (#443); applies JS-truthy semantics so non-bool Go types (string, slice, map, pointer,
+  numeric) compile under the same conditional shape Svelte expects.
 
 ## Deprecated
 
@@ -79,8 +85,6 @@ during Phase 7 corpus regen would prompt re-evaluation.
 - `snapshot` — `$state.snapshot()` deep-clone; not used in compiled-server output.
 - `validate_*` / `push_element` / `pop_element` — DEV-only validation; we emit
   release-mode shapes only.
-- `html` block — `{@html}` raw HTML rendering; trivial when added (one helper),
-  deferred until first golden hits it.
 
 ## Cross-check fixtures
 

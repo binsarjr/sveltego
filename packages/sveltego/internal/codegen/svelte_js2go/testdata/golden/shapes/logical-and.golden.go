@@ -11,7 +11,7 @@ import (
 // Generated from route /test/logical-and.
 func Render(payload *server.Payload, props map[string]any) {
 	data, _ := props["data"].(map[string]any)
-	if data.ready && data.visible {
+	if server.Truthy((data.ready && data.visible)) {
 		payload.Push("<p>ready</p>")
 	}
 }

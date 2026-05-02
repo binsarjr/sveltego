@@ -11,7 +11,7 @@ import (
 // Generated from route /test/nullish-with-bool.
 func Render(payload *server.Payload, props map[string]any) {
 	data, _ := props["data"].(map[string]any)
-	if server.Fallback(data.active, false) {
+	if server.Truthy(server.Fallback(data.active, false)) {
 		payload.Push("<p>active</p>")
 	}
 }

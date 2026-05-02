@@ -12,7 +12,7 @@ import (
 func Render(payload *server.Payload, props map[string]any) {
 	data, _ := props["data"].(map[string]any)
 	for _, group := range data.groups {
-		if group.visible {
+		if server.Truthy(group.visible) {
 			for _, item := range group.items {
 				payload.Push("<li>")
 				payload.Push(server.EscapeHTML(item.name))

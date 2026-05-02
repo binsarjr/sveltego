@@ -11,8 +11,8 @@ import (
 // Generated from route /test/nested-if-if.
 func Render(payload *server.Payload, props map[string]any) {
 	data, _ := props["data"].(map[string]any)
-	if data.a {
-		if data.b {
+	if server.Truthy(data.a) {
+		if server.Truthy(data.b) {
 			payload.Push("<p>both</p>")
 		}
 	}

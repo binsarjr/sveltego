@@ -11,7 +11,7 @@ import (
 // Generated from route /test/logical-mixed.
 func Render(payload *server.Payload, props map[string]any) {
 	data, _ := props["data"].(map[string]any)
-	if (data.a && data.b) || data.c {
+	if server.Truthy(((data.a && data.b) || data.c)) {
 		payload.Push("<p>true</p>")
 	}
 }
