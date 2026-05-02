@@ -29,24 +29,15 @@ type layoutImport struct {
 	pkgPath   string
 	alias     string
 	hasServer bool
-	// hasSSR is set for layouts in SSRRenderLayouts: the manifest emits
-	// the payload-bridge form of render__layout__<alias> that dispatches
-	// to <alias>.RenderLayoutSSR (children-callback ABI from #453).
-	hasSSR bool
 }
 
 // errorImport pairs an error-page package path with the import alias
 // used for it inside the generated manifest. The manifest emits one
-// renderError__<alias> adapter per unique error package.
-//
-// hasSSR is set for boundaries in SSRRenderErrors: the manifest emits
-// the payload-bridge form of renderError__<alias> that dispatches to
-// `<alias>.RenderErrorSSR` (the wire shipped per #412) instead of the
-// legacy `ErrorPage{}.Render` adapter.
+// renderError__<alias> adapter per unique error package, dispatching to
+// the wire-emitted RenderErrorSSR (#412).
 type errorImport struct {
 	pkgPath string
 	alias   string
-	hasSSR  bool
 }
 
 // ManifestOptions configures [GenerateManifest].
@@ -89,24 +80,6 @@ type ManifestOptions struct {
 	// that proxies the request to the long-running Node sidecar via the
 	// runtime/svelte/fallback registry.
 	SSRFallbackRoutes []SSRFallbackRoute
-	// SSRRenderLayouts is the set of layout package paths (".gen/..."
-	// prefix preserved) whose `_layout.svelte` received a children-
-	// callback ABI emit under `.gen/layoutsrc/<encoded>/` plus a
-	// `wire_layout_render.gen.go` per route dir (#456). For these
-	// layouts the manifest emits the payload-bridge form of
-	// `render__layout__<alias>` — calling the typed
-	// `RenderLayoutSSR(payload, data, inner)` from the wire — instead of
-	// the legacy `Layout{}.Render(*render.Writer, ..., children)` shape.
-	SSRRenderLayouts map[string]struct{}
-	// SSRRenderErrors is the set of error-boundary package paths
-	// (".gen/..." prefix preserved) whose `_error.svelte` received an
-	// SSR transpile emit under `.gen/errorsrc/<encoded>/` plus a sibling
-	// `wire_error_render.gen.go` (#412). For these boundaries the
-	// manifest emits the payload-bridge form of `renderError__<alias>`
-	// that dispatches `RenderErrorSSR(payload, safe)` instead of the
-	// legacy `ErrorPage{}.Render` Mustache-Go adapter, so SSR error
-	// rendering travels the same Option B transpile path as page bodies.
-	SSRRenderErrors map[string]struct{}
 }
 
 // GenerateManifest emits a deterministic, gofmt-clean Go source file
@@ -189,10 +162,6 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 	}
 	for i := range layoutImports {
 		layoutImports[i].hasServer = layoutHasServer[layoutImports[i].pkgPath]
-		if opts.SSRRenderLayouts != nil {
-			_, ok := opts.SSRRenderLayouts[layoutImports[i].pkgPath]
-			layoutImports[i].hasSSR = ok
-		}
 	}
 	sort.Slice(layoutImports, func(i, j int) bool {
 		return layoutImports[i].pkgPath < layoutImports[j].pkgPath
@@ -215,12 +184,6 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 		seenErrorPkg[p] = struct{}{}
 		alias := uniqueAlias(p)
 		errorImports = append(errorImports, errorImport{pkgPath: p, alias: alias})
-	}
-	for i := range errorImports {
-		if opts.SSRRenderErrors != nil {
-			_, ok := opts.SSRRenderErrors[errorImports[i].pkgPath]
-			errorImports[i].hasSSR = ok
-		}
 	}
 	sort.Slice(errorImports, func(i, j int) bool {
 		return errorImports[i].pkgPath < errorImports[j].pkgPath
@@ -274,28 +237,11 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 	}
 	hasLayout := len(layoutImports) > 0
 	hasError := len(errorImports) > 0
-	if !hasSvelte {
-		for _, li := range layoutImports {
-			if li.hasSSR {
-				hasSvelte = true
-				break
-			}
-		}
-	}
-	if !hasSvelte {
-		for _, ei := range errorImports {
-			if ei.hasSSR {
-				hasSvelte = true
-				break
-			}
-		}
-	}
-	// $app/state lowering (#466) plumbs server.PageState through every
-	// renderChain__<routeIdent> and renderError__<alias> emit, including
-	// the Mustache-Go legacy adapters. The server import must be present
-	// whenever there's at least one layout (renderChain emit) or one
-	// error boundary (renderErrorChain emit), even on otherwise-pure-
-	// Mustache-Go playgrounds.
+	// Every layout and every error boundary now travels the SSR
+	// payload-bridge adapter, which calls into runtime/svelte/server. The
+	// server import must therefore be present whenever the manifest
+	// contains either, regardless of whether a page route hit the SSR
+	// branch above.
 	if !hasSvelte && (hasLayout || hasError) {
 		hasSvelte = true
 	}
@@ -713,15 +659,14 @@ func emitFallbackInit(b *Builder, fallback []SSRFallbackRoute) {
 }
 
 // emitLayoutAdapters writes one `render__layout__<alias>` function per
-// unique layout package. The default form widens Layout{}.Render's typed
-// LayoutData to the `any`-shaped router.LayoutHandler (legacy mustache
-// path). Layouts in SSRRenderLayouts swap to the payload-bridge form
-// from #456: dispatch to the wire-emitted RenderLayoutSSR through a
-// fresh server.Payload, bridge the writer-shape `children` callback
-// into the payload, and copy payload.Body() into the outer writer at
-// the end. Layout packages with a sibling layout.server.go additionally
-// receive a load adapter `loadLayout__<alias>` that wraps the wire-
-// emitted LayoutLoad to satisfy router.LayoutLoadHandler.
+// unique layout package. Every layout now travels the children-callback
+// payload-bridge form from #456: dispatch to the wire-emitted
+// RenderLayoutSSR through a fresh server.Payload, bridge the writer-
+// shape `children` callback into the payload, and copy payload.Body()
+// into the outer writer. Layout packages with a sibling
+// layout.server.go additionally receive a load adapter
+// `loadLayout__<alias>` that wraps the wire-emitted LayoutLoad to
+// satisfy router.LayoutLoadHandler.
 func emitLayoutAdapters(b *Builder, imports []layoutImport) {
 	for _, li := range imports {
 		emitSSRLayoutAdapter(b, li)

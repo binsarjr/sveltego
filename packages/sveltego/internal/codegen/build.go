@@ -293,8 +293,6 @@ func Build(ctx context.Context, opts BuildOptions) (*BuildResult, error) {
 		HasServiceWorker:  hasServiceWorker,
 		SSRRenderRoutes:   ssrPlan.Transpiled,
 		SSRFallbackRoutes: ssrPlan.Fallback,
-		SSRRenderLayouts:  ssrPlan.Layouts,
-		SSRRenderErrors:   ssrPlan.Errors,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("codegen: generate manifest: %w", err)

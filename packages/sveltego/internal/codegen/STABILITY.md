@@ -1,6 +1,14 @@
 # Stability — packages/sveltego/internal/codegen
 
-Last updated: 2026-04-30 · Version: pre-alpha
+Last updated: 2026-05-03 · Version: pre-alpha
+
+## Recent changes
+
+- 2026-05-03 (#494): `ManifestOptions.SSRRenderLayouts` and `SSRRenderErrors`
+  removed. The Mustache-Go pipeline went away in #486, so every layout and
+  error boundary now travels the SSR payload-bridge form unconditionally —
+  the maps had no false-branch consumer left. `SSRPlanResult.Layouts` and
+  `SSRPlanResult.Errors` removed for the same reason.
 
 Tiers per [RFC #97](https://github.com/binsarjr/sveltego/issues/97).
 

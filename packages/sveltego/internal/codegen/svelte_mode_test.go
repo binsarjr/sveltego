@@ -94,11 +94,11 @@ func TestGenerateManifest_SvelteMode_SSRRender(t *testing.T) {
 	}
 }
 
-// TestGenerateManifest_SvelteMode_SSRLayout verifies #456: when a
-// layout package is in SSRRenderLayouts, the manifest swaps its
-// `render__layout__<alias>` adapter from the legacy
-// `Layout{}.Render(*render.Writer, ...)` call to the children-callback
-// payload bridge that dispatches `<alias>.RenderLayoutSSR`.
+// TestGenerateManifest_SvelteMode_SSRLayout verifies #456 / #494: layout
+// adapters always emit the children-callback payload bridge that
+// dispatches `<alias>.RenderLayoutSSR`. After #494 the manifest no
+// longer accepts a `SSRRenderLayouts` toggle — every layout takes the
+// SSR path unconditionally because the Mustache-Go pipeline is gone.
 func TestGenerateManifest_SvelteMode_SSRLayout(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -120,7 +120,6 @@ func TestGenerateManifest_SvelteMode_SSRLayout(t *testing.T) {
 		t.Fatalf("Scan: %v", err)
 	}
 	pattern := scan.Routes[0].Pattern
-	pkgPath := scan.Routes[0].PackagePath
 	routeOpts := map[string]kit.PageOptions{
 		pattern: {SSR: true, CSR: true, CSRF: true, TrailingSlash: kit.TrailingSlashNever, Templates: kit.TemplatesSvelte},
 	}
@@ -132,9 +131,6 @@ func TestGenerateManifest_SvelteMode_SSRLayout(t *testing.T) {
 		SSRRenderRoutes: map[string]string{
 			pattern: "routes",
 		},
-		SSRRenderLayouts: map[string]struct{}{
-			pkgPath: {},
-		},
 	})
 	if err != nil {
 		t.Fatalf("GenerateManifest: %v", err)
@@ -144,18 +140,18 @@ func TestGenerateManifest_SvelteMode_SSRLayout(t *testing.T) {
 		t.Errorf("expected RenderLayoutSSR call inside layout bridge with pageState:\n%s", s)
 	}
 	if bytes.Contains(out, []byte(".Layout{}.Render(w, ctx, typed, children)")) {
-		t.Errorf("legacy Layout{}.Render call should not appear when layout is SSR-bridged:\n%s", s)
+		t.Errorf("legacy Layout{}.Render call should not appear:\n%s", s)
 	}
 	if !bytes.Contains(out, []byte("inner := func(p *server.Payload) {")) {
 		t.Errorf("expected children-bridge closure:\n%s", s)
 	}
 }
 
-// TestGenerateManifest_SvelteMode_SSRError verifies #412: when an
-// error-boundary package is in SSRRenderErrors, the manifest swaps its
-// `renderError__<alias>` adapter from the legacy
-// `<alias>.ErrorPage{}.Render(...)` call to the payload bridge that
-// dispatches `<alias>.RenderErrorSSR(&payload, safe)`.
+// TestGenerateManifest_SvelteMode_SSRError verifies #412 / #494: error
+// boundary adapters always emit the payload bridge that dispatches
+// `<alias>.RenderErrorSSR(&payload, safe, pageState)`. After #494 the
+// manifest no longer accepts a `SSRRenderErrors` toggle — every error
+// boundary takes the SSR path unconditionally.
 func TestGenerateManifest_SvelteMode_SSRError(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -177,8 +173,7 @@ func TestGenerateManifest_SvelteMode_SSRError(t *testing.T) {
 		t.Fatalf("Scan: %v", err)
 	}
 	pattern := scan.Routes[0].Pattern
-	errorPkg := scan.Routes[0].ErrorBoundaryPackagePath
-	if errorPkg == "" {
+	if scan.Routes[0].ErrorBoundaryPackagePath == "" {
 		t.Fatalf("expected ErrorBoundaryPackagePath to be set")
 	}
 	routeOpts := map[string]kit.PageOptions{
@@ -192,9 +187,6 @@ func TestGenerateManifest_SvelteMode_SSRError(t *testing.T) {
 		SSRRenderRoutes: map[string]string{
 			pattern: "routes",
 		},
-		SSRRenderErrors: map[string]struct{}{
-			errorPkg: {},
-		},
 	})
 	if err != nil {
 		t.Fatalf("GenerateManifest: %v", err)
@@ -204,7 +196,7 @@ func TestGenerateManifest_SvelteMode_SSRError(t *testing.T) {
 		t.Errorf("expected RenderErrorSSR call inside error bridge with pageState:\n%s", s)
 	}
 	if bytes.Contains(out, []byte(".ErrorPage{}.Render(w, ctx, safe)")) {
-		t.Errorf("legacy ErrorPage{}.Render call should not appear when boundary is SSR-bridged:\n%s", s)
+		t.Errorf("legacy ErrorPage{}.Render call should not appear:\n%s", s)
 	}
 	if !bytes.Contains(out, []byte("var payload server.Payload")) {
 		t.Errorf("expected payload allocation in error bridge:\n%s", s)
