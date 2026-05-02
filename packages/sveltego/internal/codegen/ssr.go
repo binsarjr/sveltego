@@ -199,6 +199,7 @@ func runSSRTranspile(ctx context.Context, projectRoot, outDir, modulePath string
 			Rewriter:           lowerer,
 			TypedDataParam:     typedParam,
 			EmitPageStateParam: true,
+			CSRFAutoInject:     routeCSRFEnabled(p.route.Pattern, routeOptions),
 		})
 		if err != nil {
 			return result, fmt.Errorf("codegen: ssr transpile %s: %w (annotate the route with <!-- sveltego:ssr-fallback --> to opt into the sidecar fallback)", p.route.Pattern, err)
@@ -274,6 +275,12 @@ func runSSRTranspile(ctx context.Context, projectRoot, outDir, modulePath string
 			TypedDataParam:     shape.RootType,
 			EmitChildrenParam:  true,
 			EmitPageStateParam: true,
+			// Layouts span multiple routes whose CSRF flags may
+			// differ; enable inject unconditionally. pageState.CSRFToken
+			// is empty when CSRF is disabled for the bound page so the
+			// hidden input renders with an empty value (harmless because
+			// the server skips validation on opted-out routes).
+			CSRFAutoInject: true,
 		})
 		if err != nil {
 			return result, fmt.Errorf("codegen: ssr layout transpile %s: %w", lp.pkgPath, err)
@@ -636,6 +643,19 @@ func planSSRErrors(scan *routescan.ScanResult, routeOptions map[string]kit.PageO
 		})
 	}
 	return plans
+}
+
+// routeCSRFEnabled reports whether the per-route options enable CSRF
+// for pattern. Missing entries fall back to the framework default
+// (kit.DefaultPageOptions().CSRF). Used by the SSR transpile driver to
+// decide whether to run the CSRF auto-inject pre-pass over a page
+// route's AST (issue #493).
+func routeCSRFEnabled(pattern string, routeOptions map[string]kit.PageOptions) bool {
+	opts, ok := routeOptions[pattern]
+	if !ok {
+		return kit.DefaultPageOptions().CSRF
+	}
+	return opts.CSRF
 }
 
 // routeEligibleForSSRChain reports whether a route's layout chain and

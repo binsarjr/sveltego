@@ -72,11 +72,12 @@ func layoutDataAt(layoutDatas []any, i int) any {
 // rebuild a closure stack on every request.
 func renderChain__Index(w *render.Writer, ctx *kit.RenderCtx, page router.PageHandler, pageData any, layoutDatas []any) error {
 	pageState := server.PageState{
-		URL:    ctx.URL,
-		Params: ctx.Params,
-		Route:  server.PageRoute{ID: `/`},
-		Status: 200,
-		Data:   pageData,
+		URL:       ctx.URL,
+		Params:    ctx.Params,
+		Route:     server.PageRoute{ID: `/`},
+		Status:    200,
+		Data:      pageData,
+		CSRFToken: ctx.CSRFToken(),
 	}
 	return render__layout__page_routes(w, ctx, layoutDataAt(layoutDatas, 0), func(w *render.Writer) error {
 		return page(w, ctx, pageData)
@@ -88,11 +89,12 @@ func renderChain__Index(w *render.Writer, ctx *kit.RenderCtx, page router.PageHa
 // rebuild a closure stack on every request.
 func renderChain__DashBilling(w *render.Writer, ctx *kit.RenderCtx, page router.PageHandler, pageData any, layoutDatas []any) error {
 	pageState := server.PageState{
-		URL:    ctx.URL,
-		Params: ctx.Params,
-		Route:  server.PageRoute{ID: `/dash/billing`},
-		Status: 200,
-		Data:   pageData,
+		URL:       ctx.URL,
+		Params:    ctx.Params,
+		Route:     server.PageRoute{ID: `/dash/billing`},
+		Status:    200,
+		Data:      pageData,
+		CSRFToken: ctx.CSRFToken(),
 	}
 	return render__layout__page_routes(w, ctx, layoutDataAt(layoutDatas, 0), func(w *render.Writer) error {
 		return page(w, ctx, pageData)

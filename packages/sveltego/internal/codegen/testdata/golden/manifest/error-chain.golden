@@ -133,10 +133,11 @@ func render__layout__page_routes_admin(w *render.Writer, ctx *kit.RenderCtx, dat
 func renderError__page_routes(w *render.Writer, ctx *kit.RenderCtx, safe kit.SafeError) error {
 	var payload server.Payload
 	pageState := server.PageState{
-		URL:    ctx.URL,
-		Params: ctx.Params,
-		Status: safe.HTTPStatus(),
-		Error:  &server.PageError{Message: safe.Error(), Status: safe.HTTPStatus()},
+		URL:       ctx.URL,
+		Params:    ctx.Params,
+		Status:    safe.HTTPStatus(),
+		Error:     &server.PageError{Message: safe.Error(), Status: safe.HTTPStatus()},
+		CSRFToken: ctx.CSRFToken(),
 	}
 	page_routes.RenderErrorSSR(&payload, safe, pageState)
 	if head := payload.HeadHTML(); head != "" {
@@ -151,10 +152,11 @@ func renderError__page_routes(w *render.Writer, ctx *kit.RenderCtx, safe kit.Saf
 func renderError__page_routes_admin(w *render.Writer, ctx *kit.RenderCtx, safe kit.SafeError) error {
 	var payload server.Payload
 	pageState := server.PageState{
-		URL:    ctx.URL,
-		Params: ctx.Params,
-		Status: safe.HTTPStatus(),
-		Error:  &server.PageError{Message: safe.Error(), Status: safe.HTTPStatus()},
+		URL:       ctx.URL,
+		Params:    ctx.Params,
+		Status:    safe.HTTPStatus(),
+		Error:     &server.PageError{Message: safe.Error(), Status: safe.HTTPStatus()},
+		CSRFToken: ctx.CSRFToken(),
 	}
 	page_routes_admin.RenderErrorSSR(&payload, safe, pageState)
 	if head := payload.HeadHTML(); head != "" {
@@ -179,11 +181,12 @@ func layoutDataAt(layoutDatas []any, i int) any {
 // rebuild a closure stack on every request.
 func renderChain__Index(w *render.Writer, ctx *kit.RenderCtx, page router.PageHandler, pageData any, layoutDatas []any) error {
 	pageState := server.PageState{
-		URL:    ctx.URL,
-		Params: ctx.Params,
-		Route:  server.PageRoute{ID: `/`},
-		Status: 200,
-		Data:   pageData,
+		URL:       ctx.URL,
+		Params:    ctx.Params,
+		Route:     server.PageRoute{ID: `/`},
+		Status:    200,
+		Data:      pageData,
+		CSRFToken: ctx.CSRFToken(),
 	}
 	return render__layout__page_routes(w, ctx, layoutDataAt(layoutDatas, 0), func(w *render.Writer) error {
 		return page(w, ctx, pageData)
@@ -195,7 +198,7 @@ func renderChain__Index(w *render.Writer, ctx *kit.RenderCtx, page router.PageHa
 // is baked in; layoutData is intentionally nil per legacy behavior.
 func renderErrorChain__Index(w *render.Writer, ctx *kit.RenderCtx, safe kit.SafeError, layoutDatas []any) error {
 	_ = layoutDatas
-	pageState := server.PageState{URL: ctx.URL, Params: ctx.Params, Route: server.PageRoute{ID: `/`}, Status: safe.HTTPStatus(), Error: &server.PageError{Message: safe.Error(), Status: safe.HTTPStatus()}}
+	pageState := server.PageState{URL: ctx.URL, Params: ctx.Params, Route: server.PageRoute{ID: `/`}, Status: safe.HTTPStatus(), Error: &server.PageError{Message: safe.Error(), Status: safe.HTTPStatus()}, CSRFToken: ctx.CSRFToken()}
 	return render__layout__page_routes(w, ctx, nil, func(w *render.Writer) error {
 		return renderError__page_routes(w, ctx, safe)
 	}, pageState)
@@ -206,11 +209,12 @@ func renderErrorChain__Index(w *render.Writer, ctx *kit.RenderCtx, safe kit.Safe
 // rebuild a closure stack on every request.
 func renderChain__Admin(w *render.Writer, ctx *kit.RenderCtx, page router.PageHandler, pageData any, layoutDatas []any) error {
 	pageState := server.PageState{
-		URL:    ctx.URL,
-		Params: ctx.Params,
-		Route:  server.PageRoute{ID: `/admin`},
-		Status: 200,
-		Data:   pageData,
+		URL:       ctx.URL,
+		Params:    ctx.Params,
+		Route:     server.PageRoute{ID: `/admin`},
+		Status:    200,
+		Data:      pageData,
+		CSRFToken: ctx.CSRFToken(),
 	}
 	return render__layout__page_routes(w, ctx, layoutDataAt(layoutDatas, 0), func(w *render.Writer) error {
 		return render__layout__page_routes_admin(w, ctx, layoutDataAt(layoutDatas, 1), func(w *render.Writer) error {
@@ -224,7 +228,7 @@ func renderChain__Admin(w *render.Writer, ctx *kit.RenderCtx, page router.PageHa
 // is baked in; layoutData is intentionally nil per legacy behavior.
 func renderErrorChain__Admin(w *render.Writer, ctx *kit.RenderCtx, safe kit.SafeError, layoutDatas []any) error {
 	_ = layoutDatas
-	pageState := server.PageState{URL: ctx.URL, Params: ctx.Params, Route: server.PageRoute{ID: `/admin`}, Status: safe.HTTPStatus(), Error: &server.PageError{Message: safe.Error(), Status: safe.HTTPStatus()}}
+	pageState := server.PageState{URL: ctx.URL, Params: ctx.Params, Route: server.PageRoute{ID: `/admin`}, Status: safe.HTTPStatus(), Error: &server.PageError{Message: safe.Error(), Status: safe.HTTPStatus()}, CSRFToken: ctx.CSRFToken()}
 	return render__layout__page_routes(w, ctx, nil, func(w *render.Writer) error {
 		return render__layout__page_routes_admin(w, ctx, nil, func(w *render.Writer) error {
 			return renderError__page_routes_admin(w, ctx, safe)
@@ -237,11 +241,12 @@ func renderErrorChain__Admin(w *render.Writer, ctx *kit.RenderCtx, safe kit.Safe
 // rebuild a closure stack on every request.
 func renderChain__AdminUsers(w *render.Writer, ctx *kit.RenderCtx, page router.PageHandler, pageData any, layoutDatas []any) error {
 	pageState := server.PageState{
-		URL:    ctx.URL,
-		Params: ctx.Params,
-		Route:  server.PageRoute{ID: `/admin/users`},
-		Status: 200,
-		Data:   pageData,
+		URL:       ctx.URL,
+		Params:    ctx.Params,
+		Route:     server.PageRoute{ID: `/admin/users`},
+		Status:    200,
+		Data:      pageData,
+		CSRFToken: ctx.CSRFToken(),
 	}
 	return render__layout__page_routes(w, ctx, layoutDataAt(layoutDatas, 0), func(w *render.Writer) error {
 		return render__layout__page_routes_admin(w, ctx, layoutDataAt(layoutDatas, 1), func(w *render.Writer) error {
@@ -255,7 +260,7 @@ func renderChain__AdminUsers(w *render.Writer, ctx *kit.RenderCtx, page router.P
 // is baked in; layoutData is intentionally nil per legacy behavior.
 func renderErrorChain__AdminUsers(w *render.Writer, ctx *kit.RenderCtx, safe kit.SafeError, layoutDatas []any) error {
 	_ = layoutDatas
-	pageState := server.PageState{URL: ctx.URL, Params: ctx.Params, Route: server.PageRoute{ID: `/admin/users`}, Status: safe.HTTPStatus(), Error: &server.PageError{Message: safe.Error(), Status: safe.HTTPStatus()}}
+	pageState := server.PageState{URL: ctx.URL, Params: ctx.Params, Route: server.PageRoute{ID: `/admin/users`}, Status: safe.HTTPStatus(), Error: &server.PageError{Message: safe.Error(), Status: safe.HTTPStatus()}, CSRFToken: ctx.CSRFToken()}
 	return render__layout__page_routes(w, ctx, nil, func(w *render.Writer) error {
 		return render__layout__page_routes_admin(w, ctx, nil, func(w *render.Writer) error {
 			return renderError__page_routes_admin(w, ctx, safe)
