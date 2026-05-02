@@ -44,24 +44,9 @@ type ssrPlan struct {
 // Fallback holds routes that explicitly opted out via the
 // `<!-- sveltego:ssr-fallback -->` comment; those route through the
 // long-running Node sidecar at request time (Phase 8, #430).
-//
-// Layouts holds layout package paths (with the ".gen/" prefix, matching
-// LayoutPackagePaths) that received a wire_layout_render.gen.go emit so
-// the manifest can swap their adapter from the legacy
-// `Layout{}.Render(*render.Writer, ...)` form to the children-callback
-// payload bridge wired via #453 (issue #456).
-//
-// Errors holds error-boundary package paths (".gen/" prefix preserved)
-// that received an error_render.gen.go emit and a sibling
-// wire_error_render.gen.go (#412). The manifest swaps the legacy
-// `ErrorPage{}.Render(...)` adapter for the payload-bridge form that
-// dispatches `RenderErrorSSR(payload, safe)` so SSR error rendering
-// runs through Option B's transpile path instead of Mustache-Go.
 type SSRPlanResult struct {
 	Transpiled map[string]string
 	Fallback   []SSRFallbackRoute
-	Layouts    map[string]struct{}
-	Errors     map[string]struct{}
 }
 
 // SSRFallbackRoute names one route the runtime must dispatch to the
@@ -259,7 +244,6 @@ func runSSRTranspile(ctx context.Context, projectRoot, outDir, modulePath string
 	if len(layoutPlans) == 0 {
 		return result, nil
 	}
-	layoutsByPkg := make(map[string]struct{}, len(layoutPlans))
 	for _, lp := range layoutPlans {
 		jobKey := layoutJobKey(lp.pkgPath)
 		astPath, ok := resultsByRoute[jobKey]
@@ -326,15 +310,11 @@ func runSSRTranspile(ctx context.Context, projectRoot, outDir, modulePath string
 		}); err != nil {
 			return result, err
 		}
-
-		layoutsByPkg[lp.pkgPath] = struct{}{}
 	}
-	result.Layouts = layoutsByPkg
 
 	if len(errorPlans) == 0 {
 		return result, nil
 	}
-	errorsByPkg := make(map[string]struct{}, len(errorPlans))
 	for _, ep := range errorPlans {
 		jobKey := errorJobKey(ep.pkgPath)
 		astPath, ok := resultsByRoute[jobKey]
@@ -398,10 +378,7 @@ func runSSRTranspile(ctx context.Context, projectRoot, outDir, modulePath string
 		}); err != nil {
 			return result, err
 		}
-
-		errorsByPkg[ep.pkgPath] = struct{}{}
 	}
-	result.Errors = errorsByPkg
 	return result, nil
 }
 

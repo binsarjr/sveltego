@@ -173,11 +173,11 @@ func TestGenerateManifest_FmtImportGated(t *testing.T) {
 
 	t.Run("svelte_layout_no_ssr_marker_no_fmt", func(t *testing.T) {
 		t.Parallel()
-		// Svelte SSR page + a layout NOT listed in SSRRenderLayouts.
-		// emitLayoutAdapters always uses the SSR payload-bridge form
-		// regardless of the hasSSR flag, so no fmt.Errorf lands in the
-		// emitted body. The `usesFmt` accumulator must agree —
-		// otherwise the import is "fmt imported and not used" again.
+		// Svelte SSR page + a layout. emitLayoutAdapters always uses
+		// the SSR payload-bridge form (#494 collapsed the always-true
+		// hasSSR flag), so no fmt.Errorf lands in the emitted body.
+		// The `usesFmt` accumulator must agree — otherwise the import
+		// is "fmt imported and not used" again.
 		scan := &routescan.ScanResult{
 			Routes: []routescan.ScannedRoute{
 				{
@@ -213,13 +213,12 @@ func TestGenerateManifest_FmtImportGated(t *testing.T) {
 
 	t.Run("svelte_layout_chain_no_fmt", func(t *testing.T) {
 		t.Parallel()
-		// Layout chain on a Svelte SSR route, layout properly listed
-		// in SSRRenderLayouts: layout adapters use the SSR payload-
-		// bridge form (no fmt.Errorf), and renderChain__ emit also
-		// stays fmt-free. Asserts the layout case from the #485
-		// acceptance criteria — fmt only when an emitted layout
-		// bridge actually writes fmt.Errorf, which the SSR form never
-		// does.
+		// Layout chain on a Svelte SSR route: layout adapters now use
+		// the SSR payload-bridge form unconditionally (#494 collapsed
+		// the always-true hasSSR flag), and renderChain__ emit stays
+		// fmt-free. Asserts the layout case from the #485 acceptance
+		// criteria — fmt only when an emitted layout bridge actually
+		// writes fmt.Errorf, which the SSR form never does.
 		scan := &routescan.ScanResult{
 			Routes: []routescan.ScannedRoute{
 				{
@@ -241,8 +240,7 @@ func TestGenerateManifest_FmtImportGated(t *testing.T) {
 			RouteOptions: map[string]kit.PageOptions{
 				"/": {Templates: kit.TemplatesSvelte, SSR: true, CSR: true},
 			},
-			SSRRenderRoutes:  map[string]string{"/": "usersrc/routes"},
-			SSRRenderLayouts: map[string]struct{}{".gen/layouts/_root_": {}},
+			SSRRenderRoutes: map[string]string{"/": "usersrc/routes"},
 		})
 		if err != nil {
 			t.Fatalf("GenerateManifest: %v", err)
