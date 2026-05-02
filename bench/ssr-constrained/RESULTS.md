@@ -193,3 +193,70 @@ issue, attach the new `last-run.txt`, and link back here. The numbers
 in the table above are the 2026-05-02 anchor on Apple M1 Pro; do not
 edit them in place — append a new dated section at the bottom of this
 file when re-measuring.
+
+## 2026-05-03 — payload pre-encode (#488) re-measure
+
+Per #488 the hydration payload writer was rewritten to splice
+pre-encoded stable fields (Manifest, AppVersion, VersionPoll, RouteID)
+instead of running `json.Marshal(clientPayload)` per request. The wire
+format is byte-identical (verified by a new property test
+`TestWritePayloadByteIdenticalToJSONMarshal` in
+`packages/sveltego/server/payload_writer_test.go`).
+
+**In-process Go bench numbers (Apple M1 Pro, `go test -bench`):**
+
+| Bench | Baseline (origin/main) | After (#488) | Delta |
+|---|---|---|---|
+| `BenchmarkPayloadMarshal_LegacyJSONMarshal` (legacy `json.Marshal`) | 685 ns/op, 480 B/op, 2 allocs/op | (unchanged — code path retained) | — |
+| `BenchmarkPayloadMarshal_SpliceWriter` (#488 path) | n/a | **370 ns/op, 56 B/op, 2 allocs/op** | **-46% CPU, -88% B/op** vs legacy |
+| `BenchmarkServeHTTP_index` (full pipeline) | 1584 ns/op, 1637 B/op | **1249 ns/op, 1274 B/op** | **-21% CPU, -22% B/op** |
+| `BenchmarkServeHTTP_Hello` | 2059 ns/op, 2903 B/op | **1700 ns/op, 2540 B/op** | **-17% CPU, -13% B/op** |
+| `BenchmarkServeHTTP_HelloWithHead` | 2008 ns/op, 2983 B/op | **1849 ns/op, 2668 B/op** | **-8% CPU, -11% B/op** |
+
+The per-request CPU win matches the design model: pre-encoding eliminates
+the reflection-driven re-marshal of the SPA manifest (largest stable
+field) and reduces the per-request marshal alloc to a single
+`json.Marshal(p.Data)` plus the small splice scratch buffer.
+
+**Macro container bench (0.5 vCPU / 1 GiB, `bench/ssr-constrained/run.sh`):**
+
+Sustained-RPS throughput at the p99 < 100 ms ceiling **did not move
+materially** on this hardware. Baseline (origin/main 38e454c) and
+phase/payload-perf-488 both saturated at the same `last_clean_rps`
+within run-to-run variance:
+
+| Route | Baseline `last_clean_rps` | After `last_clean_rps` | Delta |
+|---|---:|---:|---:|
+| `/longlist` (100-item each loop) | 3900 (p99=18.5 ms) | 3925 (p99=28.4 ms) | +0.6% |
+| `/` (small payload) | 4000 (p99=16.8 ms) | 4000 (p99=13.7 ms) | 0% |
+
+Both baseline and after observed the same M/M/1-style cliff transition
+(p99 jumps from <30 ms to thousands of ms within ±25 rps of the same
+breakpoint). Both runs sat at peak CPU 57–59% inside the cgroup quota
+of 50 ms / 100 ms — the container's actual throughput ceiling on this
+hardware appears to be set by Docker Desktop VM scheduling latency at
+the cgroup quota refresh boundary, not per-request Go CPU cost. With
+the per-request work already inside ~0.3 ms p50, the marshal optimization
+saves cycles that the container can't translate into more requests/sec
+under the 0.5 vCPU cap.
+
+**Conclusion:**
+
+- The CPU/byte savings demonstrated by the in-process micro and macro
+  benches **are real**, will compound under heavier per-request work
+  (larger `Data`, deeper layout chains, longer payloads), and remove a
+  reflection-heavy re-marshal pass from the hot path.
+- The container-bench acceptance criterion in #488 (≥20% rps gain at
+  p99=100 ms ceiling) **is not visible on this 0.5 vCPU Apple-silicon
+  Docker Desktop harness** — the headroom unlocked by the change is
+  smaller than the run-to-run variance the harness sees at the
+  saturation cliff. Re-measuring on a real Linux host with deterministic
+  cgroup scheduling, or on a heavier route, is the right next step
+  before declaring the macro-acceptance gate met.
+- No regression introduced — at every measured RPS, p50/p95 either
+  match or improve vs baseline, and the wire format is byte-identical.
+
+Sweep artifacts: `bench/ssr-constrained/results/2026-05-02T20-47-37Z/`
+(after, /longlist), `bench/ssr-constrained/results/2026-05-02T20-57-53Z/`
+(after, /), and the corresponding baseline runs under
+`/private/tmp/payload-perf-baseline/bench/ssr-constrained/results/`.

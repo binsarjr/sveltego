@@ -8,6 +8,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -152,6 +153,66 @@ func BenchmarkDedupeTitle_NoTitle(b *testing.B) {
 	b.ResetTimer()
 	for range b.N {
 		_ = dedupeTitle(in)
+	}
+}
+
+// BenchmarkPayloadMarshal_LegacyJSONMarshal measures the cost of the
+// pre-#488 marshal path: a single json.Marshal over the full
+// clientPayload struct (including the SPA manifest, AppVersion, and
+// VersionPoll fields). Used as the baseline reference for the splice
+// writer below.
+func BenchmarkPayloadMarshal_LegacyJSONMarshal(b *testing.B) {
+	srv := benchServer(b)
+	type page struct {
+		Title string `json:"title"`
+		Items []int  `json:"items"`
+	}
+	p := clientPayload{
+		RouteID: "/about",
+		Data:    page{Title: "About", Items: []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}},
+		URL:     "https://example.test/about",
+		Params:  map[string]string{},
+		Status:  200,
+	}
+	srv.applyInitialPayloadFields(&p)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		raw, err := json.Marshal(p)
+		if err != nil {
+			b.Fatal(err)
+		}
+		_ = raw
+	}
+}
+
+// BenchmarkPayloadMarshal_SpliceWriter measures the splice-writer path
+// that pre-encodes Manifest/AppVersion/VersionPoll/RouteID at
+// Server.New() time so each request only marshals the varying fields
+// (Data, LayoutData, URL, Params, Status, Form, PageError, Deps).
+// Reports the per-request allocation and CPU delta vs the legacy path.
+func BenchmarkPayloadMarshal_SpliceWriter(b *testing.B) {
+	srv := benchServer(b)
+	type page struct {
+		Title string `json:"title"`
+		Items []int  `json:"items"`
+	}
+	p := clientPayload{
+		RouteID: "/about",
+		Data:    page{Title: "About", Items: []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}},
+		URL:     "https://example.test/about",
+		Params:  map[string]string{},
+		Status:  200,
+	}
+	srv.applyInitialPayloadFields(&p)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		buf := acquirePayloadBuf()
+		if err := srv.writePayloadJSON(buf, p); err != nil {
+			b.Fatal(err)
+		}
+		releasePayloadBuf(buf)
 	}
 }
 
