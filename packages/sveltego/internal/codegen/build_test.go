@@ -762,3 +762,93 @@ func Load(ctx *kit.LoadCtx) (LayoutData, error) {
 	assertParsesAsGo(t, mirror)
 	assertParsesAsGo(t, wire)
 }
+
+// TestBuild_CSRFFallbackLowersClientSource pins the #540 fix: an
+// ssr-fallback annotated route with CSRF enabled must emit a Svelte
+// source rewrite under .gen/csrf-fallback/<routeKey>/_page.svelte that
+// splices the hidden _csrf_token input into POST forms, and the
+// per-route entry.ts must import the lowered file rather than the
+// user's source. The sidecar continues reading the original source —
+// the post-hoc csrfinject.Rewrite handles the SSR HTML splice — but
+// the client vDOM now contains the input element so Svelte 5 hydrate
+// matches the SSR DOM and stops stripping the field.
+func TestBuild_CSRFFallbackLowersClientSource(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/csrffb\n\ngo 1.23\n")
+	// SSR=false keeps the route off the build-time SSR transpiler so the
+	// test does not require the Node sidecar.
+	writeFile(t, filepath.Join(root, "src", "routes", "login", "_page.server.go"),
+		"//go:build sveltego\n\npackage login\n\nconst SSR = false\nconst CSRF = true\n")
+	writeFile(t, filepath.Join(root, "src", "routes", "login", "_page.svelte"),
+		`<!-- sveltego:ssr-fallback -->
+<script lang="ts">
+  let { data, form } = $props();
+</script>
+
+<form method="post" action="?/login">
+  <input name="username" />
+  <input name="password" type="password" />
+  <button>Sign in</button>
+</form>
+`)
+
+	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: root}); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	loweredPath := filepath.Join(root, ".gen", "csrf-fallback", "routes", "login", "_page", "_page.svelte")
+	loweredBytes, err := os.ReadFile(loweredPath)
+	if err != nil {
+		t.Fatalf("lowered _page.svelte not emitted at %s: %v", loweredPath, err)
+	}
+	loweredSrc := string(loweredBytes)
+	if !strings.Contains(loweredSrc, `<input type="hidden" name="_csrf_token" value={`) {
+		t.Errorf("lowered _page.svelte missing hidden CSRF input:\n%s", loweredSrc)
+	}
+	if !strings.Contains(loweredSrc, `globalThis.__sveltego__?.csrfToken`) {
+		t.Errorf("lowered _page.svelte missing client-evaluated value expression:\n%s", loweredSrc)
+	}
+	// Original form open tag is preserved.
+	if !strings.Contains(loweredSrc, `<form method="post" action="?/login">`) {
+		t.Errorf("lowered _page.svelte stripped original form tag:\n%s", loweredSrc)
+	}
+
+	entryPath := filepath.Join(root, ".gen", "client", "routes", "login", "_page", "entry.ts")
+	entryBytes, err := os.ReadFile(entryPath)
+	if err != nil {
+		t.Fatalf("login entry.ts not emitted: %v", err)
+	}
+	entrySrc := string(entryBytes)
+	// Entry must import from the lowered .gen/csrf-fallback path, NOT
+	// the user's src/routes path.
+	if !strings.Contains(entrySrc, "/csrf-fallback/") {
+		t.Errorf("login entry.ts must import from .gen/csrf-fallback/, got:\n%s", entrySrc)
+	}
+	if strings.Contains(entrySrc, `from "../../../../src/routes/login/_page.svelte"`) {
+		t.Errorf("login entry.ts must NOT import the user's source directly when CSRF lowering applies:\n%s", entrySrc)
+	}
+}
+
+// TestBuild_CSRFFallbackSkipsLoweringWithoutPostForm pins the no-op
+// case: an ssr-fallback annotated route whose source has no POST form
+// must NOT emit a lowered file (no work to do) and the entry.ts must
+// still point at the user's source.
+func TestBuild_CSRFFallbackSkipsLoweringWithoutPostForm(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/csrffb\n\ngo 1.23\n")
+	writeFile(t, filepath.Join(root, "src", "routes", "about", "_page.server.go"),
+		"//go:build sveltego\n\npackage about\n\nconst SSR = false\nconst CSRF = true\n")
+	writeFile(t, filepath.Join(root, "src", "routes", "about", "_page.svelte"),
+		"<!-- sveltego:ssr-fallback -->\n<h1>about</h1>\n")
+
+	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: root}); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	loweredPath := filepath.Join(root, ".gen", "csrf-fallback", "routes", "about", "_page", "_page.svelte")
+	if _, err := os.Stat(loweredPath); err == nil {
+		t.Errorf("lowered file emitted for source without POST forms: %s", loweredPath)
+	}
+}
