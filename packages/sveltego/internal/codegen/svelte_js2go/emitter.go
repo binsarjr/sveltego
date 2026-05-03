@@ -7,6 +7,8 @@ import (
 	"go/format"
 	"strconv"
 	"strings"
+
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/images"
 )
 
 // Options configures Transpile.
@@ -93,6 +95,18 @@ type Options struct {
 	// Defaults to false so the existing 80+ priority + extended
 	// goldens stay byte-identical.
 	CSRFAutoInject bool
+
+	// ImageVariants, when non-nil, drives the build-time `<Image>`
+	// element lowering pre-pass (issue #492). Each call site of an
+	// `Image` component imported from "@sveltego/enhanced-img" is
+	// replaced with a `$$renderer.push("<img …>")` whose markup is
+	// resolved from this map. Keys are forward-slash relative paths
+	// under static/assets/ (no leading slash) — the convention shared
+	// with [internal/images.Build].
+	//
+	// Defaults to nil. Routes that import nothing from the reserved
+	// module are unaffected even when the map is supplied.
+	ImageVariants map[string]images.Result
 }
 
 // ExprRewriter is the extension point Phase 5 uses to lower JS
@@ -277,6 +291,12 @@ func TranspileNode(root *Node, route string, opts Options) ([]byte, error) {
 
 	if opts.CSRFAutoInject {
 		injectCSRF(root)
+	}
+
+	if len(opts.ImageVariants) > 0 {
+		if err := injectImage(root, opts.ImageVariants); err != nil {
+			return nil, err
+		}
 	}
 
 	e := &emitter{

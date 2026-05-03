@@ -119,6 +119,16 @@ func runSSRTranspile(ctx context.Context, projectRoot, outDir, modulePath string
 		return result, fmt.Errorf("codegen: ssr requires node 18+ on $PATH (or annotate routes with <!-- sveltego:ssr-fallback --> if they intentionally bypass the transpiler): %w", err)
 	}
 
+	// Image variant pipeline (issue #492): scan every .svelte source for
+	// `<Image src=…>` literals once, run the build-time resize pass, and
+	// share the resulting variant map across every Transpile call below.
+	// Empty map for projects with no <Image> elements — the lowering
+	// pre-pass is a no-op when the map is empty.
+	imageVariants, err := buildImageVariants(projectRoot, projectImageWidths(routeOptions))
+	if err != nil {
+		return result, err
+	}
+
 	jobs := make([]svelterender.SSRJob, 0, len(transpilePlan)+len(layoutPlans)+len(errorPlans))
 	for _, p := range transpilePlan {
 		rel, err := filepath.Rel(projectRoot, filepath.Join(p.route.Dir, "_page.svelte"))
@@ -200,6 +210,7 @@ func runSSRTranspile(ctx context.Context, projectRoot, outDir, modulePath string
 			TypedDataParam:     typedParam,
 			EmitPageStateParam: true,
 			CSRFAutoInject:     routeCSRFEnabled(p.route.Pattern, routeOptions),
+			ImageVariants:      imageVariants,
 		})
 		if err != nil {
 			return result, fmt.Errorf("codegen: ssr transpile %s: %w (annotate the route with <!-- sveltego:ssr-fallback --> to opt into the sidecar fallback)", p.route.Pattern, err)
@@ -281,6 +292,7 @@ func runSSRTranspile(ctx context.Context, projectRoot, outDir, modulePath string
 			// hidden input renders with an empty value (harmless because
 			// the server skips validation on opted-out routes).
 			CSRFAutoInject: true,
+			ImageVariants:  imageVariants,
 		})
 		if err != nil {
 			return result, fmt.Errorf("codegen: ssr layout transpile %s: %w", lp.pkgPath, err)
@@ -351,6 +363,7 @@ func runSSRTranspile(ctx context.Context, projectRoot, outDir, modulePath string
 			Rewriter:           lowerer,
 			TypedDataParam:     shape.RootType,
 			EmitPageStateParam: true,
+			ImageVariants:      imageVariants,
 		})
 		if err != nil {
 			return result, fmt.Errorf("codegen: ssr error transpile %s: %w", ep.pkgPath, err)
@@ -679,6 +692,24 @@ func routeEligibleForSSRChain(r routescan.ScannedRoute, routeOptions map[string]
 		return false
 	}
 	return opts.SSR || opts.Prerender || opts.PrerenderAuto
+}
+
+// projectImageWidths returns the effective ImageWidths for the
+// project's image variant pipeline (issue #492). Per
+// [kit.PageOptions.ImageWidths], the field is project-global rather
+// than per-route — variants share a single static/_app/immutable/
+// pool. Pick the first non-empty ImageWidths from any route's
+// effective options; an empty result lets the pipeline fall back to
+// [images.DefaultWidths].
+func projectImageWidths(routeOptions map[string]kit.PageOptions) []int {
+	for _, opts := range routeOptions {
+		if len(opts.ImageWidths) > 0 {
+			out := make([]int, len(opts.ImageWidths))
+			copy(out, opts.ImageWidths)
+			return out
+		}
+	}
+	return nil
 }
 
 // errorDataShape returns the synthetic typegen Shape used by the
