@@ -6,7 +6,7 @@ Rewritten from scratch in Go. File layout and DX mirror SvelteKit (file-based ro
 
 ## Status
 
-🚧 Pre-alpha. MVP closed; v0.2 (form actions, hooks), v0.4 (Svelte 5 runes), v1.1 (LLM tooling), and the SSR Option B track ([RFC #421](https://github.com/binsarjr/sveltego/issues/421), 9 phases) shipped. v0.3 (client SPA + hydration), v0.5 (SvelteKit-parity catch-up), v0.6 (auth), and v1.0 (production hardening) in flight. See [GitHub issues](https://github.com/binsarjr/sveltego/issues) for the live roadmap.
+🚧 Pre-alpha. MVP, v0.2 (form actions, hooks), v0.3 (client SPA + hydration), v0.4 (Svelte 5 runes), and v1.1 (LLM tooling) closed. The SSR Option B track ([RFC #421](https://github.com/binsarjr/sveltego/issues/421), 9 phases) shipped 2026-05-02; the legacy Mustache-Go template emitter was atomically deleted via [#486](https://github.com/binsarjr/sveltego/issues/486). v0.5 (SvelteKit-parity catch-up; 4 open / 19 closed), v0.6 (auth; 31 open / 9 closed), and v1.0 (production hardening; 3 open / 59 closed) in flight. See [GitHub issues](https://github.com/binsarjr/sveltego/issues) for the live roadmap.
 
 [ADR 0008](tasks/decisions/0008-pure-svelte-pivot.md) (2026-05-01) pivots templates from Go-decorated mustaches to **100% pure Svelte/JS/TS**. [ADR 0009](tasks/decisions/0009-ssr-option-b.md) (2026-05-02) restores request-time SSR by mechanically transpiling `svelte/server` compiled JS to Go at build time (Option B per [RFC #421](https://github.com/binsarjr/sveltego/issues/421)). Pure-Svelte pivot phases land via [#380](https://github.com/binsarjr/sveltego/issues/380)–[#385](https://github.com/binsarjr/sveltego/issues/385); SSR phases land via [#423](https://github.com/binsarjr/sveltego/issues/423)–[#431](https://github.com/binsarjr/sveltego/issues/431) under tracking [#422](https://github.com/binsarjr/sveltego/issues/422).
 
@@ -184,7 +184,7 @@ Codegen reads the Go AST and emits a sibling `.svelte.d.ts` declaration so Svelt
 | **v0.4** | 19 | Svelte 5 runes, slots, snippets, special elements, `<svelte:options>`, scoped CSS, a11y warnings |
 | **v0.5** | 23 | SvelteKit-parity catch-up: upstream-tracked enhancements (`kit.After`, `HandleAction`, `RawParam`, `RouteID`, etc.) and the cookie-session auth core |
 | **v0.6** | 40 | Authentication: `sveltego-auth` master plan (#155), storage adapters, sessions, password / magic-link / OTP / OAuth flows |
-| **v1.0** | 41 | Benchmarks, docs, examples, streaming/SSG/CSP, sitemap, image opt, deploy adapters, CI/release/LSP, service worker, post-merge code-quality follow-ups, SSR Option B track (RFC #421 + 9 phases #423–#431) |
+| **v1.0** | 62 | Benchmarks, docs, examples, streaming/SSG/CSP, sitemap, image opt, deploy adapters, CI/release/LSP, service worker, post-merge code-quality follow-ups, SSR Option B track (RFC #421 + 9 phases #423–#431), Mustache-Go atomic delete + follow-ups (#486/#491/#494/#502), hydration-payload spike (#315/#503) |
 | **v1.1** | 6 | LLM tooling: `llms.txt`, MCP server, copy-for-LLM, AI templates, provenance |
 
 ## Repository layout
@@ -199,6 +199,7 @@ packages/
   lsp/                  # Language server for sveltego routes (Go-side `Load` + emitted `.svelte.d.ts`)
   mcp/                  # Model Context Protocol server (search_docs, lookup_api, …)
   enhanced-img/         # Image optimization helpers
+  cookiesession/        # Encrypted-cookie session core (modeled on svelte-kit-cookie-session)
   adapter-server/       # Bare HTTP binary deploy
   adapter-docker/       # Multi-stage Dockerfile + distroless runtime
   adapter-lambda/       # AWS Lambda via aws-lambda-go-api-proxy
@@ -208,7 +209,7 @@ packages/
   adapter-auto/         # Dispatch by env / target name + standalone CLI
 bench/                  # Benchmark harness vs adapter-bun (RFC #105)
 benchmarks/             # Per-package microbenchmarks
-playgrounds/            # End-to-end example apps (basic, blog, dashboard, …)
+playgrounds/            # End-to-end example apps (basic, blog, dashboard, ssr-stress, static)
 templates/ai/           # Embedded AGENTS.md / CLAUDE.md / .cursorrules / copilot
 docs/                   # VitePress site (guide + reference)
 tasks/                  # Execution plan, lessons, ADRs
