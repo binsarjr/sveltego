@@ -428,7 +428,9 @@ func TestBuild_EmitsLayoutWrapper(t *testing.T) {
 		}
 	}
 
-	// Entry must mount the wrapper, not Page directly, and forward layoutData.
+	// Entry must mount the wrapper, not Page directly, and seed the
+	// wrapper-state rune via _setWrapperState BEFORE mount so the
+	// wrapper's first paint matches SSR (#508 hydration parity).
 	rootEntry := filepath.Join(root, ".gen", "client", "routes", "_page", "entry.ts")
 	rootEntryBytes, err := os.ReadFile(rootEntry)
 	if err != nil {
@@ -437,8 +439,18 @@ func TestBuild_EmitsLayoutWrapper(t *testing.T) {
 	if !bytes.Contains(rootEntryBytes, []byte(`import Root from "./wrapper.svelte";`)) {
 		t.Errorf("entry.ts must import wrapper as Root:\n%s", rootEntryBytes)
 	}
+	if !bytes.Contains(rootEntryBytes, []byte("import { _setWrapperState } from")) {
+		t.Errorf("entry.ts must import _setWrapperState to seed the rune store before mount:\n%s", rootEntryBytes)
+	}
+	if !bytes.Contains(rootEntryBytes, []byte("_setWrapperState({")) {
+		t.Errorf("entry.ts must call _setWrapperState before mount:\n%s", rootEntryBytes)
+	}
 	if !bytes.Contains(rootEntryBytes, []byte("layoutData: payload.layoutData ?? []")) {
-		t.Errorf("entry.ts must forward layoutData to wrapper:\n%s", rootEntryBytes)
+		t.Errorf("entry.ts must seed layoutData into the rune store:\n%s", rootEntryBytes)
+	}
+	// Wrapper takes zero props — rune store is the source of truth.
+	if !bytes.Contains(rootEntryBytes, []byte("props: {},")) {
+		t.Errorf("entry.ts must pass empty props to wrapper mount:\n%s", rootEntryBytes)
 	}
 	if !bytes.Contains(rootEntryBytes, []byte(`chainKey: "`)) {
 		t.Errorf("entry.ts must forward a chainKey to startRouter:\n%s", rootEntryBytes)
@@ -531,9 +543,13 @@ func TestBuild_WrapperReExportsModuleSnapshot(t *testing.T) {
 	if bytes.Contains(instance, []byte("export { snapshot }")) {
 		t.Errorf("snapshot must not be re-exported in instance script:\n%s", wrapperBytes)
 	}
-	// The rune seed must run inside `$effect` (Bug 2 fix).
-	if !bytes.Contains(wrapperBytes, []byte("$effect(() => {")) {
-		t.Errorf("wrapper missing $effect rune-store seed:\n%s", wrapperBytes)
+	// Wrapper takes zero props; entry.ts seeds the rune store before mount
+	// (Bug 2 fix). Top-level `$props()` reads or `$effect`-deferred seeds
+	// would trip state_referenced_locally / break hydration respectively.
+	for _, banned := range []string{"$props()", "$effect(() => {", "wrapperState.data ="} {
+		if bytes.Contains(wrapperBytes, []byte(banned)) {
+			t.Errorf("wrapper must not contain %q (Bug 2 regression):\n%s", banned, wrapperBytes)
+		}
 	}
 	// entry.ts must still pull `snapshot` through the wrapper path.
 	entryBytes, err := os.ReadFile(filepath.Join(root, ".gen", "client", "routes", "snap", "_page", "entry.ts"))

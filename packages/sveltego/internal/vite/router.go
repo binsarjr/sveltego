@@ -481,11 +481,19 @@ async function navigate(url: URL, opts: NavigateOpts): Promise<void> {
         target.innerHTML = '';
       }
     }
-    const props =
-      nextChainKey !== ''
-        ? { data: payload.data, layoutData: payload.layoutData ?? [], form: payload.form ?? null }
-        : { data: payload.data, form: payload.form ?? null };
-    mounted = mount(mod.default, { target, props });
+    if (nextChainKey !== '') {
+      // Seed the wrapper-state rune BEFORE mount so the new wrapper's
+      // layout chain and page render against populated fields on first
+      // paint — same hydration parity contract as entry.ts (#508).
+      _setWrapperState({
+        data: payload.data,
+        layoutData: payload.layoutData ?? [],
+        form: payload.form ?? null,
+      });
+      mounted = mount(mod.default, { target, props: {} });
+    } else {
+      mounted = mount(mod.default, { target, props: { data: payload.data, form: payload.form ?? null } });
+    }
     currentChainKey = nextChainKey;
     currentRouteId = routeId;
   }

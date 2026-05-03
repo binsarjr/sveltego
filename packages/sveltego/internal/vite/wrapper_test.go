@@ -18,11 +18,6 @@ func TestGenerateWrapper_singleLayoutNests(t *testing.T) {
 		`import L0 from "../../../src/routes/_layout.svelte";`,
 		`import Page from "../../../src/routes/_page.svelte";`,
 		`import { wrapperState } from "../../__router/wrapper-store.svelte";`,
-		"let { data, layoutData = [], form = null } = $props();",
-		"$effect(() => {",
-		"wrapperState.data = data;",
-		"wrapperState.layoutData = layoutData;",
-		"wrapperState.form = form;",
 		`<L0 data={wrapperState.layoutData[0] ?? {}}>`,
 		`<Page data={wrapperState.data} form={wrapperState.form} />`,
 		`</L0>`,
@@ -33,31 +28,29 @@ func TestGenerateWrapper_singleLayoutNests(t *testing.T) {
 	}
 }
 
-// TestGenerateWrapper_runeSeedsInsideEffect defends Bug 2 fix: bare
-// top-level `wrapperState.x = x` assignments capture only the initial
-// prop value, trip Svelte 5's state_referenced_locally warning, and
-// break the same-route reactive-refresh contract from #508. The seed
-// must live inside a `$effect` so the rune system tracks the prop reads.
-func TestGenerateWrapper_runeSeedsInsideEffect(t *testing.T) {
+// TestGenerateWrapper_takesNoProps defends Bug 2 fix: any top-level
+// reference to `data`/`layoutData`/`form` props in the wrapper trips
+// Svelte 5's `state_referenced_locally` analyzer. Moving the seed into
+// `$effect` defers it past first render and breaks hydration. The fix
+// keeps the wrapper as a pure rune consumer — entry.ts owns the
+// `_setWrapperState` seed BEFORE mount runs (see
+// TestGenerateClientEntry_wrapperPathSwapsRoot).
+func TestGenerateWrapper_takesNoProps(t *testing.T) {
 	t.Parallel()
 	src := GenerateWrapper(WrapperOptions{
 		LayoutImports: []string{"../../../src/routes/_layout.svelte"},
 		PagePath:      "../../../src/routes/_page.svelte",
 		StoreImport:   "../../__router/wrapper-store.svelte",
 	})
-	effectIdx := strings.Index(src, "$effect(() => {")
-	if effectIdx < 0 {
-		t.Fatalf("wrapper missing $effect block:\n%s", src)
-	}
-	// All three seed lines must sit inside the $effect body, not before it.
-	for _, seed := range []string{"wrapperState.data = data;", "wrapperState.layoutData = layoutData;", "wrapperState.form = form;"} {
-		seedIdx := strings.Index(src, seed)
-		if seedIdx < 0 {
-			t.Errorf("wrapper missing seed line %q:\n%s", seed, src)
-			continue
-		}
-		if seedIdx < effectIdx {
-			t.Errorf("seed %q sits outside $effect block (idx=%d, effect=%d)\n%s", seed, seedIdx, effectIdx, src)
+	for _, banned := range []string{
+		"$props()",
+		"$effect(() => {",
+		"wrapperState.data =",
+		"wrapperState.layoutData =",
+		"wrapperState.form =",
+	} {
+		if strings.Contains(src, banned) {
+			t.Errorf("wrapper must not contain %q (top-level prop refs trip state_referenced_locally):\n%s", banned, src)
 		}
 	}
 }
@@ -269,11 +262,39 @@ func TestGenerateClientEntry_wrapperPathSwapsRoot(t *testing.T) {
 	if !strings.Contains(src, `import Root from "./wrapper.svelte";`) {
 		t.Errorf("expected Root import to be the wrapper, got:\n%s", src)
 	}
-	if !strings.Contains(src, "props: { data: payload.data, layoutData: payload.layoutData ?? [], form: payload.form ?? null }") {
-		t.Errorf("expected wrapper props to forward layoutData (initial mount stays simple — page comes from the wrapper's own default import):\n%s", src)
+	// Wrapper takes zero props — entry.ts seeds the rune store before
+	// mount via _setWrapperState (#508 hydration parity).
+	if !strings.Contains(src, "import { _setWrapperState } from") {
+		t.Errorf("entry.ts must import _setWrapperState to seed the wrapper rune before mount:\n%s", src)
+	}
+	if !strings.Contains(src, "_setWrapperState({") {
+		t.Errorf("entry.ts must call _setWrapperState with the payload before mount:\n%s", src)
+	}
+	if !strings.Contains(src, "  props: {},\n") {
+		t.Errorf("wrapped mount must pass empty props (rune is the source of truth):\n%s", src)
+	}
+	if strings.Contains(src, "props: { data: payload.data, layoutData") {
+		t.Errorf("wrapped mount must NOT pass data/layoutData props (rune-only contract):\n%s", src)
 	}
 	if !strings.Contains(src, `chainKey: "abc123def4567890"`) {
 		t.Errorf("expected chainKey to be forwarded to startRouter:\n%s", src)
+	}
+}
+
+func TestGenerateClientEntry_noWrapperKeepsLegacyProps(t *testing.T) {
+	t.Parallel()
+	// Routes without a layout chain mount the bare _page.svelte — the
+	// wrapper-state contract does not apply, so entry.ts keeps passing
+	// data/form props directly.
+	src := GenerateClientEntry(ClientEntryOptions{
+		RelSveltePath: "../../../src/routes/api/_page.svelte",
+		RelRouterPath: "../../__router/router",
+	})
+	if !strings.Contains(src, "props: { data: payload.data, form: payload.form ?? null }") {
+		t.Errorf("page-only mount must pass data + form props:\n%s", src)
+	}
+	if strings.Contains(src, "_setWrapperState") {
+		t.Errorf("page-only mount must not seed wrapper-state rune:\n%s", src)
 	}
 }
 

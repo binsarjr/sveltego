@@ -35,10 +35,12 @@ import (
 // (vite errors with `"snapshot" is not exported by ".../wrapper.svelte"`).
 //
 // StoreImport is the import path of the shared wrapper-store.svelte.ts
-// module relative to the wrapper file. The wrapper writes its mount
-// props into the store inside a `$effect` so the rune system tracks
-// the prop reads — bare top-level assignments only capture initial
-// values and trigger Svelte's `state_referenced_locally` warning.
+// module relative to the wrapper file. The wrapper itself takes zero
+// props — entry.ts seeds the rune store via _setWrapperState before
+// mount() runs, so the layout and page templates read populated rune
+// fields on first paint (hydration matches the SSR HTML). Same-route
+// reactive refreshes (invalidate, query-string nav) write back to the
+// same store so the chain re-renders without unmounting.
 type WrapperOptions struct {
 	LayoutImports []string
 	PagePath      string
@@ -89,19 +91,10 @@ func GenerateWrapper(opts WrapperOptions) string {
 		fmt.Fprintf(&b, "  import L%d from %q;\n", i, layout)
 	}
 	fmt.Fprintf(&b, "  import Page from %q;\n", opts.PagePath)
-	fmt.Fprintf(&b, "  import { wrapperState } from %q;\n\n", opts.StoreImport)
-	b.WriteString("  let { data, layoutData = [], form = null } = $props();\n\n")
-	b.WriteString("  // Seed the shared rune store with the mount-time payload. Same-route\n")
-	b.WriteString("  // reactive refreshes (invalidate, query-string nav) write back to this\n")
-	b.WriteString("  // store so the page and layout chain re-render against the new data\n")
-	b.WriteString("  // without remounting (#508). Wrapped in $effect so the rune system\n")
-	b.WriteString("  // tracks the prop reads — a bare top-level assignment captures only the\n")
-	b.WriteString("  // initial value and trips state_referenced_locally.\n")
-	b.WriteString("  $effect(() => {\n")
-	b.WriteString("    wrapperState.data = data;\n")
-	b.WriteString("    wrapperState.layoutData = layoutData;\n")
-	b.WriteString("    wrapperState.form = form;\n")
-	b.WriteString("  });\n")
+	fmt.Fprintf(&b, "  import { wrapperState } from %q;\n", opts.StoreImport)
+	b.WriteString("  // Zero-prop wrapper: entry.ts owns the wrapper-state seed via\n")
+	b.WriteString("  // _setWrapperState before mount/hydrate so the layout chain and\n")
+	b.WriteString("  // page render against populated rune fields on first paint (#508).\n")
 	b.WriteString("</script>\n\n")
 
 	// Compose the layout chain outer→inner around <Page/>. Each layer
