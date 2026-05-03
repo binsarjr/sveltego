@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -191,14 +192,18 @@ func Build(ctx context.Context, opts BuildOptions) (*BuildResult, error) {
 				pageName = "_page@" + route.ResetTarget + ".svelte"
 			}
 			// Pure-Svelte page bodies are owned by Vite + svelte/server;
-			// the Go side keeps Load + manifest entry only. Snapshot
-			// detection still runs against the .svelte source so the
-			// SPA router wires the capture/restore hooks (#84).
+			// the Go side keeps Load + manifest entry only. Module-level
+			// exports (snapshot, plus any user additions) are extracted
+			// from the .svelte source so the per-route wrapper can
+			// re-export them via its own `<script module>` block —
+			// Svelte 5 only treats module-context exports as ESM, so a
+			// missing re-export breaks vite resolution (#84, #508 Bug 1).
 			pagePath := filepath.Join(route.Dir, pageName)
-			hasSnapshot, err := detectSnapshotInSvelte(pagePath)
+			moduleExports, err := extractModuleExportsFromSvelte(pagePath)
 			if err != nil {
 				return nil, err
 			}
+			hasSnapshot := slices.Contains(moduleExports, "snapshot")
 			routeCount++
 
 			// Path math runs unconditionally so the manifest's ClientKey
@@ -207,7 +212,7 @@ func Build(ctx context.Context, opts BuildOptions) (*BuildResult, error) {
 			// drop ClientKey from every route, leaving the frozen HTML
 			// without its <script type="module"> client bundle tag and
 			// breaking hydration on SSG pages.
-			ck, relMountFromRouter, chainKey, cerr := emitClientEntry(opts.ProjectRoot, outDir, routesDir, route, pageName, hasSnapshot, !opts.NoClient)
+			ck, relMountFromRouter, chainKey, cerr := emitClientEntry(opts.ProjectRoot, outDir, routesDir, route, pageName, hasSnapshot, moduleExports, !opts.NoClient)
 			if cerr != nil {
 				return nil, cerr
 			}
@@ -414,9 +419,16 @@ func serviceWorkerEntry(projectRoot string) string {
 // hasSnapshot wires the snapshot capture/restore hooks into the
 // initial-mount path so a reload that lands on a route with persisted
 // state restores it; when the route uses a wrapper, the wrapper
-// re-exports the page's snapshot so the import in entry.ts continues
-// to resolve.
-func emitClientEntry(projectRoot, outDir, routesDir string, route routescan.ScannedRoute, pageName string, hasSnapshot, writeFiles bool) (string, string, string, error) {
+// re-exports the page's snapshot (and any other module-level exports
+// in moduleExports) via a generated `<script module>` block so the
+// import in entry.ts continues to resolve.
+//
+// moduleExports lists every name exported from the page's
+// `<script module>` blocks, sorted. The wrapper re-exports the
+// complete set; entry.ts only consumes `snapshot` for now (driven by
+// hasSnapshot) but the contract is general so future per-page module
+// exports propagate without another codegen change.
+func emitClientEntry(projectRoot, outDir, routesDir string, route routescan.ScannedRoute, pageName string, hasSnapshot bool, moduleExports []string, writeFiles bool) (string, string, string, error) {
 	routesParent := filepath.Dir(routesDir)
 	relDir, err := filepath.Rel(routesParent, route.Dir)
 	if err != nil {
@@ -493,7 +505,7 @@ func emitClientEntry(projectRoot, outDir, routesDir string, route routescan.Scan
 		wrapperSrc := vite.GenerateWrapper(vite.WrapperOptions{
 			LayoutImports: layoutImports,
 			PagePath:      relSvelte,
-			HasSnapshot:   hasSnapshot,
+			ModuleExports: moduleExports,
 			StoreImport:   relStoreFromWrapper,
 		})
 		wrapperAbs := filepath.Join(entryDir, "wrapper.svelte")

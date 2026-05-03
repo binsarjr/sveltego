@@ -19,6 +19,7 @@ func TestGenerateWrapper_singleLayoutNests(t *testing.T) {
 		`import Page from "../../../src/routes/_page.svelte";`,
 		`import { wrapperState } from "../../__router/wrapper-store.svelte";`,
 		"let { data, layoutData = [], form = null } = $props();",
+		"$effect(() => {",
 		"wrapperState.data = data;",
 		"wrapperState.layoutData = layoutData;",
 		"wrapperState.form = form;",
@@ -28,6 +29,35 @@ func TestGenerateWrapper_singleLayoutNests(t *testing.T) {
 	} {
 		if !strings.Contains(src, want) {
 			t.Errorf("wrapper missing %q:\n%s", want, src)
+		}
+	}
+}
+
+// TestGenerateWrapper_runeSeedsInsideEffect defends Bug 2 fix: bare
+// top-level `wrapperState.x = x` assignments capture only the initial
+// prop value, trip Svelte 5's state_referenced_locally warning, and
+// break the same-route reactive-refresh contract from #508. The seed
+// must live inside a `$effect` so the rune system tracks the prop reads.
+func TestGenerateWrapper_runeSeedsInsideEffect(t *testing.T) {
+	t.Parallel()
+	src := GenerateWrapper(WrapperOptions{
+		LayoutImports: []string{"../../../src/routes/_layout.svelte"},
+		PagePath:      "../../../src/routes/_page.svelte",
+		StoreImport:   "../../__router/wrapper-store.svelte",
+	})
+	effectIdx := strings.Index(src, "$effect(() => {")
+	if effectIdx < 0 {
+		t.Fatalf("wrapper missing $effect block:\n%s", src)
+	}
+	// All three seed lines must sit inside the $effect body, not before it.
+	for _, seed := range []string{"wrapperState.data = data;", "wrapperState.layoutData = layoutData;", "wrapperState.form = form;"} {
+		seedIdx := strings.Index(src, seed)
+		if seedIdx < 0 {
+			t.Errorf("wrapper missing seed line %q:\n%s", seed, src)
+			continue
+		}
+		if seedIdx < effectIdx {
+			t.Errorf("seed %q sits outside $effect block (idx=%d, effect=%d)\n%s", seed, seedIdx, effectIdx, src)
 		}
 	}
 }
@@ -62,6 +92,13 @@ func TestGenerateWrapper_nestedLayoutsComposeOuterToInner(t *testing.T) {
 	}
 }
 
+// TestGenerateWrapper_snapshotIsReExported guards Bug 1 fix: when the
+// page's `<script module>` exports `snapshot`, the wrapper must
+// re-export it via its own `<script module>` block (Svelte 5 only
+// recognises module-level exports there). The instance script must not
+// carry the export — that path is parsed as the legacy props syntax and
+// emits no ESM export, breaking the wrapper-as-snapshot bridge for
+// entry.ts (vite errors with `"snapshot" is not exported by ".../wrapper.svelte"`).
 func TestGenerateWrapper_snapshotIsReExported(t *testing.T) {
 	t.Parallel()
 
@@ -69,13 +106,61 @@ func TestGenerateWrapper_snapshotIsReExported(t *testing.T) {
 		LayoutImports: []string{"../../../src/routes/_layout.svelte"},
 		PagePath:      "../../../src/routes/snapshot/_page.svelte",
 		StoreImport:   "../../__router/wrapper-store.svelte",
-		HasSnapshot:   true,
+		ModuleExports: []string{"snapshot"},
 	})
-	if !strings.Contains(src, `import Page, { snapshot } from "../../../src/routes/snapshot/_page.svelte";`) {
-		t.Errorf("missing snapshot import:\n%s", src)
+	if !strings.Contains(src, `<script module lang="ts">`) {
+		t.Errorf("missing <script module> block:\n%s", src)
 	}
-	if !strings.Contains(src, "export { snapshot };") {
-		t.Errorf("missing snapshot re-export:\n%s", src)
+	if !strings.Contains(src, `export { snapshot } from "../../../src/routes/snapshot/_page.svelte";`) {
+		t.Errorf("missing snapshot re-export-from in module block:\n%s", src)
+	}
+	// The snapshot must NOT be re-exported from inside the instance
+	// `<script lang="ts">` — Svelte 5 reads that as the legacy props
+	// syntax and emits no ESM export.
+	moduleEnd := strings.Index(src, "</script>")
+	if moduleEnd < 0 {
+		t.Fatalf("malformed wrapper:\n%s", src)
+	}
+	instance := src[moduleEnd:]
+	if strings.Contains(instance, "export { snapshot }") {
+		t.Errorf("snapshot must not be re-exported from instance script:\n%s", src)
+	}
+	// Page must still be the default import for component composition.
+	if !strings.Contains(src, `import Page from "../../../src/routes/snapshot/_page.svelte";`) {
+		t.Errorf("missing Page default import in instance script:\n%s", src)
+	}
+}
+
+// TestGenerateWrapper_multipleModuleExportsReExported covers a synthetic
+// `<script module>` exporting more than just snapshot — the wrapper
+// must propagate every name through the same module-block re-export
+// (Bug 1 generalisation; the contract isn't snapshot-specific).
+func TestGenerateWrapper_multipleModuleExportsReExported(t *testing.T) {
+	t.Parallel()
+	src := GenerateWrapper(WrapperOptions{
+		LayoutImports: []string{"../../../src/routes/_layout.svelte"},
+		PagePath:      "../../../src/routes/multi/_page.svelte",
+		StoreImport:   "../../__router/wrapper-store.svelte",
+		ModuleExports: []string{"alpha", "beta", "snapshot"},
+	})
+	if !strings.Contains(src, `export { alpha, beta, snapshot } from "../../../src/routes/multi/_page.svelte";`) {
+		t.Errorf("missing combined module-export re-export:\n%s", src)
+	}
+}
+
+// TestGenerateWrapper_noModuleBlockWhenNoExports keeps the wrapper free
+// of an empty `<script module>` block when the page has no module-level
+// exports — Svelte 5 tolerates an empty module script but it is noise
+// in the generated output.
+func TestGenerateWrapper_noModuleBlockWhenNoExports(t *testing.T) {
+	t.Parallel()
+	src := GenerateWrapper(WrapperOptions{
+		LayoutImports: []string{"../../../src/routes/_layout.svelte"},
+		PagePath:      "../../../src/routes/_page.svelte",
+		StoreImport:   "../../__router/wrapper-store.svelte",
+	})
+	if strings.Contains(src, `<script module`) {
+		t.Errorf("wrapper should not emit <script module> when ModuleExports is empty:\n%s", src)
 	}
 }
 
