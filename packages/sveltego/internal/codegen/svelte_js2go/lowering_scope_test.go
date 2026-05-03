@@ -23,13 +23,14 @@ func scopeShape() *typegen.Shape {
 	)
 }
 
-func TestLowerer_EachLoopShadowsDataName(t *testing.T) {
+func TestLowerer_EachLoopOnTypedSliceLowersElement(t *testing.T) {
 	t.Parallel()
-	// {#each data.items as item}<p>{item.title}</p>{/each} — `item` is
-	// a LocalEach binding, NOT subject to JSON-tag rewriting even
-	// though the typegen Shape happens to have a field literally
-	// called `item` (rare but possible). The lowerer must trust
-	// scope.Lookup over name collisions.
+	// {#each data.items as item}<p>{item.title}</p>{/each} — when the
+	// source slice is typed (`[]Item` with NamedType="Item"), the
+	// per-iteration alias inherits the element type and `item.title`
+	// lowers to `item.Title`. Issue #509 (bug 2.2). Without this fix
+	// `item` typed as `any` (Phase 3 EnsureArrayLike fallback) failed
+	// to compile against the typed slice.
 	root := buildProgram(buildBlock(
 		propsDestructure("data"),
 		constDecl("each_array",
@@ -64,13 +65,16 @@ func TestLowerer_EachLoopShadowsDataName(t *testing.T) {
 		t.Fatalf("unexpected lowering errors: %v", errs)
 	}
 	src := string(got)
-	// `item.title` must remain JS-style — it's a local in scope.
-	if !strings.Contains(src, "item.title") {
-		t.Errorf("expected unrewritten item.title:\n%s", src)
+	if !strings.Contains(src, "item.Title") {
+		t.Errorf("expected lowered item.Title:\n%s", src)
 	}
-	// And `data.items` (root chain) must lower to data.Items.
 	if !strings.Contains(src, "data.Items") {
 		t.Errorf("expected lowered data.Items:\n%s", src)
+	}
+	// EnsureArrayLike must be skipped — typed slice flows directly into
+	// the loop so the iteration alias keeps its element type.
+	if strings.Contains(src, "EnsureArrayLike") {
+		t.Errorf("expected typed-slice path to skip EnsureArrayLike:\n%s", src)
 	}
 }
 

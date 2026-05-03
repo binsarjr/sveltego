@@ -13,6 +13,7 @@ export default defineConfig({
     alias: {
       "$app/state": path.resolve(__dirname, ".gen/client/__router/state.svelte"),
       "$app/navigation": path.resolve(__dirname, ".gen/client/__router/navigation"),
+      "$lib": path.resolve(__dirname, "src/lib"),
     },
   },
   build: {

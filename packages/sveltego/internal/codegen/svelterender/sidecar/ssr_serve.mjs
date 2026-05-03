@@ -21,12 +21,14 @@
 import { createServer } from "node:http";
 import { readFile, writeFile, mkdtemp, rm } from "node:fs/promises";
 import { isAbsolute, resolve as resolvePath, join as joinPath, dirname } from "node:path";
+import { register } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { compile } from "svelte/compiler";
 import { render as svelteRender } from "svelte/server";
 
 const compiledCache = new Map();
 let cacheDir = null;
+let loaderRegistered = false;
 const sidecarDir = dirname(fileURLToPath(import.meta.url));
 
 // Server-side shim URLs for the `$app/*` virtual modules the client
@@ -61,6 +63,40 @@ export function rewriteAppAliases(code) {
 	);
 }
 
+// rewriteLibAliases substitutes `'$lib/<rest>'` import sources in the
+// compiled JS with absolute file URLs under `<projectRoot>/src/lib/`.
+// Mirrors the Vite `$lib` alias on the client side so user code in
+// fallback-rendered routes can import `$lib/Button.svelte` without
+// per-component relative paths. The loader hook (svelte_loader.mjs)
+// also rewrites these for any `.svelte` file it compiles recursively;
+// this entry-level pass keeps the entry's `$lib` imports working
+// without depending on hook timing.
+export function rewriteLibAliases(code, root) {
+	const libRoot = joinPath(root, "src", "lib");
+	return code.replace(
+		/(\bfrom\s*|\bimport\s*\(\s*)(['"])\$lib(\/[^'"]*)\2/g,
+		(_match, prefix, quote, rest) => {
+			const url = pathToFileURL(joinPath(libRoot, rest)).href;
+			return `${prefix}${quote}${url}${quote}`;
+		},
+	);
+}
+
+// ensureSvelteLoader registers the in-process Node ESM loader hook
+// (svelte_loader.mjs) that intercepts `.svelte` resolutions and
+// compiles them via `svelte/compiler` on the fly. Without this hook
+// Node's default extension lookup rejects child `.svelte` imports
+// with `ERR_UNKNOWN_FILE_EXTENSION` (#512). Idempotent — register()
+// is called at most once per process.
+function ensureSvelteLoader(root) {
+	if (loaderRegistered) return;
+	const loaderURL = pathToFileURL(joinPath(sidecarDir, "svelte_loader.mjs")).href;
+	register(loaderURL, import.meta.url, {
+		data: { projectRoot: root, sidecarDir },
+	});
+	loaderRegistered = true;
+}
+
 async function ensureCacheDir() {
 	if (cacheDir) return cacheDir;
 	// Place the cache dir inside the sidecar tree so Node's module
@@ -89,7 +125,7 @@ async function loadComponent(root, source) {
 	if (!result || typeof result.js?.code !== "string") {
 		throw new Error(`svelte/compiler produced no js.code for ${source}`);
 	}
-	const rewritten = rewriteAppAliases(result.js.code);
+	const rewritten = rewriteLibAliases(rewriteAppAliases(result.js.code), root);
 	const dir = await ensureCacheDir();
 	const safe = absolute.replace(/[^a-zA-Z0-9_]/g, "_");
 	const modPath = joinPath(dir, `${safe}.mjs`);
@@ -166,6 +202,11 @@ async function handleRender(req, res, root) {
 export async function runSSRServe(args) {
 	const root = resolvePath(args.root || process.cwd());
 	const port = args.port ? Number.parseInt(args.port, 10) : 0;
+
+	// Register the .svelte loader hook before any component import. The
+	// hook lives on Node's loader thread; data passed here arrives on the
+	// other side via initialize().
+	ensureSvelteLoader(root);
 
 	const server = createServer(async (req, res) => {
 		if (req.method === "POST" && req.url === "/render") {

@@ -55,6 +55,20 @@ func (e *emitter) formatExpression(n *Node) (string, error) {
 }
 
 func (e *emitter) formatIdentifier(n *Node) (string, error) {
+	// JS `undefined` is not a Go identifier. Lower it to `nil` so
+	// runtime helpers that accept `any` (server.Attr, server.Stringify,
+	// server.Fallback) treat it the same way they treat absent values.
+	// Issue #509 (bug 2.3): surfaced by
+	// `aria-current={active ? 'page' : undefined}`.
+	//
+	// Skip the rewrite when the user happens to have a local named
+	// `undefined` in scope (legal in JS, valid Go after mangleIdent).
+	// hasLocal walks the scope chain so we don't conflate "not bound"
+	// with "bound as LocalUnknown" — Scope.Lookup returns LocalUnknown
+	// for both cases, which would otherwise miss user shadows.
+	if n.Name == "undefined" && (e.scope == nil || !hasLocal(e.scope, n.Name)) {
+		return "nil", nil
+	}
 	def := mangleIdent(n.Name)
 	if e.opts.Rewriter != nil {
 		if rep := e.opts.Rewriter.Rewrite(e.scope, n, def); rep != "" {

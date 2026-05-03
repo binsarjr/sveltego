@@ -72,11 +72,15 @@ func GenerateConfig(opts ConfigOptions) string {
 	// `$app/state` target keeps the `.svelte` half so Vite resolves to
 	// `state.svelte.ts` and vite-plugin-svelte transforms the runes
 	// (#471) — without the `.svelte` segment Vite would prefer a bare
-	// `state.ts` if both ever shipped.
+	// `state.ts` if both ever shipped. `$lib` is the SvelteKit-style
+	// alias for `src/lib/` shared modules; user code can import
+	// `$lib/Button.svelte` (or any sub-path) and Vite resolves it under
+	// `<projectRoot>/src/lib/...` without per-component relative paths.
 	b.WriteString("  resolve: {\n")
 	b.WriteString("    alias: {\n")
 	fmt.Fprintf(&b, "      %q: path.resolve(__dirname, %q),\n", "$app/state", genDir+"/__router/state.svelte")
 	fmt.Fprintf(&b, "      %q: path.resolve(__dirname, %q),\n", "$app/navigation", genDir+"/__router/navigation")
+	fmt.Fprintf(&b, "      %q: path.resolve(__dirname, %q),\n", "$lib", "src/lib")
 	b.WriteString("    },\n")
 	b.WriteString("  },\n")
 	b.WriteString("  build: {\n")

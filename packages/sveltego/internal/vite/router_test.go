@@ -557,7 +557,10 @@ func TestGenerateClientEntry_seedsState(t *testing.T) {
 }
 
 // TestGenerateConfig_aliasesAppState pins the vite alias map: user code
-// imports `$app/state` and `$app/navigation` directly, mirroring SvelteKit.
+// imports `$app/state`, `$app/navigation`, and `$lib/*` directly,
+// mirroring SvelteKit. `$lib` resolves to `<projectRoot>/src/lib` so
+// shared components and modules import as `$lib/Button.svelte` instead
+// of fragile relative paths.
 func TestGenerateConfig_aliasesAppState(t *testing.T) {
 	t.Parallel()
 
@@ -565,6 +568,7 @@ func TestGenerateConfig_aliasesAppState(t *testing.T) {
 	for _, want := range []string{
 		`"$app/state": path.resolve(__dirname, ".gen/client/__router/state.svelte")`,
 		`"$app/navigation": path.resolve(__dirname, ".gen/client/__router/navigation")`,
+		`"$lib": path.resolve(__dirname, "src/lib")`,
 	} {
 		if !strings.Contains(src, want) {
 			t.Errorf("config missing alias %q:\n%s", want, src)

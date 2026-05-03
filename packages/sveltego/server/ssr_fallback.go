@@ -110,7 +110,7 @@ func StartFallbackSidecar(ctx context.Context, cfg SSRFallbackConfig) (*fallback
 	if nodePath == "" {
 		p, err := exec.LookPath("node")
 		if err != nil {
-			return nil, fmt.Errorf("server: ssr fallback requires node 18+ on $PATH: %w", err)
+			return nil, fmt.Errorf("server: ssr fallback requires node 20.6+ on $PATH (sidecar uses module.register loader hook): %w", err)
 		}
 		nodePath = p
 	}
