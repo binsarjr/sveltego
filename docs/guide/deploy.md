@@ -26,7 +26,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN go install github.com/binsarjr/sveltego/packages/sveltego/cmd/sveltego@latest \
+RUN go install github.com/binsarjr/sveltego/packages/sveltego/cmd/sveltego@v0.1.0-alpha.0 \
     && sveltego build \
     && go build -trimpath -ldflags="-s -w" -o /out/app ./cmd/app
 
