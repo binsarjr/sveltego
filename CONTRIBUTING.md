@@ -319,7 +319,37 @@ changes go in the footer: `BREAKING CHANGE: <description>`.
 `release-please` (RFC #100) reads these commits to compute per-package
 version bumps and CHANGELOG entries.
 
-## 14. Local gate (run before push)
+## 14. Release tagging
+
+Tag format is load-bearing. Go's module proxy resolves tags by **module
+subdirectory prefix**, not by arbitrary release-please component name. A
+tag whose prefix doesn't match the module's path inside the repo is
+invisible to `go install ...@latest` (issue #532).
+
+Rules:
+
+1. **Tag prefix MUST be `packages/<name>/v*`** for every Go module under
+   `packages/`. Module path is `github.com/binsarjr/sveltego/packages/<name>`,
+   so the tag must mirror that subpath.
+2. **New packages** register in `release-please-config.json` with
+   `"component": "packages/<name>"` (full subpath, not bare name).
+   Combined with `"tag-separator": "/"` and `"include-component-in-tag":
+   true`, this emits the correct prefix.
+3. **Manifest version (`.release-please-manifest.json`) MUST align with a
+   tag the Go proxy can already resolve at HEAD** before any prefix
+   rename. Otherwise release-please sees the package as never-released
+   and proposes a downgrade to `v1.0.0`. Verify with:
+
+   ```bash
+   git tag -l 'packages/<name>/*'
+   ```
+
+   The highest proxy-visible tag is the floor for the manifest entry.
+4. **Old component-prefixed tags** (e.g. `sveltego/v1.0.0`) are invisible
+   to the Go proxy and stay untouched. Do not delete; do not migrate.
+   release-please ignores them once the manifest is seeded correctly.
+
+## 15. Local gate (run before push)
 
 The pre-commit hook (RFC #99, `.githooks/pre-commit`) and CI (RFC #101) run
 the same gate. Run it locally first:
@@ -342,7 +372,7 @@ When opening a PR, GitHub auto-loads
 each item as it lands. Reviewers reject PRs with unticked boxes that
 lack an explanation.
 
-## 15. AI agents
+## 16. AI agents
 
 AI agents working in this repo follow [`AGENTS.md`](./AGENTS.md) (master
 ruleset, RFC #103) plus per-package `CLAUDE.md` files for scope-specific
@@ -352,7 +382,7 @@ auto-synced from `AGENTS.md`; do not edit them directly.
 If a per-package `CLAUDE.md` disagrees with this file, the package file
 wins for that package only. Cross-cutting rules live here.
 
-## 16. Merging to main
+## 17. Merging to main
 
 PRs land via the **GitHub merge queue**. The queue batches entries, runs CI
 on the merged candidate, and lands the commit only when all required checks
@@ -397,7 +427,7 @@ this account. Enable it manually:
 >
 > This is required to activate `gh pr merge --auto` queue behavior.
 
-## 17. References
+## 18. References
 
 Foundation RFCs on `github.com/binsarjr/sveltego`:
 

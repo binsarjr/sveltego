@@ -18,16 +18,16 @@
     { "type": "rfc", "section": "RFCs" }
   ],
   "packages": {
-    "packages/sveltego":           { "component": "sveltego",           "package-name": "sveltego" },
-    "packages/adapter-auto":       { "component": "adapter-auto",       "package-name": "adapter-auto" },
-    "packages/adapter-cloudflare": { "component": "adapter-cloudflare", "package-name": "adapter-cloudflare" },
-    "packages/adapter-docker":     { "component": "adapter-docker",     "package-name": "adapter-docker" },
-    "packages/adapter-lambda":     { "component": "adapter-lambda",     "package-name": "adapter-lambda" },
-    "packages/adapter-server":     { "component": "adapter-server",     "package-name": "adapter-server" },
-    "packages/adapter-static":     { "component": "adapter-static",     "package-name": "adapter-static" },
-    "packages/enhanced-img":       { "component": "enhanced-img",       "package-name": "enhanced-img" },
-    "packages/init":               { "component": "init",               "package-name": "init" },
-    "packages/mcp":                { "component": "mcp",                "package-name": "mcp" },
-    "packages/lsp":                { "component": "lsp",                "package-name": "lsp" }
+    "packages/sveltego":           { "component": "packages/sveltego",           "package-name": "sveltego" },
+    "packages/adapter-auto":       { "component": "packages/adapter-auto",       "package-name": "adapter-auto" },
+    "packages/adapter-cloudflare": { "component": "packages/adapter-cloudflare", "package-name": "adapter-cloudflare" },
+    "packages/adapter-docker":     { "component": "packages/adapter-docker",     "package-name": "adapter-docker" },
+    "packages/adapter-lambda":     { "component": "packages/adapter-lambda",     "package-name": "adapter-lambda" },
+    "packages/adapter-server":     { "component": "packages/adapter-server",     "package-name": "adapter-server" },
+    "packages/adapter-static":     { "component": "packages/adapter-static",     "package-name": "adapter-static" },
+    "packages/enhanced-img":       { "component": "packages/enhanced-img",       "package-name": "enhanced-img" },
+    "packages/init":               { "component": "packages/init",               "package-name": "init" },
+    "packages/mcp":                { "component": "packages/mcp",                "package-name": "mcp" },
+    "packages/lsp":                { "component": "packages/lsp",                "package-name": "lsp" }
   }
 }
