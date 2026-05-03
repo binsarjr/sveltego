@@ -72,6 +72,30 @@ func GenerateClientEntry(opts ClientEntryOptions) string {
 	b.WriteString("  target,\n")
 	b.WriteString("  props: { data: payload.data, form: payload.form ?? null },\n")
 	b.WriteString("});\n\n")
+	// CSRF auto-inject for client-rendered POST forms (#510). The
+	// build-time AST splice handles SSR; the runtime sidecar splice
+	// handles fallback routes; this third path covers SPA / Static
+	// routes whose forms are constructed in the browser. The walk
+	// runs once after mount (no MutationObserver — keeps the runtime
+	// dead simple; users adding forms dynamically can re-run via
+	// window.__sveltego_csrf__()).
+	b.WriteString("const __sveltegoInjectCSRF = () => {\n")
+	b.WriteString("  const t = (payload as any).csrfToken;\n")
+	b.WriteString("  if (!t) return;\n")
+	b.WriteString("  const forms = target.querySelectorAll('form');\n")
+	b.WriteString("  forms.forEach((f) => {\n")
+	b.WriteString("    const m = (f.getAttribute('method') ?? '').toLowerCase();\n")
+	b.WriteString("    if (m !== 'post') return;\n")
+	b.WriteString("    if (f.querySelector('input[name=\"_csrf_token\"]')) return;\n")
+	b.WriteString("    const input = document.createElement('input');\n")
+	b.WriteString("    input.type = 'hidden';\n")
+	b.WriteString("    input.name = '_csrf_token';\n")
+	b.WriteString("    input.value = t;\n")
+	b.WriteString("    f.insertBefore(input, f.firstChild);\n")
+	b.WriteString("  });\n")
+	b.WriteString("};\n")
+	b.WriteString("queueMicrotask(__sveltegoInjectCSRF);\n")
+	b.WriteString("(window as any).__sveltego_csrf__ = __sveltegoInjectCSRF;\n\n")
 	b.WriteString("(window as any).__sveltego_hydrated = true;\n\n")
 	if opts.HasSnapshot {
 		b.WriteString("startRouter({ component, payload, target, snapshot });\n")
