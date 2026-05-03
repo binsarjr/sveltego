@@ -66,7 +66,7 @@ To copy AI templates into an existing project (without scaffolding a new tree), 
 
 LLMs default to SvelteKit-with-Node-server. Remind them:
 
-> Templates are pure Svelte/JS/TS — `let { data } = $props()`, `{data.user.name}`, `null` not `nil`. Server-side data lives in `_page.server.go` (Go), not `+page.server.ts`. Files under `src/routes/**` use the `_` prefix (`_page.server.go`, `_layout.server.go`, `_server.go`) so Go's default toolchain skips them. `hooks.server.go` still needs `//go:build sveltego`; param matchers live in `src/params/<name>/<name>.go` (one per subdirectory; package = `<name>`) and don't need the constraint — codegen mirrors them and `gen.Matchers()` auto-registers them on the runtime (#511).
+> Templates are pure Svelte/JS/TS — `let { data } = $props()`, `{data.user.name}`, `null` not `nil`. Server-side data lives in `_page.server.go` (Go), not `+page.server.ts`. Files under `src/routes/**` use the `_` prefix (`_page.server.go`, `_layout.server.go`, `_server.go`) so Go's default toolchain skips them. No user `.go` file needs `//go:build sveltego` (#527): `hooks.server.go` and `sveltego.config.go` compile as standalone packages but `cmd/app/main.go` only imports the codegen mirrors at `.gen/`. Param matchers live in `src/params/<name>/<name>.go` (one per subdirectory; package = `<name>`); codegen mirrors them and `gen.Matchers()` auto-registers them on the runtime (#511).
 
 The shipped templates do this for you; the prompts below assume the rules are loaded.
 
@@ -82,7 +82,7 @@ The shipped templates do this for you; the prompts below assume the rules are lo
 
 **Add a hook**
 
-> Add `hooks.server.go` (with `//go:build sveltego`) with a `Handle` that reads cookie `session`, calls `auth.LookupUser(token)`, and attaches `*User` to `ev.Locals["user"]`. Use `kit.Sequence` so we can chain another handler later.
+> Add `hooks.server.go` with a `Handle` that reads cookie `session`, calls `auth.LookupUser(token)`, and attaches `*User` to `ev.Locals["user"]`. Use `kit.Sequence` so we can chain another handler later.
 
 ## Watch out for
 

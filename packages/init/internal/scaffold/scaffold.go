@@ -355,9 +355,7 @@ export default {
 };
 `
 
-const configBody = `//go:build sveltego
-
-// Package config holds the sveltego project configuration. The build tool
+const configBody = `// Package config holds the sveltego project configuration. The build tool
 // reads this file at compile time.
 package config
 
@@ -369,9 +367,7 @@ func Config() map[string]any {
 }
 `
 
-const hooksBody = `//go:build sveltego
-
-package hooks
+const hooksBody = `package hooks
 
 import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 

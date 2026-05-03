@@ -49,8 +49,8 @@ hello/
       _page.server.go        # `_` prefix; Go toolchain skips
       _layout.svelte
     lib/                     # $lib alias target ($lib/.gitkeep)
-  hooks.server.go            # //go:build sveltego (no `_` prefix)
-  sveltego.config.go         # //go:build sveltego
+  hooks.server.go            # tag-free; standalone `hooks` package, never linked into main
+  sveltego.config.go         # tag-free; standalone `config` package, never linked into main
   go.mod
   README.md
   .gitignore

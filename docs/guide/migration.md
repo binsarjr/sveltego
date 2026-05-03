@@ -18,7 +18,7 @@ sveltego mirrors SvelteKit's *shape*, not its *implementation*. The file convent
 | `+layout.server.ts` | `_layout.server.go` (`_` prefix auto-skips Go toolchain) |
 | `+server.ts` | `_server.go` (`_` prefix auto-skips Go toolchain) |
 | `+error.svelte` | `_error.svelte` |
-| `hooks.server.ts` | `hooks.server.go` (still needs `//go:build sveltego` — no `_` prefix) |
+| `hooks.server.ts` | `hooks.server.go` (tag-free; standalone `hooks` package) |
 | `[param]`, `[[opt]]`, `[...rest]`, `(group)` | identical |
 | `$lib` alias | `$lib` alias (resolves to `src/lib`) |
 | `$env/static/private`, `$env/static/public`, `$env/dynamic/*` | `kit/env` package |
@@ -33,7 +33,7 @@ sveltego mirrors SvelteKit's *shape*, not its *implementation*. The file convent
 - **Nullability.** `null` and `undefined` in Svelte; `nil` and zero values on the Go side. JSON tags determine serialization (use `,omitempty` to drop zero values).
 - **Errors.** Idiomatic Go errors on the server. Return `kit.Redirect(303, "/login")` or `kit.Error(404, "not found")` from `Load` instead of throwing.
 - **Form actions.** `kit.ActionResult` is a sealed sum: `ActionData`, `ActionFailData`, `ActionRedirectResult`. Construct via `kit.ActionDataResult`, `kit.ActionFail`, `kit.ActionRedirect`.
-- **Build constraint.** Files under `src/routes/**` use the `_` prefix (`_page.server.go`, `_layout.server.go`, `_server.go`); Go's default toolchain skips files whose names start with `_`, so no `//go:build sveltego` constraint is required there. The project-level `hooks.server.go` MUST still start with `//go:build sveltego` because its filename has no `_` prefix. Param matchers live in `src/params/<name>/<name>.go` (one matcher per subdirectory); they don't need the constraint either — codegen mirrors them into `.gen/paramssrc/<name>/` and `gen.Matchers()` registers them on the runtime automatically (#511). Codegen reads every user `.go` file through `go/parser`.
+- **Build constraint.** No user `.go` file needs `//go:build sveltego` (#527). Files under `src/routes/**` use the `_` prefix; Go's default toolchain skips files whose names start with `_`. `hooks.server.go` and `sveltego.config.go` compile as standalone packages (`hooks`, `config`) that `cmd/app/main.go` never imports — codegen mirrors them into `.gen/` and `main.go` imports the mirrors. Param matchers live in `src/params/<name>/<name>.go` (one matcher per subdirectory); codegen mirrors them into `.gen/paramssrc/<name>/` and `gen.Matchers()` registers them on the runtime automatically (#511). Codegen reads every user `.go` file through `go/parser` regardless of `//go:build` tags, so existing projects that still carry `//go:build sveltego` keep working — the tag is a harmless no-op.
 - **Type sharing.** Codegen reads your Go `Load` return type and emits a sibling `_page.svelte.d.ts` so Svelte LSP autocompletes `data.*` end to end. No manual type duplication.
 
 ## What does not exist

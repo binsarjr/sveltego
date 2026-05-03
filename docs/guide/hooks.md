@@ -6,11 +6,9 @@ summary: Handle, HandleError, HandleFetch, Reroute, Init — request lifecycle h
 
 # Hooks
 
-`src/hooks._server.go` exports five optional hooks. Generated code wires the missing ones to identity defaults so you only write what you need.
+`src/hooks.server.go` exports five optional hooks. Generated code wires the missing ones to identity defaults so you only write what you need. The file is tag-free — codegen reads it via `go/parser` and the user file never links into the binary (`cmd/app/main.go` imports the codegen mirror at `.gen/`); existing projects that still carry `//go:build sveltego` keep working as a no-op.
 
 ```go
-//go:build sveltego
-
 package hooks
 
 import (

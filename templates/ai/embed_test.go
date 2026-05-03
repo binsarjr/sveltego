@@ -10,7 +10,6 @@ import (
 // catches before the templates ship out via `sveltego init --ai`.
 var anchorStrings = []string{
 	"sveltego",
-	"//go:build sveltego",
 	"PageData",
 	"kit.Redirect",
 	"kit.ActionMap",

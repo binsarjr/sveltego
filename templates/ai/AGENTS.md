@@ -72,10 +72,10 @@ src/hooks.server.go      Handle, HandleError, HandleFetch, Reroute, Init
 **`_` prefix rules:**
 
 - All route files under `src/routes/` use the `_` prefix: `_page.svelte`, `_layout.svelte`, `_error.svelte`, `_page@.svelte`, `_page.server.go`, `_layout.server.go`, `_server.go`. The `_` prefix on `.go` files makes Go's default toolchain skip them automatically.
-- `src/hooks.server.go` keeps the `//go:build sveltego` constraint because its filename has no `_` prefix.
-- Param matchers live in `src/params/<name>/<name>.go` (one matcher per subdirectory; package name equals `<name>`). No `//go:build sveltego` constraint needed — codegen mirrors them into `.gen/paramssrc/<name>/` and `gen.Matchers()` registers them on the runtime automatically (#511).
+- `src/hooks.server.go` and `sveltego.config.go` are tag-free. They compile as standalone packages (`hooks`, `config`), but `cmd/app/main.go` only imports the codegen mirrors at `.gen/`, so the user files are never linked into the binary. `go vet` and `golangci-lint` see them — a feature, not a bug (#527).
+- Param matchers live in `src/params/<name>/<name>.go` (one matcher per subdirectory; package name equals `<name>`). Codegen mirrors them into `.gen/paramssrc/<name>/` and `gen.Matchers()` registers them on the runtime automatically (#511).
 
-Without that constraint on the non-`_` files, `go build` / `go vet` / `golangci-lint` would try to compile them in a default Go module that lacks sveltego's generated context. Codegen reads every user `.go` file through `go/parser` directly regardless of the constraint.
+Codegen reads every user `.go` file through `go/parser` directly, which ignores `//go:build` constraints — so existing projects that still carry the tag continue to work; the tag is a harmless no-op.
 
 ---
 
@@ -84,8 +84,6 @@ Without that constraint on the non-`_` files, `go build` / `go vet` / `golangci-
 ### `Load` (`_page.server.go`)
 
 ```go
-//go:build sveltego
-
 package routes
 
 import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
@@ -196,8 +194,6 @@ One verb per Go function; the dispatcher routes by HTTP method.
 ### Hooks (`src/hooks.server.go`)
 
 ```go
-//go:build sveltego
-
 package hooks
 
 import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
@@ -222,7 +218,7 @@ Reject these at code review. They will fail at codegen or produce wrong runtime 
 - **Editing `.gen/*` files.** Generated files are overwritten on every `sveltego compile`.
 - **Universal `Load` (e.g. SvelteKit's `+page.ts`).** sveltego is server-only by design (ADR 0005). All `Load` runs on the server in Go.
 - **`+` prefix on route files** (SvelteKit-style `+page.svelte`, `+layout.svelte`, `+page.server.go`). Use `_` prefix instead (`_page.svelte`, `_layout.svelte`, `_page.server.go`).
-- **Missing `//go:build sveltego` on `src/hooks.server.go`.** The standard Go toolchain will try to compile it (filename has no `_` prefix to auto-skip). Route files under `src/routes/**` no longer need the constraint — the `_` prefix handles skipping. Param matchers in `src/params/<name>/<name>.go` also do not need the constraint (#511).
+- **Adding `//go:build sveltego` to new files.** The tag is no longer required on any user file (#527 dropped it from `src/hooks.server.go` and `sveltego.config.go`; #379 + #511 dropped it from route + matcher files). Codegen reads every user `.go` via `go/parser` regardless. Existing projects that still carry the tag keep working — it is a harmless no-op now.
 
 ---
 
