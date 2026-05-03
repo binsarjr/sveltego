@@ -166,7 +166,9 @@ func Build(ctx context.Context, opts BuildOptions) (*BuildResult, error) {
 	var clientRouteKeys []string
 	clientKeysByPkg := make(map[string]string)
 	// clientRouterMap maps each route's canonical pattern to the path of
-	// its _page.svelte source relative to the SPA router module
+	// its mount-target component (the per-route wrapper.svelte when the
+	// route has a layout chain — see #508 — otherwise the bare
+	// _page.svelte) relative to the SPA router module
 	// (.gen/client/__router/router.ts). It feeds vite.GenerateRouter so
 	// the SPA router can lazy-import the right component per navigation.
 	clientRouterMap := make(map[string]string)
@@ -174,6 +176,12 @@ func Build(ctx context.Context, opts BuildOptions) (*BuildResult, error) {
 	// `<script module>` so vite.GenerateRouter wires the snapshot capture
 	// + restore hooks (#84). Empty when no route opts in.
 	clientSnapshotRoutes := make(map[string]bool)
+	// clientChainKeys maps each route's canonical pattern to its
+	// layout-chain identifier (vite.LayoutChainKey). Routes with no
+	// _layout.svelte map to the empty string. The SPA router uses
+	// these keys to decide between an in-place page-slot swap and a
+	// full unmount+mount on navigation (#508).
+	clientChainKeys := make(map[string]string)
 
 	for _, route := range scan.Routes {
 		switch {
@@ -199,7 +207,7 @@ func Build(ctx context.Context, opts BuildOptions) (*BuildResult, error) {
 			// drop ClientKey from every route, leaving the frozen HTML
 			// without its <script type="module"> client bundle tag and
 			// breaking hydration on SSG pages.
-			ck, relSvelteFromRouter, cerr := emitClientEntry(opts.ProjectRoot, outDir, routesDir, route, pageName, hasSnapshot, !opts.NoClient)
+			ck, relMountFromRouter, chainKey, cerr := emitClientEntry(opts.ProjectRoot, outDir, routesDir, route, pageName, hasSnapshot, !opts.NoClient)
 			if cerr != nil {
 				return nil, cerr
 			}
@@ -209,7 +217,8 @@ func Build(ctx context.Context, opts BuildOptions) (*BuildResult, error) {
 			// key Vite actually emits so route-tag injection finds the
 			// chunk at runtime.
 			clientKeysByPkg[route.PackagePath] = filepath.ToSlash(filepath.Join(outDir, "client", filepath.FromSlash(ck), "entry.ts"))
-			clientRouterMap[route.Pattern] = relSvelteFromRouter
+			clientRouterMap[route.Pattern] = relMountFromRouter
+			clientChainKeys[route.Pattern] = chainKey
 			if hasSnapshot {
 				clientSnapshotRoutes[route.Pattern] = true
 			}
@@ -333,7 +342,7 @@ func Build(ctx context.Context, opts BuildOptions) (*BuildResult, error) {
 		swEntry = "src/service-worker.ts"
 	}
 	if !opts.NoClient && len(clientRouteKeys) > 0 {
-		if err := emitClientRouter(opts.ProjectRoot, outDir, clientRouterMap, clientSnapshotRoutes); err != nil {
+		if err := emitClientRouter(opts.ProjectRoot, outDir, clientRouterMap, clientSnapshotRoutes, clientChainKeys); err != nil {
 			return nil, err
 		}
 		addons, derr := detectAddons(opts.ProjectRoot)
@@ -390,20 +399,28 @@ func serviceWorkerEntry(projectRoot string) string {
 	return ""
 }
 
-// emitClientEntry writes .gen/client/<routeKey>/entry.ts for one page route.
+// emitClientEntry writes .gen/client/<routeKey>/entry.ts for one page
+// route — and, when the route has a non-empty layout chain, the per-route
+// wrapper.svelte that nests the chain around the page (#508).
+//
 // routeKey is e.g. "routes/_page" or "routes/post/[id]/_page". Returns
-// the routeKey, the .svelte source path relative to the SPA router
-// directory (.gen/client/__router/), and any error. The caller collects
-// the routeKey for vite.GenerateConfig and the relative source path for
-// vite.GenerateRouter so the per-app router module imports each
-// component lazily without re-deriving the path. hasSnapshot wires the
-// snapshot capture/restore hooks into the initial-mount path so a
-// reload that lands on a route with persisted state restores it.
-func emitClientEntry(projectRoot, outDir, routesDir string, route routescan.ScannedRoute, pageName string, hasSnapshot, writeFiles bool) (string, string, error) {
+// the routeKey, the mount-target component's path relative to the SPA
+// router directory (.gen/client/__router/), the layout-chain key, and
+// any error. The caller collects the routeKey for vite.GenerateConfig,
+// the relative mount path for vite.GenerateRouter (so the router can
+// lazy-import the right component per navigation), and the chain key
+// for the router's same-chain shortcut.
+//
+// hasSnapshot wires the snapshot capture/restore hooks into the
+// initial-mount path so a reload that lands on a route with persisted
+// state restores it; when the route uses a wrapper, the wrapper
+// re-exports the page's snapshot so the import in entry.ts continues
+// to resolve.
+func emitClientEntry(projectRoot, outDir, routesDir string, route routescan.ScannedRoute, pageName string, hasSnapshot, writeFiles bool) (string, string, string, error) {
 	routesParent := filepath.Dir(routesDir)
 	relDir, err := filepath.Rel(routesParent, route.Dir)
 	if err != nil {
-		return "", "", fmt.Errorf("codegen: client entry rel path: %w", err)
+		return "", "", "", fmt.Errorf("codegen: client entry rel path: %w", err)
 	}
 	routeKey := filepath.ToSlash(filepath.Join(relDir, strings.TrimSuffix(pageName, ".svelte")))
 
@@ -411,7 +428,7 @@ func emitClientEntry(projectRoot, outDir, routesDir string, route routescan.Scan
 	depth := len(strings.Split(filepath.ToSlash(filepath.Dir(entryRelFromRoot)), "/"))
 	routeDirFromRoot, err := filepath.Rel(projectRoot, route.Dir)
 	if err != nil {
-		return "", "", fmt.Errorf("codegen: client entry svelte rel path: %w", err)
+		return "", "", "", fmt.Errorf("codegen: client entry svelte rel path: %w", err)
 	}
 	svelteSrc := filepath.ToSlash(routeDirFromRoot) + "/" + pageName
 
@@ -423,13 +440,24 @@ func emitClientEntry(projectRoot, outDir, routesDir string, route routescan.Scan
 	routerDepth := len(strings.Split(routerDirFromRoot, "/"))
 	relSvelteFromRouter := vite.RelativeSveltePath(svelteSrc, routerDepth)
 
+	chainKey := vite.LayoutChainKey(route.LayoutChain)
+	hasChain := chainKey != ""
+	relMountFromRouter := relSvelteFromRouter
+	if hasChain {
+		// Per-route wrapper sits next to entry.ts under
+		// .gen/client/<routeKey>/wrapper.svelte. The router imports
+		// it via the same depth math as the page svelte source.
+		wrapperRelFromRoot := outDir + "/client/" + routeKey + "/wrapper.svelte"
+		relMountFromRouter = vite.RelativeSveltePath(wrapperRelFromRoot, routerDepth)
+	}
+
 	if !writeFiles {
-		return routeKey, relSvelteFromRouter, nil
+		return routeKey, relMountFromRouter, chainKey, nil
 	}
 
 	entryDir := filepath.Join(projectRoot, outDir, "client", filepath.FromSlash(routeKey))
 	if err := os.MkdirAll(entryDir, 0o755); err != nil {
-		return "", "", fmt.Errorf("codegen: mkdir client entry %s: %w", entryDir, err)
+		return "", "", "", fmt.Errorf("codegen: mkdir client entry %s: %w", entryDir, err)
 	}
 
 	relSvelte := vite.RelativeSveltePath(svelteSrc, depth)
@@ -439,31 +467,76 @@ func emitClientEntry(projectRoot, outDir, routesDir string, route routescan.Scan
 	// and into __router/router.
 	relRouter := strings.Repeat("../", depth-2) + "__router/router"
 
+	relWrapper := ""
+	if hasChain {
+		relWrapper = "./wrapper.svelte"
+		// Build LayoutImports relative to the wrapper file's directory.
+		// The wrapper sits at .gen/client/<routeKey>/wrapper.svelte, so
+		// it shares depth with entry.ts; layouts and the page resolve
+		// through the same `depth` ascent as relSvelte.
+		layoutImports := make([]string, 0, len(route.LayoutChain))
+		for _, layoutDir := range route.LayoutChain {
+			layoutSrc, lErr := resolveLayoutSource(layoutDir)
+			if lErr != nil {
+				return "", "", "", lErr
+			}
+			layoutRelFromRoot, lErr := filepath.Rel(projectRoot, layoutSrc)
+			if lErr != nil {
+				return "", "", "", fmt.Errorf("codegen: layout rel path: %w", lErr)
+			}
+			layoutImports = append(layoutImports, vite.RelativeSveltePath(filepath.ToSlash(layoutRelFromRoot), depth))
+		}
+		// wrapper-store.svelte.ts lives in __router/. From the
+		// per-route directory, we walk up to .gen/client/ and over
+		// into __router/.
+		relStoreFromWrapper := strings.Repeat("../", depth-2) + "__router/wrapper-store.svelte"
+		wrapperSrc := vite.GenerateWrapper(vite.WrapperOptions{
+			LayoutImports: layoutImports,
+			PagePath:      relSvelte,
+			HasSnapshot:   hasSnapshot,
+			StoreImport:   relStoreFromWrapper,
+		})
+		wrapperAbs := filepath.Join(entryDir, "wrapper.svelte")
+		if err := os.WriteFile(wrapperAbs, []byte(wrapperSrc), genFileMode); err != nil {
+			return "", "", "", fmt.Errorf("codegen: write wrapper %s: %w", wrapperAbs, err)
+		}
+	}
+
 	src := vite.GenerateClientEntry(vite.ClientEntryOptions{
-		RelSveltePath: relSvelte,
-		RelRouterPath: relRouter,
-		HasSnapshot:   hasSnapshot,
+		RelSveltePath:  relSvelte,
+		RelRouterPath:  relRouter,
+		RelWrapperPath: relWrapper,
+		LayoutChainKey: chainKey,
+		HasSnapshot:    hasSnapshot,
 	})
 	entryAbs := filepath.Join(entryDir, "entry.ts")
 	if err := os.WriteFile(entryAbs, []byte(src), genFileMode); err != nil {
-		return "", "", fmt.Errorf("codegen: write client entry %s: %w", entryAbs, err)
+		return "", "", "", fmt.Errorf("codegen: write client entry %s: %w", entryAbs, err)
 	}
 
 	enhanceAbs := filepath.Join(entryDir, "enhance.ts")
 	if err := os.WriteFile(enhanceAbs, []byte(vite.GenerateEnhanceRuntime()), genFileMode); err != nil {
-		return "", "", fmt.Errorf("codegen: write enhance runtime %s: %w", enhanceAbs, err)
+		return "", "", "", fmt.Errorf("codegen: write enhance runtime %s: %w", enhanceAbs, err)
 	}
 
-	return routeKey, relSvelteFromRouter, nil
+	return routeKey, relMountFromRouter, chainKey, nil
 }
 
 // emitClientRouter writes .gen/client/__router/router.ts — the shared
 // SPA router module imported by every per-route entry.ts. routeMap keys
 // are canonical route patterns (matching server-side router.Route.Pattern)
-// and values are paths to each route's _page.svelte source relative to
-// the router.ts file. snapshotRoutes flags which patterns export a
-// Snapshot so the generated router wires capture/restore hooks.
-func emitClientRouter(projectRoot, outDir string, routeMap map[string]string, snapshotRoutes map[string]bool) error {
+// and values are paths to each route's mount-target component (the
+// per-route wrapper.svelte when the route has a layout chain — see
+// #508 — otherwise the bare _page.svelte) relative to the router.ts
+// file. snapshotRoutes flags which patterns export a Snapshot so the
+// generated router wires capture/restore hooks. chainKeys maps each
+// pattern to its layout-chain identifier; the router uses it to skip
+// unmount/mount when navigating within the same chain.
+//
+// Also emits wrapper-store.svelte.ts when at least one route uses a
+// wrapper, so the runtime has a shared rune-backed prop bag for
+// same-chain page-slot swaps.
+func emitClientRouter(projectRoot, outDir string, routeMap map[string]string, snapshotRoutes map[string]bool, chainKeys map[string]string) error {
 	dir := filepath.Join(projectRoot, outDir, "client", "__router")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("codegen: mkdir client router %s: %w", dir, err)
@@ -471,6 +544,7 @@ func emitClientRouter(projectRoot, outDir string, routeMap map[string]string, sn
 	src := vite.GenerateRouter(vite.RouterOptions{
 		Routes:         routeMap,
 		SnapshotRoutes: snapshotRoutes,
+		ChainKeys:      chainKeys,
 	})
 	target := filepath.Join(dir, "router.ts")
 	if err := os.WriteFile(target, []byte(src), genFileMode); err != nil {
@@ -487,6 +561,14 @@ func emitClientRouter(projectRoot, outDir string, routeMap map[string]string, sn
 	stateTarget := filepath.Join(dir, "state.svelte.ts")
 	if err := os.WriteFile(stateTarget, []byte(vite.GenerateStateModule()), genFileMode); err != nil {
 		return fmt.Errorf("codegen: write client state %s: %w", stateTarget, err)
+	}
+	// wrapper-store backs the per-route wrapper.svelte's reactive prop
+	// surface (#508). Always emit so the router import resolves, even
+	// when no route currently uses a wrapper — the module is tiny and
+	// keeps the import contract uniform.
+	wrapperStoreTarget := filepath.Join(dir, "wrapper-store.svelte.ts")
+	if err := os.WriteFile(wrapperStoreTarget, []byte(vite.GenerateWrapperStoreModule()), genFileMode); err != nil {
+		return fmt.Errorf("codegen: write wrapper store %s: %w", wrapperStoreTarget, err)
 	}
 	return nil
 }

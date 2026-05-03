@@ -357,11 +357,11 @@ export const snapshot = {
 	if err != nil {
 		t.Fatalf("root entry.ts not emitted: %v", err)
 	}
-	if !bytes.Contains(rootEntryBytes, []byte(`import Page, { snapshot } from`)) {
+	if !bytes.Contains(rootEntryBytes, []byte(`import Root, { snapshot } from`)) {
 		t.Errorf("snapshot route entry.ts missing snapshot import:\n%s", rootEntryBytes)
 	}
-	if !bytes.Contains(rootEntryBytes, []byte(`startRouter({ component, payload, target, snapshot });`)) {
-		t.Errorf("snapshot route entry.ts must hand snapshot to startRouter:\n%s", rootEntryBytes)
+	if !bytes.Contains(rootEntryBytes, []byte(`startRouter({ component, payload, target, snapshot, chainKey: `)) {
+		t.Errorf("snapshot route entry.ts must hand snapshot + chainKey to startRouter:\n%s", rootEntryBytes)
 	}
 
 	plainEntry := filepath.Join(root, ".gen", "client", "routes", "plain", "_page", "entry.ts")
@@ -371,6 +371,95 @@ export const snapshot = {
 	}
 	if bytes.Contains(plainEntryBytes, []byte("snapshot")) {
 		t.Errorf("plain route should not import snapshot:\n%s", plainEntryBytes)
+	}
+}
+
+// TestBuild_EmitsLayoutWrapper covers issue #508: a route with a
+// _layout.svelte chain must get a per-route wrapper.svelte that nests
+// the layout(s) around the page, the entry.ts must mount the wrapper
+// (not the bare page), startRouter must receive a non-empty chainKey,
+// and the SPA router must carry a chainKeys table plus the
+// wrapper-store import. Routes without a layout chain stay on the
+// pre-#508 page-only mount path.
+func TestBuild_EmitsLayoutWrapper(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/lw\n\ngo 1.22\n")
+	// SSR=false opts the page (and its layout chain) out of the
+	// build-time SSR transpile so the test does not depend on a Node
+	// sidecar being installed at $PATH.
+	writeFile(t, filepath.Join(root, "src", "routes", "_page.server.go"),
+		"//go:build sveltego\n\npackage routes\n\nconst SSR = false\n")
+	writeFile(t, filepath.Join(root, "src", "routes", "_layout.svelte"),
+		"<script>let { data, children } = $props();</script><header>{data?.user ?? ''}</header>{@render children()}")
+	writeFile(t, filepath.Join(root, "src", "routes", "_page.svelte"),
+		"<h1>home</h1>\n")
+
+	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: root}); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	// Wrapper file must be present alongside entry.ts for the root route.
+	wrapperPath := filepath.Join(root, ".gen", "client", "routes", "_page", "wrapper.svelte")
+	wrapperBytes, err := os.ReadFile(wrapperPath)
+	if err != nil {
+		t.Fatalf("wrapper.svelte not emitted at %s: %v", wrapperPath, err)
+	}
+	for _, want := range []string{
+		`import L0 from `,
+		`_layout.svelte"`,
+		`import Page from `,
+		`export { Page as page };`,
+		`import { wrapperState } from `,
+		`<L0 data={wrapperState.layoutData[0] ?? {}}>`,
+		`{@const PageSlot = wrapperState.page}`,
+		`<PageSlot data={wrapperState.data} form={wrapperState.form} />`,
+		`</L0>`,
+	} {
+		if !bytes.Contains(wrapperBytes, []byte(want)) {
+			t.Errorf("wrapper.svelte missing %q:\n%s", want, wrapperBytes)
+		}
+	}
+
+	// Entry must mount the wrapper, not Page directly, and forward layoutData.
+	rootEntry := filepath.Join(root, ".gen", "client", "routes", "_page", "entry.ts")
+	rootEntryBytes, err := os.ReadFile(rootEntry)
+	if err != nil {
+		t.Fatalf("entry.ts not emitted: %v", err)
+	}
+	if !bytes.Contains(rootEntryBytes, []byte(`import Root from "./wrapper.svelte";`)) {
+		t.Errorf("entry.ts must import wrapper as Root:\n%s", rootEntryBytes)
+	}
+	if !bytes.Contains(rootEntryBytes, []byte("layoutData: payload.layoutData ?? []")) {
+		t.Errorf("entry.ts must forward layoutData to wrapper:\n%s", rootEntryBytes)
+	}
+	if !bytes.Contains(rootEntryBytes, []byte(`chainKey: "`)) {
+		t.Errorf("entry.ts must forward a chainKey to startRouter:\n%s", rootEntryBytes)
+	}
+
+	// Shared wrapper-store and the router's chainKeys table must be emitted.
+	storePath := filepath.Join(root, ".gen", "client", "__router", "wrapper-store.svelte.ts")
+	storeBytes, err := os.ReadFile(storePath)
+	if err != nil {
+		t.Fatalf("wrapper-store.svelte.ts not emitted: %v", err)
+	}
+	if !bytes.Contains(storeBytes, []byte("export const wrapperState = $state")) {
+		t.Errorf("wrapper-store.svelte.ts missing wrapperState rune:\n%s", storeBytes)
+	}
+
+	routerBytes, err := os.ReadFile(filepath.Join(root, ".gen", "client", "__router", "router.ts"))
+	if err != nil {
+		t.Fatalf("router.ts not emitted: %v", err)
+	}
+	if !bytes.Contains(routerBytes, []byte("import { _setWrapperState } from './wrapper-store.svelte';")) {
+		t.Errorf("router.ts missing wrapper-store import:\n%s", routerBytes)
+	}
+	if !bytes.Contains(routerBytes, []byte("const chainKeys: Record<string, string> = {")) {
+		t.Errorf("router.ts missing chainKeys table:\n%s", routerBytes)
+	}
+	// The router's loader map must point at the wrapper, not the bare page.
+	if !bytes.Contains(routerBytes, []byte("/wrapper.svelte")) {
+		t.Errorf("router.ts loader map should target wrapper.svelte:\n%s", routerBytes)
 	}
 }
 

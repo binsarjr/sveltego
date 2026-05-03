@@ -17,8 +17,8 @@ func TestGenerateClientEntry_ImportsEnhance(t *testing.T) {
 	if !strings.Contains(out, "(window as any).__sveltego__ = { ...payload, enhance }") {
 		t.Errorf("expected enhance to be exposed on window.__sveltego__:\n%s", out)
 	}
-	if !strings.Contains(out, "import Page from \"../../../src/routes/_page.svelte\";") {
-		t.Errorf("expected Page import:\n%s", out)
+	if !strings.Contains(out, "import Root from \"../../../src/routes/_page.svelte\";") {
+		t.Errorf("expected Root (page) import:\n%s", out)
 	}
 	if !strings.Contains(out, "(window as any).__sveltego_hydrated = true") {
 		t.Errorf("expected __sveltego_hydrated marker after mount (#446):\n%s", out)
