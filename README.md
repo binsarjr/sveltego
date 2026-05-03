@@ -108,9 +108,9 @@ The `playgrounds/basic` app runs SSR by default; switch any route by editing the
 Pre-alpha — expect rough edges. One Go command from any terminal, no clone, no global install:
 
 ```sh
-go run github.com/binsarjr/sveltego/packages/init/cmd/sveltego-init@latest ./hello
+go run github.com/binsarjr/sveltego/packages/init/cmd/sveltego-init@v0.1.0-alpha.1 ./hello
 cd hello
-go install github.com/binsarjr/sveltego/packages/sveltego/cmd/sveltego@v0.1.0-alpha.0   # build CLI (until #368 ships release binaries)
+go install github.com/binsarjr/sveltego/packages/sveltego/cmd/sveltego@v0.1.0-alpha.1   # build CLI (until #368 ships release binaries)
 sveltego build && ./build/app                                  # listens on :3000
 ```
 
