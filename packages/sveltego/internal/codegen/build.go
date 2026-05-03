@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/codegen/csrffallback"
 	"github.com/binsarjr/sveltego/packages/sveltego/internal/codegen/svelterender"
 	"github.com/binsarjr/sveltego/packages/sveltego/internal/routescan"
 	"github.com/binsarjr/sveltego/packages/sveltego/internal/vite"
@@ -218,7 +219,8 @@ func Build(ctx context.Context, opts BuildOptions) (*BuildResult, error) {
 			// drop ClientKey from every route, leaving the frozen HTML
 			// without its <script type="module"> client bundle tag and
 			// breaking hydration on SSG pages.
-			ck, relPageFromRouter, chainKey, cerr := emitClientEntry(opts.ProjectRoot, outDir, routesDir, route, pageName, hasSnapshot, !opts.NoClient)
+			csrfLowering := route.SSRFallback && routeCSRFEnabled(route.Pattern, routeOptions)
+			ck, relPageFromRouter, chainKey, cerr := emitClientEntry(opts.ProjectRoot, outDir, routesDir, route, pageName, hasSnapshot, csrfLowering, !opts.NoClient)
 			if cerr != nil {
 				return nil, cerr
 			}
@@ -442,7 +444,15 @@ func serviceWorkerEntry(projectRoot string) string {
 // and the layout-chain key. Routes without a chain mount the page
 // directly; chained routes mount the shared wrapper and seed
 // wrapperState.Page from the page module's default export.
-func emitClientEntry(projectRoot, outDir, routesDir string, route routescan.ScannedRoute, pageName string, hasSnapshot bool, writeFiles bool) (string, string, string, error) {
+//
+// When csrfLowering is true the route is ssr-fallback annotated AND
+// has CSRF enabled (#540): emit a Svelte-source rewrite under
+// `.gen/csrf-fallback/<routeKey>/_page.svelte` that splices the hidden
+// `_csrf_token` input into every POST form so Svelte 5 hydrate sees
+// the input in the vDOM and does not strip the SSR-rendered DOM node.
+// The sidecar continues reading the user's original `_page.svelte`;
+// the post-hoc `csrfinject.Rewrite` keeps the SSR HTML correct.
+func emitClientEntry(projectRoot, outDir, routesDir string, route routescan.ScannedRoute, pageName string, hasSnapshot, csrfLowering, writeFiles bool) (string, string, string, error) {
 	routesParent := filepath.Dir(routesDir)
 	relDir, err := filepath.Rel(routesParent, route.Dir)
 	if err != nil {
@@ -457,6 +467,16 @@ func emitClientEntry(projectRoot, outDir, routesDir string, route routescan.Scan
 		return "", "", "", fmt.Errorf("codegen: client entry svelte rel path: %w", err)
 	}
 	svelteSrc := filepath.ToSlash(routeDirFromRoot) + "/" + pageName
+
+	if csrfLowering && writeFiles {
+		lowered, lerr := emitCSRFFallbackLowering(projectRoot, outDir, routeKey, route.Dir, pageName)
+		if lerr != nil {
+			return "", "", "", lerr
+		}
+		if lowered != "" {
+			svelteSrc = lowered
+		}
+	}
 
 	// Path to the .svelte source from the SPA router directory
 	// (.gen/client/__router/) — depth from routes parent to project root
@@ -510,6 +530,46 @@ func emitClientEntry(projectRoot, outDir, routesDir string, route routescan.Scan
 	}
 
 	return routeKey, relSvelteFromRouter, chainKey, nil
+}
+
+// emitCSRFFallbackLowering writes a CSRF-spliced copy of the user's
+// `_page.svelte` to `.gen/csrf-fallback/<routeKey>/_page.svelte` for an
+// ssr-fallback route that opted into CSRF (#540). Returns the
+// project-relative path of the lowered file (suitable for the client
+// entry's `import Page from`) when the splicer mutated the source, or
+// the empty string when the source contains no POST forms (in which
+// case the caller keeps the original path). The sidecar continues
+// reading the user's original `_page.svelte`; only the client compile
+// is redirected so Svelte 5 hydrate sees the hidden input in vDOM.
+func emitCSRFFallbackLowering(projectRoot, outDir, routeKey, routeDir, pageName string) (string, error) {
+	srcAbs := filepath.Join(routeDir, pageName)
+	contents, err := os.ReadFile(srcAbs) //nolint:gosec // path comes from the trusted route scan
+	if err != nil {
+		return "", fmt.Errorf("codegen: read csrf-fallback source %s: %w", srcAbs, err)
+	}
+	result, err := csrffallback.Lower(csrffallback.LowerOptions{
+		Source:        srcAbs,
+		SourceContent: contents,
+	})
+	if err != nil {
+		return "", fmt.Errorf("codegen: lower csrf-fallback %s: %w", srcAbs, err)
+	}
+	if !result.Mutated {
+		return "", nil
+	}
+	loweredDir := filepath.Join(projectRoot, outDir, "csrf-fallback", filepath.FromSlash(routeKey))
+	if err := os.MkdirAll(loweredDir, 0o755); err != nil {
+		return "", fmt.Errorf("codegen: mkdir csrf-fallback %s: %w", loweredDir, err)
+	}
+	loweredAbs := filepath.Join(loweredDir, pageName)
+	if err := os.WriteFile(loweredAbs, result.Content, genFileMode); err != nil {
+		return "", fmt.Errorf("codegen: write csrf-fallback %s: %w", loweredAbs, err)
+	}
+	rel, err := filepath.Rel(projectRoot, loweredAbs)
+	if err != nil {
+		return "", fmt.Errorf("codegen: csrf-fallback rel path: %w", err)
+	}
+	return filepath.ToSlash(rel), nil
 }
 
 // emitChainWrapper writes a single chainKey-shared wrapper.svelte
