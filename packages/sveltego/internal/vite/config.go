@@ -80,6 +80,7 @@ func GenerateConfig(opts ConfigOptions) string {
 	b.WriteString("    alias: {\n")
 	fmt.Fprintf(&b, "      %q: path.resolve(__dirname, %q),\n", "$app/state", genDir+"/__router/state.svelte")
 	fmt.Fprintf(&b, "      %q: path.resolve(__dirname, %q),\n", "$app/navigation", genDir+"/__router/navigation")
+	fmt.Fprintf(&b, "      %q: path.resolve(__dirname, %q),\n", "$app/forms", genDir+"/__router/forms")
 	fmt.Fprintf(&b, "      %q: path.resolve(__dirname, %q),\n", "$lib", "src/lib")
 	b.WriteString("    },\n")
 	b.WriteString("  },\n")

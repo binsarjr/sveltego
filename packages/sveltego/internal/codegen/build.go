@@ -524,11 +524,6 @@ func emitClientEntry(projectRoot, outDir, routesDir string, route routescan.Scan
 		return "", "", "", fmt.Errorf("codegen: write client entry %s: %w", entryAbs, err)
 	}
 
-	enhanceAbs := filepath.Join(entryDir, "enhance.ts")
-	if err := os.WriteFile(enhanceAbs, []byte(vite.GenerateEnhanceRuntime()), genFileMode); err != nil {
-		return "", "", "", fmt.Errorf("codegen: write enhance runtime %s: %w", enhanceAbs, err)
-	}
-
 	return routeKey, relSvelteFromRouter, chainKey, nil
 }
 
@@ -651,6 +646,14 @@ func emitClientRouter(projectRoot, outDir string, routeMap map[string]string, sn
 	navTarget := filepath.Join(dir, "navigation.ts")
 	if err := os.WriteFile(navTarget, []byte(vite.GenerateNavigationModule()), genFileMode); err != nil {
 		return fmt.Errorf("codegen: write client navigation %s: %w", navTarget, err)
+	}
+	// $app/forms public surface (#545). User code imports `enhance` from
+	// `$app/forms`; Vite aliases that to this file. Per-route entry.ts
+	// also imports the same module by relative path, so each per-route
+	// bundle ships one shared copy instead of a duplicated `enhance.ts`.
+	formsTarget := filepath.Join(dir, "forms.ts")
+	if err := os.WriteFile(formsTarget, []byte(vite.GenerateFormsModule()), genFileMode); err != nil {
+		return fmt.Errorf("codegen: write client forms %s: %w", formsTarget, err)
 	}
 	// Emit with the `.svelte.ts` extension so vite-plugin-svelte runs
 	// the file through the Svelte compiler — `state.svelte.ts` contains
