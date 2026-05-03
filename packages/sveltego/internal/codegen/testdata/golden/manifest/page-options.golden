@@ -78,6 +78,7 @@ func renderChain__Index(w *render.Writer, ctx *kit.RenderCtx, page router.PageHa
 		Status:    200,
 		Data:      pageData,
 		CSRFToken: ctx.CSRFToken(),
+		Nonce:     ctx.Nonce(),
 	}
 	w.WriteString(server.BlockOpen)
 	if err := func(w *render.Writer) error {
@@ -107,6 +108,7 @@ func renderChain__DashBilling(w *render.Writer, ctx *kit.RenderCtx, page router.
 		Status:    200,
 		Data:      pageData,
 		CSRFToken: ctx.CSRFToken(),
+		Nonce:     ctx.Nonce(),
 	}
 	w.WriteString(server.BlockOpen)
 	if err := func(w *render.Writer) error {

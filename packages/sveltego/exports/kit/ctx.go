@@ -77,6 +77,21 @@ func (c *RenderCtx) CSRFToken() string {
 	return ""
 }
 
+// Nonce returns the per-request CSP nonce the pipeline stored on Locals
+// before Render runs, or the empty string when CSP is disabled. Codegen
+// emits ctx.Nonce() into the per-route PageState so templates that read
+// `page.nonce` see the same value the response's
+// Content-Security-Policy header advertises.
+func (c *RenderCtx) Nonce() string {
+	if c == nil || c.Locals == nil {
+		return ""
+	}
+	if v, ok := c.Locals[cspNonceKey].(string); ok {
+		return v
+	}
+	return ""
+}
+
 // LoadCtx is the request-scoped context handed to user-written Load
 // functions in _page.server.go and _layout.server.go.
 //

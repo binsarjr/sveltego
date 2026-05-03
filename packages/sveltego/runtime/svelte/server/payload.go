@@ -6,8 +6,10 @@ import "strings"
 // render functions. Out collects the body, Head collects <svelte:head>
 // contributions; Title is the latest <title> seen during render.
 //
-// Phase 6 will extend Payload with CSP nonce, route metadata, and any
-// other request-scoped fields the pipeline needs to inject.
+// Request-scoped fields the SSR templates can read (CSP nonce, CSRF
+// token, route metadata) live on the sibling PageState struct — that is
+// what the per-route bridge constructs from kit.RenderCtx and forwards
+// into the transpiled Render function. See page_state.go.
 type Payload struct {
 	Out   strings.Builder
 	Head  strings.Builder

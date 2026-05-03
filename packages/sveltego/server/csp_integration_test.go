@@ -2,12 +2,15 @@ package server
 
 import (
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
+	"github.com/binsarjr/sveltego/packages/sveltego/render"
 	"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"
 )
 
@@ -219,5 +222,150 @@ func TestCSP_NonceAttrInUserScript(t *testing.T) {
 	got := resp.Header.Get("X-Nonce-Attr")
 	if !strings.HasPrefix(got, `nonce="`) || !strings.HasSuffix(got, `"`) {
 		t.Errorf("NonceAttr shape = %q", got)
+	}
+}
+
+// TestCSP_NonceOnAutoInjectedScripts pins issue #539: every codegen-emitted
+// <script> and <link rel="modulepreload"> tag carries the same per-request
+// nonce that the Content-Security-Policy header advertises. Asserts the
+// JSON hydration payload, the entry module script, the modulepreload hint,
+// and the response header all share one value.
+func TestCSP_NonceOnAutoInjectedScripts(t *testing.T) {
+	t.Parallel()
+
+	const manifest = `{
+		"src/routes/_page.svelte": {
+			"file": "_app/page-abc.js",
+			"imports": ["_shared"],
+			"isEntry": true
+		},
+		"_shared": {
+			"file": "_app/shared-def.js"
+		}
+	}`
+
+	srv, err := New(Config{
+		Routes: []router.Route{{
+			Pattern:   "/",
+			Segments:  []router.Segment{},
+			ClientKey: "src/routes/_page.svelte",
+			Page: func(w *render.Writer, _ *kit.RenderCtx, _ any) error {
+				w.WriteString(`<main>hello</main>`)
+				return nil
+			},
+		}},
+		Shell:         testShell,
+		Logger:        quietLogger(),
+		ViteManifest:  manifest,
+		CSP:           kit.CSPConfig{Mode: kit.CSPStrict},
+		ServiceWorker: true,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ts := httptest.NewServer(srv)
+	t.Cleanup(ts.Close)
+
+	resp, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	bs := string(body)
+
+	header := resp.Header.Get("Content-Security-Policy")
+	if header == "" {
+		t.Fatal("Content-Security-Policy header missing")
+	}
+
+	headerNonceRe := regexp.MustCompile(`'nonce-([^']+)'`)
+	hm := headerNonceRe.FindStringSubmatch(header)
+	if len(hm) != 2 {
+		t.Fatalf("could not extract nonce from header: %q", header)
+	}
+	headerNonce := hm[1]
+
+	wantStrings := []string{
+		// Entry module script under /static/_app/_app/page-abc.js.
+		`<script type="module" nonce="` + headerNonce + `" src="/static/_app/_app/page-abc.js"></script>`,
+		// Modulepreload hint for the shared chunk.
+		`<link rel="modulepreload" nonce="` + headerNonce + `" href="/static/_app/_app/shared-def.js">`,
+		// JSON hydration payload script.
+		`<script id="sveltego-data" nonce="` + headerNonce + `" type="application/json">`,
+		// Service worker registration.
+		`<script nonce="` + headerNonce + `">if('serviceWorker' in navigator)`,
+	}
+	for _, want := range wantStrings {
+		if !strings.Contains(bs, want) {
+			t.Errorf("body missing %q\nbody:\n%s", want, bs)
+		}
+	}
+
+	// Negative assertions: no auto-injected <script> or <link rel="modulepreload">
+	// without a nonce attribute (would defeat the strict CSP).
+	scriptRe := regexp.MustCompile(`<script (?:[^>]*?)>`)
+	for _, m := range scriptRe.FindAllString(bs, -1) {
+		// Skip resolve scripts the streaming chain emits — none on this route.
+		if !strings.Contains(m, `nonce="`+headerNonce+`"`) {
+			t.Errorf("found <script> without matching nonce: %q", m)
+		}
+	}
+	preloadRe := regexp.MustCompile(`<link rel="modulepreload"[^>]*>`)
+	for _, m := range preloadRe.FindAllString(bs, -1) {
+		if !strings.Contains(m, `nonce="`+headerNonce+`"`) {
+			t.Errorf("found <link rel=\"modulepreload\"> without matching nonce: %q", m)
+		}
+	}
+}
+
+// TestCSP_OffEmitsNoNonceAttribute pins the off-CSP byte stability:
+// when CSP is disabled, no auto-injected tag carries a nonce attribute.
+// Guards against accidental coupling that would alter SSG / cache hashes.
+func TestCSP_OffEmitsNoNonceAttribute(t *testing.T) {
+	t.Parallel()
+
+	const manifest = `{
+		"src/routes/_page.svelte": {
+			"file": "_app/page-abc.js",
+			"imports": ["_shared"],
+			"isEntry": true
+		},
+		"_shared": {
+			"file": "_app/shared-def.js"
+		}
+	}`
+
+	srv, err := New(Config{
+		Routes: []router.Route{{
+			Pattern:   "/",
+			Segments:  []router.Segment{},
+			ClientKey: "src/routes/_page.svelte",
+			Page: func(w *render.Writer, _ *kit.RenderCtx, _ any) error {
+				w.WriteString(`<main>hello</main>`)
+				return nil
+			},
+		}},
+		Shell:         testShell,
+		Logger:        quietLogger(),
+		ViteManifest:  manifest,
+		ServiceWorker: true,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ts := httptest.NewServer(srv)
+	t.Cleanup(ts.Close)
+
+	resp, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	bs := string(body)
+
+	if strings.Contains(bs, ` nonce="`) {
+		t.Errorf("nonce attribute leaked when CSP off:\n%s", bs)
 	}
 }

@@ -37,9 +37,14 @@ func Parse(data []byte) (Manifest, error) {
 //   - one <link rel="stylesheet"> per CSS file
 //   - one <script type="module"> for the entry chunk itself
 //
+// nonce is the per-request CSP nonce; when non-empty, the emitted
+// <script type="module"> and <link rel="modulepreload"> tags carry
+// nonce="…" so a strict `script-src 'nonce-…'` directive permits the
+// preloaded chunks. Empty nonce (CSP off) emits the unattributed form.
+//
 // Returns an empty string when routeKey is not found in the manifest (e.g.
 // when the client build was skipped with --no-client).
-func (m Manifest) Tags(routeKey, base string) string {
+func (m Manifest) Tags(routeKey, base, nonce string) string {
 	if m == nil {
 		return ""
 	}
@@ -48,6 +53,10 @@ func (m Manifest) Tags(routeKey, base string) string {
 		return ""
 	}
 	base = strings.TrimRight(base, "/")
+	na := ""
+	if nonce != "" {
+		na = ` nonce="` + nonce + `"`
+	}
 
 	var b strings.Builder
 
@@ -67,7 +76,7 @@ func (m Manifest) Tags(routeKey, base string) string {
 			if !ok {
 				continue
 			}
-			fmt.Fprintf(&b, `<link rel="modulepreload" href="%s/%s">`, base, ic.File)
+			fmt.Fprintf(&b, `<link rel="modulepreload"%s href="%s/%s">`, na, base, ic.File)
 			b.WriteByte('\n')
 			collectImports(imp)
 		}
@@ -79,7 +88,7 @@ func (m Manifest) Tags(routeKey, base string) string {
 		b.WriteByte('\n')
 	}
 
-	fmt.Fprintf(&b, `<script type="module" src="%s/%s"></script>`, base, chunk.File)
+	fmt.Fprintf(&b, `<script type="module"%s src="%s/%s"></script>`, na, base, chunk.File)
 	b.WriteByte('\n')
 
 	return b.String()
