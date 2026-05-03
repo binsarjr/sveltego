@@ -275,7 +275,7 @@ func TestGenerateClientEntry_importsRouter(t *testing.T) {
 	})
 	for _, want := range []string{
 		`import Root from "../../routes/_page.svelte"`,
-		`import { startRouter } from "../__router/router"`,
+		`import { startRouter, afterNavigate } from "../__router/router"`,
 		"import { hydrate, mount } from 'svelte'",
 		"const appShell = document.getElementById('app');",
 		"const target = appShell ?? document.body;",
