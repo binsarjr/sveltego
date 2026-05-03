@@ -252,7 +252,7 @@ func TestApplyInitialPayloadFieldsThenWritePayload(t *testing.T) {
 
 	r := httptest.NewRequest("GET", "/", nil)
 	route := &router.Route{Pattern: "/"}
-	payload := buildClientPayload(r, route, map[string]any{"hello": "world"}, nil, map[string]string{}, nil)
+	payload := buildClientPayload(r, nil, route, map[string]any{"hello": "world"}, nil, map[string]string{}, nil)
 	srv.applyInitialPayloadFields(&payload)
 
 	want, err := json.Marshal(payload)

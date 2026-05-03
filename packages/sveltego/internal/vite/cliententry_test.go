@@ -62,3 +62,29 @@ func TestGenerateEnhanceRuntime_Deterministic(t *testing.T) {
 		t.Error("GenerateEnhanceRuntime is non-deterministic")
 	}
 }
+
+// TestGenerateClientEntry_CSRFAutoInject covers issue #510 on the SPA
+// path: the per-route entry must walk every <form method="post"> the
+// client mounts and splice a hidden _csrf_token input populated from
+// payload.csrfToken. Without this, SPA / Static routes that render
+// forms entirely in the browser would POST without the field and
+// trigger the framework's 403 CSRF rejection.
+func TestGenerateClientEntry_CSRFAutoInject(t *testing.T) {
+	t.Parallel()
+	out := GenerateClientEntry(ClientEntryOptions{
+		RelSveltePath: "../../../src/routes/_page.svelte",
+		RelRouterPath: "../../__router/router",
+	})
+	for _, want := range []string{
+		"(payload as any).csrfToken",
+		"target.querySelectorAll('form')",
+		"_csrf_token",
+		"input.type = 'hidden';",
+		"f.insertBefore(input, f.firstChild);",
+		"window as any).__sveltego_csrf__",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("client entry missing %q for CSRF auto-inject:\n%s", want, out)
+		}
+	}
+}

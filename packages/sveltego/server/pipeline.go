@@ -363,18 +363,26 @@ func (s *Server) renderEmptyShell() *kit.Response {
 // navigations; __data.json fetches omit it because the client already
 // has it from the first paint.
 type clientPayload struct {
-	RouteID     string                `json:"routeId"`
-	Data        any                   `json:"data"`
-	LayoutData  []any                 `json:"layoutData,omitempty"`
-	Form        any                   `json:"form"`
-	URL         string                `json:"url"`
-	Params      map[string]string     `json:"params"`
-	Status      int                   `json:"status"`
-	PageError   *clientPageError      `json:"error"`
-	Manifest    []clientManifestEntry `json:"manifest,omitempty"`
-	Deps        []string              `json:"deps,omitempty"`
-	AppVersion  string                `json:"appVersion,omitempty"`
-	VersionPoll *clientVersionPoll    `json:"versionPoll,omitempty"`
+	RouteID    string                `json:"routeId"`
+	Data       any                   `json:"data"`
+	LayoutData []any                 `json:"layoutData,omitempty"`
+	Form       any                   `json:"form"`
+	URL        string                `json:"url"`
+	Params     map[string]string     `json:"params"`
+	Status     int                   `json:"status"`
+	PageError  *clientPageError      `json:"error"`
+	Manifest   []clientManifestEntry `json:"manifest,omitempty"`
+	Deps       []string              `json:"deps,omitempty"`
+	AppVersion string                `json:"appVersion,omitempty"`
+	// CSRFToken carries the per-request double-submit token so the
+	// client-side mount hook can splice a hidden `_csrf_token` input
+	// into POST forms it renders into the empty SPA shell. Mirrors the
+	// build-time AST splice (svelte_js2go/lower_csrf.go) and the runtime
+	// sidecar splice (runtime/svelte/csrfinject) for the third path:
+	// SPA / Static routes whose forms are constructed entirely in the
+	// browser. Empty when the route opts out of CSRF.
+	CSRFToken   string             `json:"csrfToken,omitempty"`
+	VersionPoll *clientVersionPoll `json:"versionPoll,omitempty"`
 }
 
 // clientVersionPoll mirrors kit.VersionPollConfig on the wire. Emitted
@@ -476,8 +484,12 @@ func escapeScriptSpecial(raw []byte) []byte {
 // decoded route-param map; it is always emitted (empty object when the
 // route has no captures) so client code can iterate without nil checks.
 // Status defaults to 200 on the success path; the caller swaps it for
-// form.code when a form action overrode the status.
-func buildClientPayload(r *http.Request, route *router.Route, data any, layoutDatas []any, params map[string]string, form *formData) clientPayload {
+// form.code when a form action overrode the status. ev carries the
+// per-request CSRF token (issue #510) so SPA / Static routes that
+// render forms entirely in the browser can splice the hidden
+// `_csrf_token` input from a known-good value rather than parsing the
+// `_csrf` cookie themselves.
+func buildClientPayload(r *http.Request, ev *kit.RequestEvent, route *router.Route, data any, layoutDatas []any, params map[string]string, form *formData) clientPayload {
 	p := clientPayload{
 		RouteID: route.Pattern,
 		Data:    data,
@@ -501,6 +513,9 @@ func buildClientPayload(r *http.Request, route *router.Route, data any, layoutDa
 		if form.code != 0 {
 			p.Status = form.code
 		}
+	}
+	if ev != nil {
+		p.CSRFToken = kit.CSRFToken(ev)
 	}
 	return p
 }
@@ -588,7 +603,7 @@ func (s *Server) renderDataJSON(r *http.Request, ev *kit.RequestEvent, route *ro
 	if form != nil {
 		data = injectFormField(data, form.data)
 	}
-	payload := buildClientPayload(r, route, data, layoutDatas, ev.Params, form)
+	payload := buildClientPayload(r, ev, route, data, layoutDatas, ev.Params, form)
 	if lctx != nil {
 		payload.Deps = lctx.CollectDeps()
 	}
@@ -717,7 +732,7 @@ func (s *Server) renderSvelteShell(r *http.Request, ev *kit.RequestEvent, route 
 	}
 	buf.WriteString(s.shellMid)
 	buf.WriteString(`<div id="app"></div>`)
-	payload := buildClientPayload(r, route, data, layoutDatas, ev.Params, form)
+	payload := buildClientPayload(r, ev, route, data, layoutDatas, ev.Params, form)
 	s.applyInitialPayloadFields(&payload)
 	if lctx != nil {
 		payload.Deps = lctx.CollectDeps()
@@ -847,7 +862,7 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 				w.Header()[k] = vs
 			}
 		}
-		payload := buildClientPayload(r, route, data, layoutDatas, ev.Params, form)
+		payload := buildClientPayload(r, ev, route, data, layoutDatas, ev.Params, form)
 		s.applyInitialPayloadFields(&payload)
 		if lctx != nil {
 			payload.Deps = lctx.CollectDeps()
@@ -891,7 +906,7 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 	if err := inner(buf); err != nil {
 		return nil, err
 	}
-	payload := buildClientPayload(r, route, data, layoutDatas, ev.Params, form)
+	payload := buildClientPayload(r, ev, route, data, layoutDatas, ev.Params, form)
 	s.applyInitialPayloadFields(&payload)
 	if lctx != nil {
 		payload.Deps = lctx.CollectDeps()
