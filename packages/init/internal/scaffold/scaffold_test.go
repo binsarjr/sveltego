@@ -376,6 +376,40 @@ func TestRun_MainGoWiresViteAndStatic(t *testing.T) {
 	}
 }
 
+// TestRun_PageDataMatchesJSONTagContract pins the scaffold to the
+// Go ↔ TypeScript boundary the SSR transpiler enforces (ADR 0008): every
+// PageData field carries an explicit `json:"..."` tag, and the template
+// reads `data.<lowercase>` matching that tag. Without this, the welcome
+// page fails to build out of the box with "<Field> not in PageData JSON
+// tag map" (#524).
+func TestRun_PageDataMatchesJSONTagContract(t *testing.T) {
+	for _, flavor := range []TailwindFlavor{TailwindNone, TailwindV4, TailwindV3} {
+		t.Run(string(flavor), func(t *testing.T) {
+			dir := t.TempDir()
+			if _, err := Run(Options{Dir: dir, Module: "example.com/hello", Tailwind: flavor}); err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			server, err := os.ReadFile(filepath.Join(dir, "src/routes/_page.server.go"))
+			if err != nil {
+				t.Fatalf("read _page.server.go: %v", err)
+			}
+			if !bytes.Contains(server, []byte("`json:\"greeting\"`")) {
+				t.Errorf("_page.server.go missing `json:\"greeting\"` tag on PageData.Greeting; body:\n%s", server)
+			}
+			page, err := os.ReadFile(filepath.Join(dir, "src/routes/_page.svelte"))
+			if err != nil {
+				t.Fatalf("read _page.svelte: %v", err)
+			}
+			if !bytes.Contains(page, []byte("{data.greeting}")) {
+				t.Errorf("_page.svelte must read {data.greeting} (lowercase, matching json tag); body:\n%s", page)
+			}
+			if bytes.Contains(page, []byte("{data.Greeting}")) {
+				t.Errorf("_page.svelte references {data.Greeting} (uppercase) — transpiler rejects this; body:\n%s", page)
+			}
+		})
+	}
+}
+
 func contains(xs []string, s string) bool {
 	i := sort.SearchStrings(xs, s)
 	return i < len(xs) && xs[i] == s
