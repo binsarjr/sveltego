@@ -114,6 +114,61 @@ func TestCSRFInject_FallbackPathInjectsHiddenInput(t *testing.T) {
 	}
 }
 
+// TestCSRFInject_HydrationPayloadIncludesCSRFToken covers issue #523: the
+// JSON hydration payload shipped to the client must carry the per-request
+// `csrfToken` so the post-mount splicer in entry.ts can re-add the hidden
+// input whenever Svelte 5 hydration strips it (typical on ssr-fallback
+// routes whose source `.svelte` lacks the input in its vDOM). Without
+// this field, `__sveltego_csrf__()` early-returns and the form submits
+// without `_csrf_token`, triggering 403 forbidden.
+func TestCSRFInject_HydrationPayloadIncludesCSRFToken(t *testing.T) {
+	t.Parallel()
+	actions := kit.ActionMap{
+		"login": func(_ *kit.RequestEvent) kit.ActionResult {
+			return kit.ActionDataResult(200, "ok")
+		},
+	}
+	opts := kit.DefaultPageOptions()
+	opts.Templates = ""
+	srv := newTestServer(t, []router.Route{{
+		Pattern:  "/login",
+		Segments: []router.Segment{{Kind: router.SegmentStatic, Value: "login"}},
+		Page:     fallbackInjectedPage(),
+		Actions:  func() any { return actions },
+		Options:  opts,
+	}})
+	ts := httptest.NewServer(srv)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/login")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+
+	var cookieToken string
+	for _, c := range resp.Cookies() {
+		if c.Name == "_csrf" {
+			cookieToken = c.Value
+			break
+		}
+	}
+	if cookieToken == "" {
+		t.Fatalf("expected _csrf cookie on GET; got cookies=%v", resp.Cookies())
+	}
+
+	// The hydration payload script tag must carry "csrfToken":"<value>"
+	// so client entry.ts has something to splice back in after Svelte
+	// hydration strips the SSR-injected hidden input. The value must
+	// match the `_csrf` cookie so a POST sent with that hidden field
+	// passes the double-submit check.
+	want := `"csrfToken":"` + cookieToken + `"`
+	if !strings.Contains(string(body), want) {
+		t.Fatalf("hydration payload missing %q; body=\n%s", want, body)
+	}
+}
+
 // TestCSRFInject_FallbackPathSkipsGetForm asserts the same renderFallback
 // shape leaves GET forms alone — the runtime rewriter gates on method
 // just like the build-time pass.
