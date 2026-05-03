@@ -62,16 +62,17 @@ func GenerateClientEntry(opts ClientEntryOptions) string {
 	// unmounting (#518). When there is no chain we fall back to
 	// mounting the page module directly with data/form props.
 	useWrapper := opts.RelWrapperPath != ""
-	if useWrapper {
+	switch {
+	case useWrapper:
 		fmt.Fprintf(&b, "import Root from %q;\n", opts.RelWrapperPath)
 		if opts.HasSnapshot {
 			fmt.Fprintf(&b, "import Page, { snapshot } from %q;\n", opts.RelSveltePath)
 		} else {
 			fmt.Fprintf(&b, "import Page from %q;\n", opts.RelSveltePath)
 		}
-	} else if opts.HasSnapshot {
+	case opts.HasSnapshot:
 		fmt.Fprintf(&b, "import Root, { snapshot } from %q;\n", opts.RelSveltePath)
-	} else {
+	default:
 		fmt.Fprintf(&b, "import Root from %q;\n", opts.RelSveltePath)
 	}
 	fmt.Fprintf(&b, "import { startRouter } from %q;\n", opts.RelRouterPath)
