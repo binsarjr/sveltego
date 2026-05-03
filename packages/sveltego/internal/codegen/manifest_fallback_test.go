@@ -60,6 +60,94 @@ func TestGenerateManifest_FallbackAdapter(t *testing.T) {
 	}
 }
 
+// TestGenerateManifest_FallbackAdapter_CSRFInject covers issue #510:
+// when a fallback-annotated route opts into CSRF, the generated
+// renderFallback__ adapter must pipe the sidecar's HTML body through
+// csrfinject.Rewrite so POST forms gain the hidden _csrf_token input.
+// CSRF=false on the route should keep the import and the call out.
+func TestGenerateManifest_FallbackAdapter_CSRFInject(t *testing.T) {
+	t.Parallel()
+	login := router.Segment{Kind: router.SegmentStatic, Value: "login"}
+	scan := &routescan.ScanResult{
+		Routes: []routescan.ScannedRoute{
+			{
+				Pattern:     "/login",
+				Segments:    []router.Segment{login},
+				Dir:         "/tmp/routes/login",
+				PackageName: "login",
+				PackagePath: ".gen/routes/login",
+				HasPage:     true,
+				SSRFallback: true,
+			},
+		},
+	}
+	routeOptions := map[string]kit.PageOptions{
+		"/login": {Templates: kit.TemplatesSvelte, SSR: true, CSRF: true},
+	}
+	out, err := GenerateManifest(scan, ManifestOptions{
+		PackageName:  "gen",
+		ModulePath:   "myapp",
+		GenRoot:      ".gen",
+		RouteOptions: routeOptions,
+		SSRFallbackRoutes: []SSRFallbackRoute{
+			{Pattern: "/login", Source: "src/routes/login/_page.svelte"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("GenerateManifest: %v", err)
+	}
+	s := string(out)
+	for _, want := range []string{
+		"runtime/svelte/csrfinject",
+		"csrfinject.Rewrite(resp.Body, ctx.CSRFToken())",
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("missing %q in manifest output:\n%s", want, s)
+		}
+	}
+}
+
+// TestGenerateManifest_FallbackAdapter_NoCSRFNoInject is the negative
+// twin: a fallback route with CSRF disabled must not import csrfinject
+// nor call Rewrite, because the rewrite cost is wasted when the server
+// won't validate the field anyway.
+func TestGenerateManifest_FallbackAdapter_NoCSRFNoInject(t *testing.T) {
+	t.Parallel()
+	login := router.Segment{Kind: router.SegmentStatic, Value: "login"}
+	scan := &routescan.ScanResult{
+		Routes: []routescan.ScannedRoute{
+			{
+				Pattern:     "/login",
+				Segments:    []router.Segment{login},
+				Dir:         "/tmp/routes/login",
+				PackageName: "login",
+				PackagePath: ".gen/routes/login",
+				HasPage:     true,
+				SSRFallback: true,
+			},
+		},
+	}
+	routeOptions := map[string]kit.PageOptions{
+		"/login": {Templates: kit.TemplatesSvelte, SSR: true, CSRF: false},
+	}
+	out, err := GenerateManifest(scan, ManifestOptions{
+		PackageName:  "gen",
+		ModulePath:   "myapp",
+		GenRoot:      ".gen",
+		RouteOptions: routeOptions,
+		SSRFallbackRoutes: []SSRFallbackRoute{
+			{Pattern: "/login", Source: "src/routes/login/_page.svelte"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("GenerateManifest: %v", err)
+	}
+	s := string(out)
+	if strings.Contains(s, "csrfinject") {
+		t.Errorf("CSRF=false route should not pull csrfinject into the manifest:\n%s", s)
+	}
+}
+
 // TestGenerateManifest_NoFallbackNoImport ensures the fallback import
 // and init() are omitted when no route opted in. We don't want a stale
 // dependency dragging into builds that don't need it.

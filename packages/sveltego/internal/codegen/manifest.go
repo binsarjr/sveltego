@@ -213,11 +213,23 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 		fallbackByRoute[fb.Pattern] = fb.Source
 	}
 	var (
-		hasPage     bool
-		hasSvelte   bool
-		hasFallback = len(fallbackByRoute) > 0
-		ssrRoutes   = opts.SSRRenderRoutes
+		hasPage         bool
+		hasSvelte       bool
+		hasFallback     = len(fallbackByRoute) > 0
+		hasFallbackCSRF bool
+		ssrRoutes       = opts.SSRRenderRoutes
 	)
+	if hasFallback {
+		// Only import the runtime csrfinject helper when at least one
+		// fallback route actually opts into CSRF — keeps the import
+		// graph clean for projects that disable CSRF globally.
+		for pattern := range fallbackByRoute {
+			if routeCSRFEnabled(pattern, opts.RouteOptions) {
+				hasFallbackCSRF = true
+				break
+			}
+		}
+	}
 	for _, e := range entries {
 		if !e.route.HasPage {
 			continue
@@ -341,6 +353,9 @@ func GenerateManifest(scan *routescan.ScanResult, opts ManifestOptions) ([]byte,
 	}
 	if hasFallback {
 		b.Line(`fallback "github.com/binsarjr/sveltego/packages/sveltego/runtime/svelte/fallback"`)
+	}
+	if hasFallbackCSRF {
+		b.Line(`csrfinject "github.com/binsarjr/sveltego/packages/sveltego/runtime/svelte/csrfinject"`)
 	}
 	b.Line(`"github.com/binsarjr/sveltego/packages/sveltego/runtime/router"`)
 	if len(imports) > 0 {
@@ -617,6 +632,7 @@ func emitFallbackAdapters(b *Builder, entries []entry, routeOptions map[string]k
 			continue
 		}
 		ident := routeIdent(e.route.Segments)
+		csrfEnabled := routeCSRFEnabled(e.route.Pattern, routeOptions)
 		b.Linef("// renderFallback__%s dispatches %s through the long-running sidecar (Phase 8 / #430).", ident, quoteGo(e.route.Pattern))
 		b.Linef("func renderFallback__%s(w *render.Writer, ctx *kit.RenderCtx, data any) error {", ident)
 		b.Indent()
@@ -632,7 +648,18 @@ func emitFallbackAdapters(b *Builder, entries []entry, routeOptions map[string]k
 		b.Line("w.WriteString(resp.Head)")
 		b.Dedent()
 		b.Line("}")
-		b.Line("w.WriteString(resp.Body)")
+		if csrfEnabled {
+			// CSRF auto-inject (issue #510): the build-time AST splice
+			// in svelte_js2go runs only on the transpile path. Routes
+			// annotated `<!-- sveltego:ssr-fallback -->` skip that path,
+			// so the hidden _csrf_token input has to be spliced into the
+			// sidecar's HTML output here. csrfinject.Rewrite is a
+			// no-op on responses that contain no POST forms (or that
+			// already carry the input from a prior pass).
+			b.Line("w.WriteString(csrfinject.Rewrite(resp.Body, ctx.CSRFToken()))")
+		} else {
+			b.Line("w.WriteString(resp.Body)")
+		}
 		b.Line("return nil")
 		b.Dedent()
 		b.Line("}")
