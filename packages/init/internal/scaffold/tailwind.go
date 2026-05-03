@@ -133,7 +133,7 @@ func renderPageSvelte(flavor TailwindFlavor) string {
 	b.WriteString("<script lang=\"ts\">\n")
 	b.WriteString("  let { data } = $props();\n")
 	b.WriteString("</script>\n\n")
-	b.WriteString("<h1 class=\"text-3xl font-bold underline\">{data.Greeting}</h1>\n")
+	b.WriteString("<h1 class=\"text-3xl font-bold underline\">{data.greeting}</h1>\n")
 	b.WriteString("<p class=\"note\">Tailwind utilities + scoped &lt;style&gt; coexist.</p>\n\n")
 	b.WriteString("<style>\n")
 	b.WriteString("  .note { color: rgb(82 82 91); }\n")

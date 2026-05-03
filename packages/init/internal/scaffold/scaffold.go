@@ -384,7 +384,7 @@ const pageSvelteBody = `<script lang="ts">
   let { data } = $props();
 </script>
 
-<h1>{data.Greeting}</h1>
+<h1>{data.greeting}</h1>
 `
 
 const pageServerBody = `package routes
@@ -392,7 +392,7 @@ const pageServerBody = `package routes
 import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
 
 type PageData struct {
-	Greeting string
+	Greeting string ` + "`json:\"greeting\"`" + `
 }
 
 func Load(ctx *kit.LoadCtx) (PageData, error) {
