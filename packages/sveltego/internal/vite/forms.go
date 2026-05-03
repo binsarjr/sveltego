@@ -56,6 +56,14 @@ function defaultApply(result: EnhanceEnvelope, form: HTMLFormElement) {
     case 'success':
     case 'failure':
       w.form = result.data ?? null;
+      // Notify per-route entries so they can re-seed their wrapper-state
+      // rune and pageState.form. cliententry.ts registers a window-level
+      // handler at mount that calls _setWrapperState / _setPage with the
+      // new form value, triggering a Svelte 5 reactive re-render of any
+      // {#if form?.ok} / {form?.error} blocks in the page template.
+      window.dispatchEvent(
+        new CustomEvent('sveltego:form', { detail: result.data ?? null }),
+      );
       break;
     case 'redirect':
       if (result.location) {

@@ -160,6 +160,26 @@ func GenerateClientEntry(opts ClientEntryOptions) string {
 	b.WriteString("queueMicrotask(__sveltegoInjectCSRF);\n")
 	b.WriteString("afterNavigate(__sveltegoInjectCSRF);\n")
 	b.WriteString("(window as any).__sveltego_csrf__ = __sveltegoInjectCSRF;\n\n")
+	// Wire the enhance flow's reactivity refresh: forms.ts dispatches a
+	// `sveltego:form` window event with the new ActionData on success or
+	// failure. Re-seed pageState.form (so `page.form` from $app/state is
+	// reactive) and, on chained routes, the wrapper-state rune (so the
+	// page's `let { form } = $props()` re-renders when the rune flows
+	// through the wrapper). Without this listener the global
+	// __sveltego__.form updates but the rendered template never re-runs.
+	b.WriteString("addEventListener('sveltego:form', (ev) => {\n")
+	b.WriteString("  const w = (window as any).__sveltego__ ?? {};\n")
+	b.WriteString("  const form = (ev as CustomEvent).detail;\n")
+	b.WriteString("  _setPage({ ...w, form });\n")
+	if useWrapper {
+		b.WriteString("  _setWrapperState({\n")
+		b.WriteString("    Page,\n")
+		b.WriteString("    data: w.data,\n")
+		b.WriteString("    layoutData: w.layoutData ?? [],\n")
+		b.WriteString("    form,\n")
+		b.WriteString("  });\n")
+	}
+	b.WriteString("});\n\n")
 	b.WriteString("(window as any).__sveltego_hydrated = true;\n\n")
 	// Forward the layout chain identifier so the SPA router can swap
 	// page slots in place when a navigation lands on a route that
