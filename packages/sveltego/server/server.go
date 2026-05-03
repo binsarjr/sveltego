@@ -162,10 +162,11 @@ type Server struct {
 	viteManifest viteManifestMap
 	viteBase     string
 
-	// serviceWorker is the precomputed registration <script> tag emitted
-	// before </body> when Config.ServiceWorker is true. Empty disables the
-	// runtime injection entirely (#89).
-	serviceWorker string
+	// serviceWorker indicates whether the registration <script> tag
+	// should be emitted before </body>. The actual tag is built per
+	// request via serviceWorkerTag so it can carry the per-request CSP
+	// nonce (#539). False disables the runtime injection entirely (#89).
+	serviceWorker bool
 
 	// clientManifest is the SPA route table embedded in the initial SSR
 	// payload so the client SPA router can match link URLs and look up
@@ -291,10 +292,7 @@ func New(cfg Config) (*Server, error) {
 		viteBase = "/static/_app"
 	}
 
-	swTag := ""
-	if cfg.ServiceWorker {
-		swTag = serviceWorkerRegisterScript
-	}
+	swEnabled := cfg.ServiceWorker
 	done := make(chan struct{})
 	clientManifest := buildClientManifest(tree.Routes())
 	appVersion := computeAppVersion(cfg.ViteManifest)
@@ -312,7 +310,7 @@ func New(cfg Config) (*Server, error) {
 		shellTail:          tail,
 		viteManifest:       vm,
 		viteBase:           viteBase,
-		serviceWorker:      swTag,
+		serviceWorker:      swEnabled,
 		clientManifest:     clientManifest,
 		encodedManifest:    encodePayloadField("manifest", clientManifest),
 		encodedAppVersion:  encodeAppVersionField(appVersion),

@@ -47,6 +47,17 @@ func (m viteManifestMap) globalCSSFile() string {
 	return c.File
 }
 
+// nonceAttr returns ` nonce="<nonce>"` (with a leading space) when nonce
+// is non-empty, otherwise the empty string. Stylesheet links do not
+// require a nonce under the default style-src directive, so callers
+// pass nonce only into the script + modulepreload emit sites.
+func nonceAttr(nonce string) string {
+	if nonce == "" {
+		return ""
+	}
+	return ` nonce="` + nonce + `"`
+}
+
 // headAssetTags returns the head-belonging HTML fragment for routeKey:
 // stylesheet links plus <link rel="modulepreload"> hints for every
 // transitive import. Returns an empty string when routeKey is not in the
@@ -55,13 +66,19 @@ func (m viteManifestMap) globalCSSFile() string {
 // prepended as a <link rel="stylesheet"> so the global stylesheet loads
 // alongside route-scoped CSS.
 //
+// nonce is the per-request CSP nonce (kit.Nonce(ev)); when non-empty
+// each <link rel="modulepreload"> tag carries nonce="…" so a strict
+// `script-src 'nonce-…'` directive permits the preloaded chunks
+// without falling back to 'unsafe-inline' or per-asset hashes. Empty
+// nonce (CSP off) emits the legacy unattributed form.
+//
 // The entry <script type="module"> is intentionally NOT in this fragment
 // — see bodyEntryTag. End-of-body script placement matches SvelteKit's
 // %sveltekit.body% convention so the browser paints SSR HTML before any
 // JS chunk executes (better LCP, fewer hydration-timing races). The
 // modulepreload hints stay in <head> so the browser still discovers and
 // parallel-fetches the chunks during HTML parse.
-func (m viteManifestMap) headAssetTags(routeKey, base string) string {
+func (m viteManifestMap) headAssetTags(routeKey, base, nonce string) string {
 	if m == nil {
 		return ""
 	}
@@ -70,6 +87,7 @@ func (m viteManifestMap) headAssetTags(routeKey, base string) string {
 	}
 	chunk := m[routeKey]
 	base = strings.TrimRight(base, "/")
+	na := nonceAttr(nonce)
 
 	var b strings.Builder
 
@@ -94,7 +112,7 @@ func (m viteManifestMap) headAssetTags(routeKey, base string) string {
 			if !ok {
 				continue
 			}
-			fmt.Fprintf(&b, `<link rel="modulepreload" href="%s/%s">`, base, ic.File)
+			fmt.Fprintf(&b, `<link rel="modulepreload"%s href="%s/%s">`, na, base, ic.File)
 			b.WriteByte('\n')
 			collectImports(imp)
 		}
@@ -114,12 +132,17 @@ func (m viteManifestMap) headAssetTags(routeKey, base string) string {
 // shell tail. Returns an empty string when routeKey is not in the
 // manifest or when m is nil.
 //
+// nonce is the per-request CSP nonce (kit.Nonce(ev)); when non-empty
+// the emitted tag carries nonce="…" so a strict
+// `script-src 'nonce-…'` directive permits the entry chunk without
+// falling back to 'unsafe-inline' or per-asset hashes.
+//
 // Pairs with headAssetTags: the head fragment carries stylesheet + module
 // preload hints (parsed during the HEAD walk so the browser starts the
 // chunk fetches in parallel with HTML parsing); the body fragment carries
 // the entry script that consumes those preloaded chunks once the SSR
 // body has fully parsed.
-func (m viteManifestMap) bodyEntryTag(routeKey, base string) string {
+func (m viteManifestMap) bodyEntryTag(routeKey, base, nonce string) string {
 	if m == nil {
 		return ""
 	}
@@ -130,7 +153,7 @@ func (m viteManifestMap) bodyEntryTag(routeKey, base string) string {
 	base = strings.TrimRight(base, "/")
 
 	var b strings.Builder
-	fmt.Fprintf(&b, `<script type="module" src="%s/%s"></script>`, base, chunk.File)
+	fmt.Fprintf(&b, `<script type="module"%s src="%s/%s"></script>`, nonceAttr(nonce), base, chunk.File)
 	b.WriteByte('\n')
 	return b.String()
 }

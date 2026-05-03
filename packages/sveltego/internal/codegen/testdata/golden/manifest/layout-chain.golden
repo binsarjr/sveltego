@@ -153,6 +153,7 @@ func renderChain__DashTeamBilling(w *render.Writer, ctx *kit.RenderCtx, page rou
 		Status:    200,
 		Data:      pageData,
 		CSRFToken: ctx.CSRFToken(),
+		Nonce:     ctx.Nonce(),
 	}
 	w.WriteString(server.BlockOpen)
 	if err := func(w *render.Writer) error {

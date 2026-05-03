@@ -40,8 +40,8 @@ func TestAssetTags_GlobalCSSInjection(t *testing.T) {
 		t.Fatalf("parse: %v", err)
 	}
 
-	headTags := m.headAssetTags(".gen/client/routes/_page/entry.ts", "/_app")
-	bodyTag := m.bodyEntryTag(".gen/client/routes/_page/entry.ts", "/_app")
+	headTags := m.headAssetTags(".gen/client/routes/_page/entry.ts", "/_app", "")
+	bodyTag := m.bodyEntryTag(".gen/client/routes/_page/entry.ts", "/_app", "")
 
 	for _, want := range []string{
 		`<link rel="stylesheet" href="/_app/assets/app-def.css">`,
@@ -88,8 +88,8 @@ func TestAssetTags_NoGlobalCSSWhenAbsent(t *testing.T) {
 		t.Fatalf("parse: %v", err)
 	}
 
-	headTags := m.headAssetTags(".gen/client/routes/_page/entry.ts", "/_app")
-	bodyTag := m.bodyEntryTag(".gen/client/routes/_page/entry.ts", "/_app")
+	headTags := m.headAssetTags(".gen/client/routes/_page/entry.ts", "/_app", "")
+	bodyTag := m.bodyEntryTag(".gen/client/routes/_page/entry.ts", "/_app", "")
 
 	if strings.Contains(headTags, "app-") {
 		t.Errorf("unexpected global CSS tag in no-addon build:\n%s", headTags)
@@ -99,6 +99,92 @@ func TestAssetTags_NoGlobalCSSWhenAbsent(t *testing.T) {
 	}
 	if strings.Contains(headTags, `<script type="module"`) {
 		t.Errorf("entry script must not appear in head fragment; got:\n%s", headTags)
+	}
+}
+
+// TestAssetTags_NonceAttachedWhenSet pins issue #539: when a per-request
+// CSP nonce is supplied, every auto-emitted <script type="module"> and
+// <link rel="modulepreload"> carries the same nonce. <link rel="stylesheet">
+// is intentionally skipped — the default CSP style-src does not gate on
+// nonce, and Vite's hashed CSS already lives under /_app.
+func TestAssetTags_NonceAttachedWhenSet(t *testing.T) {
+	t.Parallel()
+
+	const manifest = `{
+		".gen/client/routes/_page/entry.ts": {
+			"file": "assets/_page-abc.js",
+			"name": "routes/_page",
+			"src": ".gen/client/routes/_page/entry.ts",
+			"isEntry": true,
+			"imports": ["_shared"],
+			"css": ["assets/_page-xyz.css"]
+		},
+		"_shared": {
+			"file": "assets/shared-def.js"
+		}
+	}`
+
+	m, err := parseViteManifest(manifest)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	const nonce = "abc123XYZ"
+	headTags := m.headAssetTags(".gen/client/routes/_page/entry.ts", "/_app", nonce)
+	bodyTag := m.bodyEntryTag(".gen/client/routes/_page/entry.ts", "/_app", nonce)
+
+	wantBody := `<script type="module" nonce="abc123XYZ" src="/_app/assets/_page-abc.js"></script>`
+	if !strings.Contains(bodyTag, wantBody) {
+		t.Errorf("bodyEntryTag missing nonce attribute; want %q, got:\n%s", wantBody, bodyTag)
+	}
+	wantPreload := `<link rel="modulepreload" nonce="abc123XYZ" href="/_app/assets/shared-def.js">`
+	if !strings.Contains(headTags, wantPreload) {
+		t.Errorf("headAssetTags missing nonce on modulepreload; want %q, got:\n%s", wantPreload, headTags)
+	}
+	// Stylesheet links must NOT carry nonce (style-src not gated on nonce).
+	if strings.Contains(headTags, `<link rel="stylesheet" nonce=`) {
+		t.Errorf("stylesheet links should not carry nonce; got:\n%s", headTags)
+	}
+}
+
+// TestAssetTags_NoNonceWhenEmpty pins the byte-identical CSP-off output:
+// passing an empty nonce string emits the legacy unattributed form so
+// existing builds (CSP=Off) produce zero diff.
+func TestAssetTags_NoNonceWhenEmpty(t *testing.T) {
+	t.Parallel()
+
+	const manifest = `{
+		".gen/client/routes/_page/entry.ts": {
+			"file": "assets/_page-abc.js",
+			"name": "routes/_page",
+			"src": ".gen/client/routes/_page/entry.ts",
+			"isEntry": true,
+			"imports": ["_shared"]
+		},
+		"_shared": {
+			"file": "assets/shared-def.js"
+		}
+	}`
+
+	m, err := parseViteManifest(manifest)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	headTags := m.headAssetTags(".gen/client/routes/_page/entry.ts", "/_app", "")
+	bodyTag := m.bodyEntryTag(".gen/client/routes/_page/entry.ts", "/_app", "")
+
+	if strings.Contains(headTags, `nonce=`) {
+		t.Errorf("headAssetTags must not contain nonce when CSP off; got:\n%s", headTags)
+	}
+	if strings.Contains(bodyTag, `nonce=`) {
+		t.Errorf("bodyEntryTag must not contain nonce when CSP off; got:\n%s", bodyTag)
+	}
+	if !strings.Contains(bodyTag, `<script type="module" src="/_app/assets/_page-abc.js"></script>`) {
+		t.Errorf("bodyEntryTag legacy unattributed form changed:\n%s", bodyTag)
+	}
+	if !strings.Contains(headTags, `<link rel="modulepreload" href="/_app/assets/shared-def.js">`) {
+		t.Errorf("headAssetTags legacy unattributed form changed:\n%s", headTags)
 	}
 }
 

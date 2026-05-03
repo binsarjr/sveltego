@@ -291,7 +291,7 @@ func (s *Server) resolve(w http.ResponseWriter, r *http.Request, ev *kit.Request
 		if isSvelteMode {
 			return s.renderSvelteShell(r, ev, route, form)
 		}
-		return s.renderEmptyShell(), nil
+		return s.renderEmptyShell(ev), nil
 	}
 	// ADR 0009 phase 6 (#428): Svelte-mode routes with a generated
 	// Render emit have route.Page wired to the bridge adapter that
@@ -338,9 +338,10 @@ func optionsAllowSSR(opts kit.PageOptions) bool {
 // an empty mount point. Used when route.Options.SSR is false: the
 // browser receives a valid HTML document and hydrates from the client
 // bundle once delivered (#34). Cookies queued during Reroute / Handle
-// still flow through writeResponse.
-func (s *Server) renderEmptyShell() *kit.Response {
-	body := s.shellHead + s.shellMid + `<div id="app"></div>` + s.serviceWorker + s.shellTail
+// still flow through writeResponse. The service-worker registration
+// tag (when enabled) inherits the per-request CSP nonce from ev.
+func (s *Server) renderEmptyShell(ev *kit.RequestEvent) *kit.Response {
+	body := s.shellHead + s.shellMid + `<div id="app"></div>` + s.serviceWorkerTag(kit.Nonce(ev)) + s.shellTail
 	headers := http.Header{}
 	headers.Set("Content-Type", "text/html; charset=utf-8")
 	headers.Set("Content-Length", strconv.Itoa(len(body)))
@@ -549,17 +550,27 @@ func (s *Server) applyInitialPayloadFields(p *clientPayload) {
 // pre-encoded stable fields owned by s; the assembled bytes are then
 // passed through escapeScriptSpecial so any "</" or "<!--" inside
 // per-request data can't break out of the script tag.
-func (s *Server) emitPayloadScriptTag(buf *render.Writer, p clientPayload) {
+//
+// nonce is the per-request CSP nonce (kit.Nonce(ev)); when non-empty
+// the emitted tag carries nonce="…" so a strict
+// `script-src 'nonce-…'` directive permits the JSON payload script
+// alongside the entry chunk and modulepreload hints (#539).
+func (s *Server) emitPayloadScriptTag(buf *render.Writer, p clientPayload, nonce string) {
 	scratch := acquirePayloadBuf()
 	defer releasePayloadBuf(scratch)
+	openTag := `<script id="sveltego-data" type="application/json">`
+	if nonce != "" {
+		openTag = `<script id="sveltego-data" nonce="` + nonce + `" type="application/json">`
+	}
 	if err := s.writePayloadJSON(scratch, p); err != nil {
 		// Emit an empty payload rather than omitting the tag; the client
 		// will mount with nil data rather than crashing on a missing element.
-		buf.WriteString(`<script id="sveltego-data" type="application/json">{}</script>`)
+		buf.WriteString(openTag)
+		buf.WriteString(`{}</script>`)
 		return
 	}
 	encoded := escapeScriptSpecial(scratch.Bytes())
-	buf.WriteString(`<script id="sveltego-data" type="application/json">`)
+	buf.WriteString(openTag)
 	buf.WriteRaw(bytesAsString(encoded))
 	buf.WriteString(`</script>`)
 }
@@ -730,9 +741,10 @@ func (s *Server) renderSvelteShell(r *http.Request, ev *kit.RequestEvent, route 
 	buf := render.Acquire()
 	defer render.Release(buf)
 
+	nonce := kit.Nonce(ev)
 	buf.WriteString(s.shellHead)
 	if route.ClientKey != "" {
-		if tags := s.viteManifest.headAssetTags(route.ClientKey, s.viteBase); tags != "" {
+		if tags := s.viteManifest.headAssetTags(route.ClientKey, s.viteBase, nonce); tags != "" {
 			buf.WriteString(tags)
 		}
 	}
@@ -743,14 +755,14 @@ func (s *Server) renderSvelteShell(r *http.Request, ev *kit.RequestEvent, route 
 	if lctx != nil {
 		payload.Deps = lctx.CollectDeps()
 	}
-	s.emitPayloadScriptTag(buf, payload)
+	s.emitPayloadScriptTag(buf, payload, nonce)
 	if route.ClientKey != "" {
-		if tag := s.viteManifest.bodyEntryTag(route.ClientKey, s.viteBase); tag != "" {
+		if tag := s.viteManifest.bodyEntryTag(route.ClientKey, s.viteBase, nonce); tag != "" {
 			buf.WriteString(tag)
 		}
 	}
-	if s.serviceWorker != "" {
-		buf.WriteString(s.serviceWorker)
+	if sw := s.serviceWorkerTag(nonce); sw != "" {
+		buf.WriteString(sw)
 	}
 	buf.WriteString(s.shellTail)
 
@@ -858,6 +870,7 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 		}
 	}
 
+	nonce := kit.Nonce(ev)
 	streams := collectStreams(data, layoutDatas)
 	if len(streams) > 0 {
 		status := http.StatusOK
@@ -883,10 +896,10 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 			bodyEntryTag  string
 		)
 		if route.ClientKey != "" {
-			headAssetTags = s.viteManifest.headAssetTags(route.ClientKey, s.viteBase)
-			bodyEntryTag = s.viteManifest.bodyEntryTag(route.ClientKey, s.viteBase)
+			headAssetTags = s.viteManifest.headAssetTags(route.ClientKey, s.viteBase, nonce)
+			bodyEntryTag = s.viteManifest.bodyEntryTag(route.ClientKey, s.viteBase, nonce)
 		}
-		if err := s.renderStreaming(w, r, ev, inner, streams, status, headBytes, headAssetTags, bodyEntryTag, payload); err != nil {
+		if err := s.renderStreaming(w, r, ev, inner, streams, status, headBytes, headAssetTags, bodyEntryTag, payload, nonce); err != nil {
 			if errors.Is(err, kit.ErrClientGone) {
 				return nil, errStreamingWrote
 			}
@@ -913,7 +926,7 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 		buf.WriteRaw(bytesAsString(headBytes))
 	}
 	if route != nil && route.ClientKey != "" {
-		if tags := s.viteManifest.headAssetTags(route.ClientKey, s.viteBase); tags != "" {
+		if tags := s.viteManifest.headAssetTags(route.ClientKey, s.viteBase, nonce); tags != "" {
 			buf.WriteString(tags)
 		}
 	}
@@ -926,14 +939,14 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 	if lctx != nil {
 		payload.Deps = lctx.CollectDeps()
 	}
-	s.emitPayloadScriptTag(buf, payload)
+	s.emitPayloadScriptTag(buf, payload, nonce)
 	if route != nil && route.ClientKey != "" {
-		if tag := s.viteManifest.bodyEntryTag(route.ClientKey, s.viteBase); tag != "" {
+		if tag := s.viteManifest.bodyEntryTag(route.ClientKey, s.viteBase, nonce); tag != "" {
 			buf.WriteString(tag)
 		}
 	}
-	if s.serviceWorker != "" {
-		buf.WriteString(s.serviceWorker)
+	if sw := s.serviceWorkerTag(nonce); sw != "" {
+		buf.WriteString(sw)
 	}
 	buf.WriteString(s.shellTail)
 
@@ -1090,7 +1103,7 @@ func isClientGone(ctx context.Context, err error) bool {
 // cancels any pending streams, logs once at debug level, and returns
 // kit.ErrClientGone. The caller must treat that as errStreamingWrote so
 // HandleError is not invoked — a disconnect is not a server fault.
-func (s *Server) renderStreaming(w http.ResponseWriter, r *http.Request, ev *kit.RequestEvent, inner func(*render.Writer) error, streams []streamedField, status int, headBytes []byte, headAssetTags, bodyEntryTag string, payload clientPayload) error {
+func (s *Server) renderStreaming(w http.ResponseWriter, r *http.Request, ev *kit.RequestEvent, inner func(*render.Writer) error, streams []streamedField, status int, headBytes []byte, headAssetTags, bodyEntryTag string, payload clientPayload, nonce string) error {
 	if ev.Cookies != nil {
 		ev.Cookies.Apply(w)
 	}
@@ -1113,7 +1126,7 @@ func (s *Server) renderStreaming(w http.ResponseWriter, r *http.Request, ev *kit
 	if err := inner(buf); err != nil {
 		return err
 	}
-	s.emitPayloadScriptTag(buf, payload)
+	s.emitPayloadScriptTag(buf, payload, nonce)
 
 	ctx := r.Context()
 
@@ -1127,7 +1140,7 @@ func (s *Server) renderStreaming(w http.ResponseWriter, r *http.Request, ev *kit
 	}
 
 	for i, f := range streams {
-		emitResolveScript(ctx, buf, f.id, f.stream, s.streamTimeout)
+		emitResolveScript(ctx, buf, f.id, f.stream, s.streamTimeout, nonce)
 		// ctx.Err() is set when the client disconnected and WaitAny
 		// returned early. The resolve script carries an error payload
 		// that we don't need to flush — log once and bail.
@@ -1155,8 +1168,8 @@ func (s *Server) renderStreaming(w http.ResponseWriter, r *http.Request, ev *kit
 	if bodyEntryTag != "" {
 		buf.WriteString(bodyEntryTag)
 	}
-	if s.serviceWorker != "" {
-		buf.WriteString(s.serviceWorker)
+	if sw := s.serviceWorkerTag(nonce); sw != "" {
+		buf.WriteString(sw)
 	}
 	buf.WriteString(s.shellTail)
 	if err := buf.FlushTo(w); err != nil {
@@ -1195,9 +1208,19 @@ func cancelStreams(fs []streamedField) {
 // on timeout, cancellation, or producer error the call carries an error
 // object the client can branch on. Errors are intentionally string-only
 // to avoid leaking goroutine internals.
-func emitResolveScript(ctx context.Context, buf *render.Writer, id uint64, stream kit.StreamedAny, timeout time.Duration) {
+//
+// nonce is the per-request CSP nonce; when non-empty the emitted
+// <script> tag carries nonce="…" so streaming chunks land under the
+// same `script-src 'nonce-…'` directive as the initial payload (#539).
+func emitResolveScript(ctx context.Context, buf *render.Writer, id uint64, stream kit.StreamedAny, timeout time.Duration, nonce string) {
 	v, err := stream.WaitAny(ctx, timeout)
-	buf.WriteString(`<script>__sveltego__resolve(`)
+	if nonce != "" {
+		buf.WriteString(`<script nonce="`)
+		buf.WriteString(nonce)
+		buf.WriteString(`">__sveltego__resolve(`)
+	} else {
+		buf.WriteString(`<script>__sveltego__resolve(`)
+	}
 	buf.WriteString(strconv.FormatUint(id, 10))
 	buf.WriteString(`,`)
 	if err != nil {

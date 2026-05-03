@@ -42,6 +42,14 @@ type PageState struct {
 	// hidden `_csrf_token` input it splices after every POST form.
 	// Empty when CSRF is disabled for the route.
 	CSRFToken string
+	// Nonce carries the per-request CSP nonce issued by the applyCSP
+	// middleware. The per-route bridge populates it from
+	// kit.RenderCtx.Nonce(). Templates that read `page.nonce` receive
+	// the same value the response's Content-Security-Policy header
+	// advertises so developer-authored inline `<script nonce={...}>`
+	// tags can opt into the strict CSP without a separate Load
+	// channel. Empty when CSP is off for the request.
+	Nonce string
 }
 
 // PageRoute mirrors the `page.route` field. ID is the matched route's
