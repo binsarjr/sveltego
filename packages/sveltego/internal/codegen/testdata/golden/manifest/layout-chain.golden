@@ -147,11 +147,12 @@ func layoutDataAt(layoutDatas []any, i int) any {
 // rebuild a closure stack on every request.
 func renderChain__DashTeamBilling(w *render.Writer, ctx *kit.RenderCtx, page router.PageHandler, pageData any, layoutDatas []any) error {
 	pageState := server.PageState{
-		URL:    ctx.URL,
-		Params: ctx.Params,
-		Route:  server.PageRoute{ID: `/dash/team/billing`},
-		Status: 200,
-		Data:   pageData,
+		URL:       ctx.URL,
+		Params:    ctx.Params,
+		Route:     server.PageRoute{ID: `/dash/team/billing`},
+		Status:    200,
+		Data:      pageData,
+		CSRFToken: ctx.CSRFToken(),
 	}
 	return render__layout__page_routes(w, ctx, layoutDataAt(layoutDatas, 0), func(w *render.Writer) error {
 		return render__layout__page_routes_dash(w, ctx, layoutDataAt(layoutDatas, 1), func(w *render.Writer) error {

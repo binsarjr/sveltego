@@ -753,6 +753,14 @@ func isEmitterScratch(name string) bool {
 	switch name {
 	case "each_array", "payload":
 		return true
+	case "pageState":
+		// The CSRF auto-inject pre-pass (#493) synthesises
+		// `pageState.CSRFToken` MemberExpression nodes. The framework
+		// pageState parameter is bound by the emitter when
+		// EmitPageStateParam is set; treat it as scratch so the
+		// data-root lowerer leaves the chain alone and the emitter
+		// renders it verbatim.
+		return true
 	}
 	return false
 }

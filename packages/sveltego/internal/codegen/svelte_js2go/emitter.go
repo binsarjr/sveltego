@@ -79,6 +79,20 @@ type Options struct {
 	// tests that drive the priority + extended corpora directly) keep
 	// their existing parameter list.
 	EmitPageStateParam bool
+
+	// CSRFAutoInject, when true, runs the CSRF auto-inject pre-pass
+	// (issue #493) over every TemplateLiteral in the AST. Each
+	// `<form ... method="post" ... >` open tag found in static quasi
+	// text gains an immediately-following hidden `_csrf_token` input
+	// bound to `pageState.CSRFToken`. Per-form opt-out via the
+	// `nocsrf` attribute (which is also stripped from the rendered
+	// HTML). Requires EmitPageStateParam — the synthesised
+	// `pageState.CSRFToken` reference resolves against the bridge
+	// parameter declared when EmitPageStateParam is set.
+	//
+	// Defaults to false so the existing 80+ priority + extended
+	// goldens stay byte-identical.
+	CSRFAutoInject bool
 }
 
 // ExprRewriter is the extension point Phase 5 uses to lower JS
@@ -259,6 +273,10 @@ func TranspileNode(root *Node, route string, opts Options) ([]byte, error) {
 	}
 	if opts.HelperAlias == "" {
 		opts.HelperAlias = "server"
+	}
+
+	if opts.CSRFAutoInject {
+		injectCSRF(root)
 	}
 
 	e := &emitter{

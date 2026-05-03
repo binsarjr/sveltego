@@ -35,6 +35,13 @@ type PageState struct {
 	// Updated mirrors `updated.current`. Always false on the server;
 	// the client version-poller flips it when a new build ships.
 	Updated bool
+	// CSRFToken carries the per-request double-submit token issued by
+	// the CSRF middleware. The per-route bridge populates it from
+	// kit.RenderCtx.CSRFToken(). The CSRF auto-inject pre-pass
+	// (issue #493) emits `pageState.CSRFToken` as the value of the
+	// hidden `_csrf_token` input it splices after every POST form.
+	// Empty when CSRF is disabled for the route.
+	CSRFToken string
 }
 
 // PageRoute mirrors the `page.route` field. ID is the matched route's

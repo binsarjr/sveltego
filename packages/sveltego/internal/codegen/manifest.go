@@ -589,6 +589,7 @@ func emitPageStateBuild(b *Builder, pattern, dataIdent string) {
 	b.Linef("Route:  server.PageRoute{ID: %s},", quoteGo(pattern))
 	b.Line("Status: 200,")
 	b.Linef("Data:   %s,", dataIdent)
+	b.Line("CSRFToken: ctx.CSRFToken(),")
 	b.Dedent()
 	b.Line("}")
 }
@@ -782,6 +783,7 @@ func emitSSRErrorAdapter(b *Builder, ei errorImport) {
 	b.Line("Params: ctx.Params,")
 	b.Line("Status: safe.HTTPStatus(),")
 	b.Line("Error:  &server.PageError{Message: safe.Error(), Status: safe.HTTPStatus()},")
+	b.Line("CSRFToken: ctx.CSRFToken(),")
 	b.Dedent()
 	b.Line("}")
 	b.Linef("%s.RenderErrorSSR(&payload, safe, pageState)", ei.alias)
@@ -907,7 +909,7 @@ func emitRouteRenderErrorChain(b *Builder, r routescan.ScannedRoute, layoutByPat
 		// their templates (nav bars, breadcrumbs) can read $app/state.
 		// The error path overrides Status from safe.HTTPStatus() and
 		// populates page.error so `{#if page.error}` branches activate.
-		b.Linef("pageState := server.PageState{URL: ctx.URL, Params: ctx.Params, Route: server.PageRoute{ID: %s}, Status: safe.HTTPStatus(), Error: &server.PageError{Message: safe.Error(), Status: safe.HTTPStatus()}}", quoteGo(r.Pattern))
+		b.Linef("pageState := server.PageState{URL: ctx.URL, Params: ctx.Params, Route: server.PageRoute{ID: %s}, Status: safe.HTTPStatus(), Error: &server.PageError{Message: safe.Error(), Status: safe.HTTPStatus()}, CSRFToken: ctx.CSRFToken()}", quoteGo(r.Pattern))
 	}
 	innerCall := fmt.Sprintf("renderError__%s(w, ctx, safe)", errAlias)
 	emitErrorChainBody(b, survivingLayouts, layoutByPath, innerCall)
