@@ -9,7 +9,7 @@ summary: sveltego command reference — build, compile, dev, check, routes, vers
 `sveltego` is the project's primary command-line entry point. Project scaffolding lives in a separate binary, `sveltego-init`, that is normally invoked through `go run @latest` rather than installed globally. Install the framework CLI with:
 
 ```sh
-go install github.com/binsarjr/sveltego/packages/sveltego/cmd/sveltego@latest
+go install github.com/binsarjr/sveltego/packages/sveltego/cmd/sveltego@v0.1.0-alpha.0
 ```
 
 ## Global flags
