@@ -420,6 +420,12 @@ func TestBuild_EmitsLayoutWrapper(t *testing.T) {
 			t.Errorf("wrapper.svelte missing %q:\n%s", want, wrapperBytes)
 		}
 	}
+	// Hydration safety: the page slot must NOT be wrapped in `{#if}`,
+	// which would insert Svelte comment markers absent from SSR HTML
+	// and trip svelte/e/hydration_mismatch warnings on first paint.
+	if bytes.Contains(wrapperBytes, []byte("{#if")) {
+		t.Errorf("wrapper.svelte must not wrap the page slot in {#if}:\n%s", wrapperBytes)
+	}
 
 	// Entry must mount the wrapper, not Page directly, and forward layoutData.
 	rootEntry := filepath.Join(root, ".gen", "client", "routes", "_page", "entry.ts")

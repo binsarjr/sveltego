@@ -91,10 +91,13 @@ func GenerateWrapper(opts WrapperOptions) string {
 		fmt.Fprintf(&b, "%s<L%d data={wrapperState.layoutData[%d] ?? {}}>\n", indent, i, i)
 		indent += "  "
 	}
-	fmt.Fprintf(&b, "%s{#if wrapperState.page}\n", indent)
-	fmt.Fprintf(&b, "%s  {@const PageSlot = wrapperState.page}\n", indent)
-	fmt.Fprintf(&b, "%s  <PageSlot data={wrapperState.data} form={wrapperState.form} />\n", indent)
-	fmt.Fprintf(&b, "%s{/if}\n", indent)
+	// `wrapperState.page` is always seeded from the `page = Page`
+	// prop default before the first render, so the slot can render
+	// unconditionally — no `{#if}` guard. An `{#if}` would inject
+	// Svelte comment markers that are absent from the SSR HTML and
+	// trip svelte/e/hydration_mismatch warnings on the first paint.
+	fmt.Fprintf(&b, "%s{@const PageSlot = wrapperState.page}\n", indent)
+	fmt.Fprintf(&b, "%s<PageSlot data={wrapperState.data} form={wrapperState.form} />\n", indent)
 	for i := len(opts.LayoutImports) - 1; i >= 0; i-- {
 		indent = strings.Repeat("  ", i)
 		fmt.Fprintf(&b, "%s</L%d>\n", indent, i)

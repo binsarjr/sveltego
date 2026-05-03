@@ -25,7 +25,6 @@ func TestGenerateWrapper_singleLayoutNests(t *testing.T) {
 		"wrapperState.form = form;",
 		"wrapperState.page = page;",
 		`<L0 data={wrapperState.layoutData[0] ?? {}}>`,
-		`{#if wrapperState.page}`,
 		`{@const PageSlot = wrapperState.page}`,
 		`<PageSlot data={wrapperState.data} form={wrapperState.form} />`,
 		`</L0>`,
@@ -80,6 +79,24 @@ func TestGenerateWrapper_snapshotIsReExported(t *testing.T) {
 	}
 	if !strings.Contains(src, "export { Page as page, snapshot };") {
 		t.Errorf("missing combined Page+snapshot re-export:\n%s", src)
+	}
+}
+
+// TestGenerateWrapper_noConditionalGuardOnPageSlot defends against a
+// regression where wrapping the page slot in an `{#if}` block injected
+// Svelte hydration comment markers absent from the SSR HTML and tripped
+// svelte/e/hydration_mismatch warnings on first paint. The slot must
+// render unconditionally; the prop default keeps wrapperState.page
+// non-null at first render.
+func TestGenerateWrapper_noConditionalGuardOnPageSlot(t *testing.T) {
+	t.Parallel()
+	src := GenerateWrapper(WrapperOptions{
+		LayoutImports: []string{"../../../src/routes/_layout.svelte"},
+		PagePath:      "../../../src/routes/_page.svelte",
+		StoreImport:   "../../__router/wrapper-store.svelte",
+	})
+	if strings.Contains(src, "{#if") {
+		t.Errorf("wrapper must not introduce an {#if} guard around the page slot — comment markers cause hydration mismatches:\n%s", src)
 	}
 }
 
