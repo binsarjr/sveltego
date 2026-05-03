@@ -6,6 +6,7 @@ To add a new entry, create a new `YYYY-MM-DD-<topic>.md` file there — **do not
 
 Entries newest-first:
 
+- [2026-05-03: worktree-hijack — parallel agents collided in `phase-gap-unblock-478`, D1's WIP wiped by D2's checkout](lessons/2026-05-03-worktree-hijack-shared-tree.md)
 - [2026-05-03: `//go:build sveltego` on hooks + config was defensive, never load-bearing (#527)](lessons/2026-05-03-build-tag-was-defensive-not-needed.md)
 - [2026-05-03: four end-to-end hydration bugs surfaced only via the dummy (#495 #498 #499 #500)](lessons/2026-05-03-dummy-hydration-end-to-end-bugs.md)
 - [2026-05-03: stale `usesFmt` layout branch in manifest emitter dropped only because production cascade always set the flag (#485)](lessons/2026-05-03-fmt-import-gate-stale-branch.md)
