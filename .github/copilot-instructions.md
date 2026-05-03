@@ -218,13 +218,13 @@ src/routes/
   [param]/               // route param
   [[optional]]/          // optional segment
   [...rest]/             // catch-all
-src/params/<name>.go     // param matchers              — needs //go:build sveltego
+src/params/<name>/<name>.go  // param matchers              — auto-registered via gen.Matchers()
 src/lib/                 // shared modules, $lib alias target
 src/service-worker.ts    // service worker convention
 hooks.server.go          // Handle, HandleError, HandleFetch, Reroute, Init
 ```
 
-Generated output lives under `.gen/` (gitignored). Every `.gen/*.go` starts with a provenance header — do not edit generated files directly; edit the `.svelte` source. Files under `src/routes/**` use the `_` prefix (`_page.server.go`, `_layout.server.go`, `_server.go`); Go's default toolchain skips files whose names start with `_`, so no `//go:build sveltego` constraint is required there (RFC #379 phase 1b). Files under `src/params/**` MUST still start with `//go:build sveltego` because their filenames have no `_` prefix. Codegen parses every user `.go` file via `go/parser` regardless. See ADR 0003 amendment (Phase 0i-fix) and RFC #379.
+Generated output lives under `.gen/` (gitignored). Every `.gen/*.go` starts with a provenance header — do not edit generated files directly; edit the `.svelte` source. Files under `src/routes/**` use the `_` prefix (`_page.server.go`, `_layout.server.go`, `_server.go`); Go's default toolchain skips files whose names start with `_`, so no `//go:build sveltego` constraint is required there (RFC #379 phase 1b). Param matchers live in `src/params/<name>/<name>.go` (one matcher per subdirectory; package name equals `<name>`); codegen mirrors them into `.gen/paramssrc/<name>/` and emits `gen.Matchers()` so the runtime sees them automatically — no `//go:build sveltego` constraint required (#511). Codegen parses every user `.go` file via `go/parser` regardless. See ADR 0003 amendment (Phase 0i-fix) and RFC #379.
 
 ---
 

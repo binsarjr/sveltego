@@ -1,7 +1,9 @@
 // Package params holds the matchers shipped with sveltego that are
 // resolvable in route segments without requiring a project-level
-// src/params/<name>.go file. Use [DefaultMatchers] to compose them into
-// [router.Tree.WithMatchers].
+// src/params/<name>/<name>.go file. Use [DefaultMatchers] to compose
+// them into [router.Tree.WithMatchers]; the codegen-emitted
+// `gen.Matchers()` already overlays user matchers on top of the
+// defaults.
 package params
 
 import (

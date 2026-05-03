@@ -56,7 +56,7 @@ src/routes/
   [param]/               route param
   [[optional]]/          optional segment
   [...rest]/             catch-all
-src/params/<name>.go     param matchers       — needs //go:build sveltego
+src/params/<name>/<name>.go  param matchers   — auto-registered via gen.Matchers()
 src/lib/                 shared modules ($lib alias)
 src/hooks.server.go      Handle, HandleError, HandleFetch, Reroute, Init
 ```
@@ -66,7 +66,7 @@ src/hooks.server.go      Handle, HandleError, HandleFetch, Reroute, Init
 - All route files use the `_` prefix: `_page.svelte`, `_layout.svelte`, `_error.svelte`, `_page.server.go`, `_layout.server.go`, `_server.go`.
 - The `_` prefix on `.go` files makes Go's default toolchain (build/vet/lint) skip them automatically. Codegen reads them via `go/parser` directly.
 
-User `.go` files under `src/routes/**` are auto-skipped by Go via the `_` prefix; no build constraint required there. `src/hooks.server.go` and `src/params/<name>.go` keep the `//go:build sveltego` constraint because their filenames have no `_` prefix.
+User `.go` files under `src/routes/**` are auto-skipped by Go via the `_` prefix; no build constraint required there. `src/hooks.server.go` keeps the `//go:build sveltego` constraint because its filename has no `_` prefix. Param matchers live in `src/params/<name>/<name>.go` (one matcher per subdirectory; package name equals `<name>`); they don't need the constraint either — codegen mirrors them into `.gen/paramssrc/<name>/` and `gen.Matchers()` registers them on the runtime automatically (#511).
 
 ---
 
@@ -195,7 +195,7 @@ func HandleError(ev *kit.RequestEvent, err error) (kit.SafeError, error) { ... }
 - Editing `.gen/*` directly.
 - Universal `Load` (e.g. SvelteKit's `+page.ts`). sveltego is server-only.
 - `+` prefix on any route file (e.g. SvelteKit-style `+page.svelte`, `+layout.svelte`, `+page.server.go`). Use `_` prefix instead.
-- Omitting `//go:build sveltego` on `src/hooks.server.go` or `src/params/<name>.go` (route files no longer need it).
+- Omitting `//go:build sveltego` on `src/hooks.server.go`. Route files and matcher files (`src/params/<name>/<name>.go`) no longer need it (#511).
 
 ---
 

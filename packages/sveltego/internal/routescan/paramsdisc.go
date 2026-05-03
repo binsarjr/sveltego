@@ -12,18 +12,25 @@ import (
 )
 
 // builtinMatchers names the matchers shipped in kit/params and resolved by
-// the manifest emitter without requiring a project-level src/params/<name>.go.
+// the manifest emitter without requiring a project-level
+// src/params/<name>/<name>.go.
 var builtinMatchers = map[string]struct{}{
 	"int":  {},
 	"uuid": {},
 	"slug": {},
 }
 
-// discoverMatchers walks paramsDir non-recursively and returns one
-// DiscoveredMatcher per *.go file that exports `func Match(s string) bool`.
-// Files that fail to parse, lack a Match function, or carry the wrong
-// signature are surfaced as diagnostics; valid neighbors still appear in
-// the returned slice.
+// discoverMatchers walks paramsDir and returns one DiscoveredMatcher per
+// `src/params/<name>/<name>.go` file that exports `func Match(s string)
+// bool`. The expected layout — one matcher per subdirectory — keeps the
+// directory name and the package name aligned, so user code can import
+// the matcher package without an alias and the codegen registry emit
+// can write `<name>.Match` directly.
+//
+// Files that fail to parse, lack a Match function, carry the wrong
+// signature, or whose package name disagrees with the directory name
+// are surfaced as diagnostics; valid neighbors still appear in the
+// returned slice.
 func discoverMatchers(paramsDir string) ([]DiscoveredMatcher, []Diagnostic) {
 	if paramsDir == "" {
 		return nil, nil
@@ -45,14 +52,29 @@ func discoverMatchers(paramsDir string) ([]DiscoveredMatcher, []Diagnostic) {
 		diagnostics []Diagnostic
 	)
 	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") {
+		if !e.IsDir() {
+			// Tolerate stray non-Go files (READMEs, .DS_Store, …).
+			// A flat *.go drop is a legacy layout — surface a hint so
+			// the user can migrate.
+			if strings.HasSuffix(e.Name(), ".go") &&
+				!strings.HasSuffix(e.Name(), "_test.go") {
+				name := strings.TrimSuffix(e.Name(), ".go")
+				diagnostics = append(diagnostics, Diagnostic{
+					Path: filepath.Join(paramsDir, e.Name()),
+					Message: fmt.Sprintf(
+						"matcher %q must live at src/params/%s/%s.go (one matcher per subdirectory)",
+						name, name, name,
+					),
+					Hint: "move the file into a subdirectory named after the matcher",
+				})
+			}
 			continue
 		}
-		if strings.HasSuffix(e.Name(), "_test.go") {
+		if strings.HasPrefix(e.Name(), ".") || strings.HasPrefix(e.Name(), "_") {
 			continue
 		}
-		path := filepath.Join(paramsDir, e.Name())
-		m, ds := parseMatcherFile(path)
+		dir := filepath.Join(paramsDir, e.Name())
+		m, ds := discoverMatcherDir(dir, e.Name())
 		diagnostics = append(diagnostics, ds...)
 		if m != nil {
 			matchers = append(matchers, *m)
@@ -63,7 +85,28 @@ func discoverMatchers(paramsDir string) ([]DiscoveredMatcher, []Diagnostic) {
 	return matchers, diagnostics
 }
 
-func parseMatcherFile(path string) (*DiscoveredMatcher, []Diagnostic) {
+// discoverMatcherDir parses src/params/<name>/<name>.go and returns a
+// DiscoveredMatcher when the file exports `func Match(s string) bool`.
+// Other .go files in the directory (helpers, _test.go) are ignored;
+// only the file whose basename matches the directory carries the
+// canonical Match symbol.
+func discoverMatcherDir(dir, name string) (*DiscoveredMatcher, []Diagnostic) {
+	path := filepath.Join(dir, name+".go")
+	info, err := os.Stat(path)
+	if err != nil || info.IsDir() {
+		return nil, []Diagnostic{{
+			Path: dir,
+			Message: fmt.Sprintf(
+				"matcher subdirectory %q is missing %s.go",
+				name, name,
+			),
+			Hint: fmt.Sprintf(
+				"create src/params/%s/%s.go with `package %s` and `func Match(s string) bool`",
+				name, name, name,
+			),
+		}}
+	}
+
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)
 	if err != nil {
@@ -73,7 +116,17 @@ func parseMatcherFile(path string) (*DiscoveredMatcher, []Diagnostic) {
 		}}
 	}
 
-	name := strings.TrimSuffix(filepath.Base(path), ".go")
+	if file.Name == nil || file.Name.Name != name {
+		return nil, []Diagnostic{{
+			Path: path,
+			Message: fmt.Sprintf(
+				"matcher %q has package %q; want package %s",
+				name, packageNameOrEmpty(file), name,
+			),
+			Hint: fmt.Sprintf("rename the package clause to `package %s`", name),
+		}}
+	}
+
 	fn := findFunc(file, "Match")
 	if fn == nil {
 		return nil, []Diagnostic{{
@@ -90,7 +143,18 @@ func parseMatcherFile(path string) (*DiscoveredMatcher, []Diagnostic) {
 		}}
 	}
 
-	return &DiscoveredMatcher{Name: name, Path: path}, nil
+	return &DiscoveredMatcher{
+		Name:        name,
+		Path:        path,
+		PackageName: name,
+	}, nil
+}
+
+func packageNameOrEmpty(file *ast.File) string {
+	if file == nil || file.Name == nil {
+		return ""
+	}
+	return file.Name.Name
 }
 
 func findFunc(file *ast.File, name string) *ast.FuncDecl {

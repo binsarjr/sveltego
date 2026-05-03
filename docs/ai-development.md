@@ -66,7 +66,7 @@ To copy AI templates into an existing project (without scaffolding a new tree), 
 
 LLMs default to SvelteKit-with-Node-server. Remind them:
 
-> Templates are pure Svelte/JS/TS — `let { data } = $props()`, `{data.user.name}`, `null` not `nil`. Server-side data lives in `_page.server.go` (Go), not `+page.server.ts`. Files under `src/routes/**` use the `_` prefix (`_page.server.go`, `_layout.server.go`, `_server.go`) so Go's default toolchain skips them. `src/params/**` and `hooks.server.go` still need `//go:build sveltego`.
+> Templates are pure Svelte/JS/TS — `let { data } = $props()`, `{data.user.name}`, `null` not `nil`. Server-side data lives in `_page.server.go` (Go), not `+page.server.ts`. Files under `src/routes/**` use the `_` prefix (`_page.server.go`, `_layout.server.go`, `_server.go`) so Go's default toolchain skips them. `hooks.server.go` still needs `//go:build sveltego`; param matchers live in `src/params/<name>/<name>.go` (one per subdirectory; package = `<name>`) and don't need the constraint — codegen mirrors them and `gen.Matchers()` auto-registers them on the runtime (#511).
 
 The shipped templates do this for you; the prompts below assume the rules are loaded.
 

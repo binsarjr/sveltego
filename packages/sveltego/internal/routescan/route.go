@@ -61,11 +61,16 @@ type ScannedRoute struct {
 	SSRFallback bool
 }
 
-// DiscoveredMatcher names a Go file under src/params/ that exports
-// `func Match(s string) bool`. Path is the absolute filesystem path.
+// DiscoveredMatcher names a Go file under src/params/<name>/ that
+// exports `func Match(s string) bool`. Name is the matcher name (the
+// segment after `=` in `[id=int]`); Path is the absolute filesystem
+// path of `<name>.go`; PackageName is the file's `package` clause —
+// equal to Name by convention so the codegen registry emit can call
+// `<name>.Match` after importing the user package by alias.
 type DiscoveredMatcher struct {
-	Name string
-	Path string
+	Name        string
+	Path        string
+	PackageName string
 }
 
 // ScanInput configures one scan. RoutesDir is required and must be an

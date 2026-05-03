@@ -122,8 +122,13 @@ collapsed from `+`/bare to uniform `_`.
 - The `_` prefix on `.go` files makes Go's default toolchain
   (`go build/vet/list/test`, `golangci-lint`) skip them automatically. The
   `//go:build sveltego` constraint is no longer required on per-route Go
-  files — it remains mandatory on `hooks.server.go` (project root) and
-  `src/params/<name>.go` because those filenames have no `_` prefix.
+  files — it remains mandatory on `hooks.server.go` (project root)
+  because that filename has no `_` prefix. **Update (#511, 2026-05-03):**
+  param matchers no longer need the constraint either; they live in
+  `src/params/<name>/<name>.go` (one matcher per subdirectory, package
+  name = `<name>`) and codegen mirrors them into `.gen/paramssrc/<name>/`
+  so the user's `go build` only sees the standalone matcher package
+  (which compiles cleanly without a sveltego build tag).
 - The scanner's build-tag warning (`missing //go:build sveltego`) is
   removed for route files. Constraint stripping in the user-source mirror
   emitter still runs; with no constraint to strip it is a no-op.

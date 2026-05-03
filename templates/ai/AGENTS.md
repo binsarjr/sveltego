@@ -64,7 +64,7 @@ src/routes/
   [param]/               route param
   [[optional]]/          optional segment
   [...rest]/             catch-all
-src/params/<name>.go     param matchers       — needs //go:build sveltego
+src/params/<name>/<name>.go  param matchers   — auto-registered via gen.Matchers()
 src/lib/                 shared modules ($lib alias)
 src/hooks.server.go      Handle, HandleError, HandleFetch, Reroute, Init
 ```
@@ -72,7 +72,8 @@ src/hooks.server.go      Handle, HandleError, HandleFetch, Reroute, Init
 **`_` prefix rules:**
 
 - All route files under `src/routes/` use the `_` prefix: `_page.svelte`, `_layout.svelte`, `_error.svelte`, `_page@.svelte`, `_page.server.go`, `_layout.server.go`, `_server.go`. The `_` prefix on `.go` files makes Go's default toolchain skip them automatically.
-- `src/hooks.server.go` and `src/params/<name>.go` keep the `//go:build sveltego` constraint because their filenames have no `_` prefix.
+- `src/hooks.server.go` keeps the `//go:build sveltego` constraint because its filename has no `_` prefix.
+- Param matchers live in `src/params/<name>/<name>.go` (one matcher per subdirectory; package name equals `<name>`). No `//go:build sveltego` constraint needed — codegen mirrors them into `.gen/paramssrc/<name>/` and `gen.Matchers()` registers them on the runtime automatically (#511).
 
 Without that constraint on the non-`_` files, `go build` / `go vet` / `golangci-lint` would try to compile them in a default Go module that lacks sveltego's generated context. Codegen reads every user `.go` file through `go/parser` directly regardless of the constraint.
 
@@ -221,7 +222,7 @@ Reject these at code review. They will fail at codegen or produce wrong runtime 
 - **Editing `.gen/*` files.** Generated files are overwritten on every `sveltego compile`.
 - **Universal `Load` (e.g. SvelteKit's `+page.ts`).** sveltego is server-only by design (ADR 0005). All `Load` runs on the server in Go.
 - **`+` prefix on route files** (SvelteKit-style `+page.svelte`, `+layout.svelte`, `+page.server.go`). Use `_` prefix instead (`_page.svelte`, `_layout.svelte`, `_page.server.go`).
-- **Missing `//go:build sveltego` on `src/hooks.server.go` or `src/params/<name>.go`.** The standard Go toolchain will try to compile those files (they have no `_` prefix to auto-skip them). Route files under `src/routes/**` no longer need the constraint — the `_` prefix handles skipping.
+- **Missing `//go:build sveltego` on `src/hooks.server.go`.** The standard Go toolchain will try to compile it (filename has no `_` prefix to auto-skip). Route files under `src/routes/**` no longer need the constraint — the `_` prefix handles skipping. Param matchers in `src/params/<name>/<name>.go` also do not need the constraint (#511).
 
 ---
 
