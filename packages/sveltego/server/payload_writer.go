@@ -185,6 +185,19 @@ func (s *Server) writePayloadJSON(dst *bytes.Buffer, p clientPayload) error {
 		}
 	}
 
+	// CSRFToken sits between AppVersion and VersionPoll to mirror the
+	// clientPayload struct's declaration order so writePayloadJSON stays
+	// byte-identical to encoding/json's output (asserted by
+	// TestWritePayloadByteIdenticalToJSONMarshal). Empty token is
+	// omitted to match the json:"csrfToken,omitempty" tag — routes that
+	// opt out of CSRF (or routes without Actions) leave the field blank.
+	if p.CSRFToken != "" {
+		dst.WriteString(`,"csrfToken":`)
+		if err := encodeJSONString(dst, p.CSRFToken); err != nil {
+			return fmt.Errorf("marshal csrfToken: %w", err)
+		}
+	}
+
 	if p.VersionPoll != nil {
 		if len(s.encodedVersionPoll) > 0 {
 			dst.Write(s.encodedVersionPoll)

@@ -124,6 +124,42 @@ func TestWritePayloadByteIdenticalToJSONMarshal(t *testing.T) {
 				Status:  200,
 			},
 		},
+		{
+			// CSRFToken populated covers the per-request token field the
+			// CSRF auto-inject contract (#510 / #523) ships to the client
+			// so the post-mount splicer can re-add the hidden input that
+			// Svelte 5 hydration would otherwise strip on ssr-fallback
+			// routes whose source `.svelte` lacks the input in its vDOM.
+			name: "csrf-token-set",
+			payload: clientPayload{
+				RouteID:   "/login",
+				Data:      map[string]any{},
+				URL:       "https://example.test/login",
+				Params:    map[string]string{},
+				Status:    200,
+				CSRFToken: "abc123-token-with-dashes_and-underscores",
+			},
+		},
+		{
+			// CSRFToken alongside AppVersion + VersionPoll pins the
+			// relative emit order so the splice writer keeps matching
+			// encoding/json's struct-declaration ordering (CSRFToken
+			// sits between AppVersion and VersionPoll in clientPayload).
+			name: "csrf-token-with-app-version-and-poll",
+			payload: clientPayload{
+				RouteID:    "/post/[id]",
+				Data:       loadShape{Title: "hi", Count: 7},
+				URL:        "https://example.test/post/42",
+				Params:     map[string]string{"id": "42"},
+				Status:     200,
+				Manifest:   srv.clientManifest,
+				AppVersion: "abc123",
+				CSRFToken:  "tok-xyz",
+				VersionPoll: &clientVersionPoll{
+					IntervalMS: 30000,
+				},
+			},
+		},
 	}
 
 	for _, tc := range cases {
