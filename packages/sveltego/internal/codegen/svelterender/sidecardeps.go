@@ -72,13 +72,13 @@ func EnsureSidecarDeps(srcDir string) (string, error) {
 	}
 
 	if err := materializeSidecar(srcDir, cacheDir); err != nil {
-		return "", fmt.Errorf("%w: copy sidecar to %s: %v", errSidecarDepsInstall, cacheDir, err)
+		return "", fmt.Errorf("%w (copy sidecar to %s): %w", errSidecarDepsInstall, cacheDir, err)
 	}
 	if err := runNPMInstall(cacheDir); err != nil {
-		return "", fmt.Errorf("%w: %v", errSidecarDepsInstall, err)
+		return "", fmt.Errorf("%w: %w", errSidecarDepsInstall, err)
 	}
 	if _, err := os.Stat(filepath.Join(cacheDir, "node_modules", "acorn")); err != nil {
-		return "", fmt.Errorf("%w: install completed but node_modules/acorn missing at %s: %v",
+		return "", fmt.Errorf("%w (install completed but node_modules/acorn missing at %s): %w",
 			errSidecarDepsInstall, cacheDir, err)
 	}
 	return cacheDir, nil
@@ -95,7 +95,7 @@ func sidecarCacheDir(srcDir string) (string, error) {
 	}
 	base, err := os.UserCacheDir()
 	if err != nil {
-		return "", fmt.Errorf("%w: os.UserCacheDir: %v", errSidecarUnwritableCache, err)
+		return "", fmt.Errorf("%w (os.UserCacheDir): %w", errSidecarUnwritableCache, err)
 	}
 	dir := filepath.Join(base, "sveltego", "sidecar", hash)
 	return dir, nil
@@ -199,8 +199,8 @@ func runNPMInstall(dir string) error {
 	)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("`npm %s` in %s failed: %v; output: %s",
-			strings.Join(args, " "), dir, err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("`npm %s` in %s failed (output: %s): %w",
+			strings.Join(args, " "), dir, strings.TrimSpace(string(out)), err)
 	}
 	return nil
 }
