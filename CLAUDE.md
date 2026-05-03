@@ -262,8 +262,14 @@ matchers live in `src/params/<name>/<name>.go` (one matcher per
 subdirectory; package name equals `<name>`); codegen mirrors them into
 `.gen/paramssrc/<name>/` and emits `gen.Matchers()` so the runtime sees
 them automatically — no `//go:build sveltego` constraint required.
-Codegen reads every user `.go` file through `go/parser` directly
-regardless. See ADR 0003 amendment (Phase 0i-fix) and RFC #379.
+`src/hooks.server.go` and `sveltego.config.go` are also tag-free
+(#527): they compile as standalone `hooks` / `config` packages, but
+`cmd/app/main.go` only imports the codegen mirrors at `.gen/`, so the
+user files never link into the binary. `go vet` and `golangci-lint`
+see them — a feature, not a bug. Codegen reads every user `.go` file
+through `go/parser` directly regardless of `//go:build` constraints, so
+existing projects that still carry the tag keep working — the tag is a
+harmless no-op. See ADR 0003 amendment (Phase 0i-fix) and RFC #379.
 
 ## Workflow notes
 

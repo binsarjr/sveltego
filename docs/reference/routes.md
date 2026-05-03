@@ -23,22 +23,18 @@ src/routes/
   [...rest]/                 # catch-all
 src/params/<name>/<name>.go  # param matcher            (auto-registered via gen.Matchers())
 src/lib/                     # $lib alias target
-hooks.server.go              # hooks pipeline           (`//go:build sveltego`)
+hooks.server.go              # hooks pipeline           (tag-free; standalone `hooks` package)
 ```
 
-## Build tag and the `_` prefix
+## Build tags are not required
 
-Files under `src/routes/**` use the `_` prefix (`_page.server.go`, `_layout.server.go`, `_server.go`). Go's default toolchain automatically ignores any source file whose name starts with `_`, so no build tag is required there (RFC #379 phase 1b).
+No user `.go` file needs `//go:build sveltego` (#527). The convention works because:
 
-The project-level `hooks.server.go` MUST still start with:
+- Files under `src/routes/**` use the `_` prefix. Go's default toolchain automatically ignores any source file whose name starts with `_` (RFC #379 phase 1b).
+- `src/hooks.server.go` and `sveltego.config.go` compile as standalone packages (`hooks` and `config`), but `cmd/app/main.go` only imports the codegen mirrors at `.gen/hookssrc/` and `.gen/configsrc/`. The user files are never linked into the binary. `go vet` and `golangci-lint` see them — a feature, not a bug.
+- Param matchers under `src/params/<name>/<name>.go` (one matcher per subdirectory; package name equals `<name>`) are mirrored into `.gen/paramssrc/<name>/` and registered via `gen.Matchers()` so the runtime sees them without manual `cmd/app/main.go` wiring (#511).
 
-```go
-//go:build sveltego
-```
-
-because its filename has no `_` prefix. Without the tag, Go's default toolchain (build, vet, lint) would try to compile it. Codegen reads every user `.go` file through `go/parser` regardless.
-
-Param matchers live under `src/params/<name>/<name>.go` (one matcher per subdirectory; package name equals `<name>`). They do **not** need the `//go:build sveltego` constraint — codegen mirrors each matcher into `.gen/paramssrc/<name>/` and emits `.gen/matchers.gen.go` exposing `func Matchers() router.Matchers` so the runtime gets the full registry without manual `cmd/app/main.go` wiring (#511). See ADR 0003 amendment and RFC #379.
+Codegen reads every user `.go` file through `go/parser`, which ignores `//go:build` constraints — so existing projects that still carry `//go:build sveltego` keep working. The tag is a harmless no-op now. See ADR 0003 amendment and RFC #379.
 
 ## Match precedence
 

@@ -43,8 +43,6 @@ src/routes/posts/[id]/
 **`_page.server.go`:**
 
 ```go
-//go:build sveltego
-
 package routes
 
 import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
@@ -83,8 +81,6 @@ Use when the page rarely changes (marketing, docs, blog, changelog). The build e
 **`_page.server.go`:**
 
 ```go
-//go:build sveltego
-
 package routes
 
 import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
@@ -114,8 +110,6 @@ Use when SEO is irrelevant (authenticated dashboards, internal consoles), the pa
 **`_page.server.go`:**
 
 ```go
-//go:build sveltego
-
 package routes
 
 import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"

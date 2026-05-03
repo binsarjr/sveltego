@@ -376,6 +376,29 @@ func TestRun_MainGoWiresViteAndStatic(t *testing.T) {
 	}
 }
 
+// TestRun_HooksAndConfigNoBuildTag pins the scaffold contract that
+// hooks.server.go and sveltego.config.go ship without `//go:build
+// sveltego` (#527). The tag was gratuitous: codegen reads via go/parser
+// (ignores tags), the user's main package imports the codegen mirror,
+// and the scaffolded package names (`hooks`, `config`) never link into
+// `cmd/app`. Dropping it lets `go vet` and `golangci-lint` see the user
+// files and removes one ceremony line.
+func TestRun_HooksAndConfigNoBuildTag(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := Run(Options{Dir: dir, Module: "example.com/hello"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	for _, rel := range []string{"src/hooks.server.go", "sveltego.config.go"} {
+		body, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel)))
+		if err != nil {
+			t.Fatalf("read %s: %v", rel, err)
+		}
+		if bytes.Contains(body, []byte("//go:build sveltego")) {
+			t.Errorf("%s contains forbidden //go:build sveltego tag; body:\n%s", rel, body)
+		}
+	}
+}
+
 // TestRun_PageDataMatchesJSONTagContract pins the scaffold to the
 // Go ↔ TypeScript boundary the SSR transpiler enforces (ADR 0008): every
 // PageData field carries an explicit `json:"..."` tag, and the template

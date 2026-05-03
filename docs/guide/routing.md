@@ -6,7 +6,7 @@ summary: File-based routing — _page.svelte, _page.server.go, _server.go, param
 
 # Routing
 
-sveltego uses file-based routing under `src/routes/`. The conventions match SvelteKit. Server-side Go files in `src/routes/**` use the `_` prefix (`_page.server.go`, `_layout.server.go`, `_server.go`); Go's default toolchain skips files whose names start with `_`, so no build tag is required there (RFC #379 phase 1b). Files under `src/params/**` MUST still start with `//go:build sveltego` because their filenames have no `_` prefix. Codegen parses every user `.go` file via `go/parser` regardless.
+sveltego uses file-based routing under `src/routes/`. The conventions match SvelteKit. Server-side Go files in `src/routes/**` use the `_` prefix (`_page.server.go`, `_layout.server.go`, `_server.go`); Go's default toolchain skips files whose names start with `_`, so no build tag is required there (RFC #379 phase 1b). Param matchers under `src/params/<name>/<name>.go` are also tag-free — codegen mirrors them into `.gen/paramssrc/<name>/` and `gen.Matchers()` registers them on the runtime automatically (#511). No user `.go` file needs `//go:build sveltego` (#527); existing projects that still carry it keep working — codegen reads via `go/parser`, which ignores build tags.
 
 ## Files
 
@@ -35,8 +35,6 @@ sveltego uses file-based routing under `src/routes/`. The conventions match Svel
 Built-in matchers: `int`, `uuid`, `slug`. Add your own under `src/params/`:
 
 ```go
-//go:build sveltego
-
 package params
 
 func Hex(value string) bool {

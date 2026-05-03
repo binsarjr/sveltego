@@ -40,7 +40,7 @@ Pure-Svelte templates on the client, Go-only on the server, hybrid runtime.
                                        └─→ acorn.parse → JSON AST
                                             └─→ internal/codegen/svelte_js2go (Go)
                                                  └─→ .gen/<route>_render.go  (Render(payload, data))
-server-side Go (route data)      ──→ Load(), Actions()        (//go:build sveltego)
+server-side Go (route data)      ──→ Load(), Actions()        (no build tag — `_` prefix auto-skips)
                                   └─→ codegen → .svelte.d.ts  (Go AST → TypeScript types)
 hooks.server.go                  ──→ Handle, HandleError, HandleFetch
                                           ↓
@@ -72,8 +72,6 @@ Quick examples:
 
 ```go
 // SSR (default) — _page.server.go
-//go:build sveltego
-
 func Load(ctx kit.LoadCtx) (PageData, error) {
     return PageData{Posts: fetchPosts(ctx)}, nil
 }
@@ -81,8 +79,6 @@ func Load(ctx kit.LoadCtx) (PageData, error) {
 
 ```go
 // SSG — _page.server.go
-//go:build sveltego
-
 const Prerender = true
 
 func Load(ctx kit.LoadCtx) (PageData, error) {
@@ -92,8 +88,6 @@ func Load(ctx kit.LoadCtx) (PageData, error) {
 
 ```go
 // SPA — _page.server.go
-//go:build sveltego
-
 const SSR = false
 
 func Load(ctx kit.LoadCtx) (PageData, error) {
@@ -158,8 +152,6 @@ Templates are **100% pure Svelte/JS/TS** ([ADR 0008](tasks/decisions/0008-pure-s
 Server-side, a Go file returns the `data` shape:
 
 ```go
-//go:build sveltego
-
 type PageData struct {
     User  User   `json:"user"`
     Posts []Post `json:"posts"`

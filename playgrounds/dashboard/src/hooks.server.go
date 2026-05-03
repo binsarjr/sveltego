@@ -1,5 +1,3 @@
-//go:build sveltego
-
 // Package src holds the dashboard's request-pipeline hooks. Handle
 // reads the session cookie, populates ev.Locals["user"], and short-
 // circuits unauthenticated requests targeted at protected routes.

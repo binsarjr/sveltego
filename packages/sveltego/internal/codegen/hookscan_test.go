@@ -144,6 +144,30 @@ var Handle kit.HandleFn = func(ev *kit.RequestEvent, resolve kit.ResolveFn) (*ki
 	}
 }
 
+// TestScanHooksServer_noBuildTag pins that the scanner reads tagless
+// hooks.server.go correctly. Issue #527 dropped the `//go:build sveltego`
+// requirement from the scaffold; the scanner must still register hooks
+// without it (go/parser ignores build constraints regardless).
+func TestScanHooksServer_noBuildTag(t *testing.T) {
+	t.Parallel()
+	body := `package hooks
+
+import "github.com/binsarjr/sveltego/packages/sveltego/exports/kit"
+
+func Handle(ev *kit.RequestEvent, resolve kit.ResolveFn) (*kit.Response, error) {
+	return resolve(ev)
+}
+`
+	root := writeTempHooks(t, body)
+	set, err := scanHooksServer(root)
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if !set.Handle {
+		t.Errorf("Handle = false on tagless file, want true; set = %+v", set)
+	}
+}
+
 func TestScanHooksServer_ignoresMethods(t *testing.T) {
 	t.Parallel()
 	// A receiver-bearing method named Handle must not register as a hook.
