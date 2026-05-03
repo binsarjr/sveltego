@@ -1,6 +1,7 @@
 package sveltejs2go
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -86,22 +87,12 @@ func injectImage(root *Node, variants map[string]images.Result) error {
 	return joinErrors(inj.errs)
 }
 
-// joinErrors collapses multiple lowering errors into a single error
-// whose message lists each offender on its own line. The format mirrors
-// the [Lowerer.Err] output so build drivers can surface either kind
-// uniformly.
+// joinErrors collapses multiple lowering errors via errors.Join so each
+// offender is surfaced on its own line by the default Error() output.
+// Mirrors the [Lowerer.Err] convention so build drivers can format
+// either kind uniformly.
 func joinErrors(errs []error) error {
-	if len(errs) == 0 {
-		return nil
-	}
-	if len(errs) == 1 {
-		return errs[0]
-	}
-	parts := make([]string, 0, len(errs))
-	for _, e := range errs {
-		parts = append(parts, e.Error())
-	}
-	return fmt.Errorf("%s", strings.Join(parts, "\n"))
+	return errors.Join(errs...)
 }
 
 // collectImports walks Program.body looking for ImportDeclaration nodes
@@ -298,10 +289,10 @@ func (i *imageInjector) collectStaticAttrs(obj *Node) (imageAttrs, error) {
 			return attrs, fmt.Errorf("Image props: unsupported property kind %q (only static keys allowed)", p.Type)
 		}
 		if p.Computed {
-			return attrs, fmt.Errorf("Image props: computed property keys are not supported")
+			return attrs, errors.New("Image props: computed property keys are not supported")
 		}
 		if p.Key == nil || p.Key.Type != "Identifier" {
-			return attrs, fmt.Errorf("Image props: prop key must be a bare identifier")
+			return attrs, errors.New("Image props: prop key must be a bare identifier")
 		}
 		name := p.Key.Name
 		val := p.Value
@@ -322,14 +313,14 @@ func (i *imageInjector) collectStaticAttrs(obj *Node) (imageAttrs, error) {
 		case "width":
 			n, ok := literalIntish(val)
 			if !ok {
-				return attrs, fmt.Errorf("Image width must be a number literal")
+				return attrs, errors.New("Image width must be a number literal")
 			}
 			attrs.width = n
 			attrs.hasW = true
 		case "height":
 			n, ok := literalIntish(val)
 			if !ok {
-				return attrs, fmt.Errorf("Image height must be a number literal")
+				return attrs, errors.New("Image height must be a number literal")
 			}
 			attrs.height = n
 			attrs.hasH = true
@@ -346,14 +337,14 @@ func (i *imageInjector) collectStaticAttrs(obj *Node) (imageAttrs, error) {
 		case "class":
 			s, ok := literalString(val)
 			if !ok {
-				return attrs, fmt.Errorf("Image class must be a static string (dynamic class= is not supported)")
+				return attrs, errors.New("Image class must be a static string (dynamic class= is not supported)")
 			}
 			attrs.classAttr = s
 			attrs.hasClass = true
 		case "sizes":
 			s, ok := literalString(val)
 			if !ok {
-				return attrs, fmt.Errorf("Image sizes must be a static string")
+				return attrs, errors.New("Image sizes must be a static string")
 			}
 			attrs.sizes = s
 			attrs.hasSizes = true
@@ -371,7 +362,7 @@ func (i *imageInjector) collectStaticAttrs(obj *Node) (imageAttrs, error) {
 		}
 	}
 	if attrs.src == "" {
-		return attrs, fmt.Errorf("Image is missing required src attribute")
+		return attrs, errors.New("Image is missing required src attribute")
 	}
 	return attrs, nil
 }
