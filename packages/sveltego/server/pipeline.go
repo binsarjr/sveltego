@@ -726,7 +726,7 @@ func (s *Server) renderSvelteShell(r *http.Request, ev *kit.RequestEvent, route 
 
 	buf.WriteString(s.shellHead)
 	if route.ClientKey != "" {
-		if tags := s.viteManifest.assetTags(route.ClientKey, s.viteBase); tags != "" {
+		if tags := s.viteManifest.headAssetTags(route.ClientKey, s.viteBase); tags != "" {
 			buf.WriteString(tags)
 		}
 	}
@@ -738,6 +738,11 @@ func (s *Server) renderSvelteShell(r *http.Request, ev *kit.RequestEvent, route 
 		payload.Deps = lctx.CollectDeps()
 	}
 	s.emitPayloadScriptTag(buf, payload)
+	if route.ClientKey != "" {
+		if tag := s.viteManifest.bodyEntryTag(route.ClientKey, s.viteBase); tag != "" {
+			buf.WriteString(tag)
+		}
+	}
 	if s.serviceWorker != "" {
 		buf.WriteString(s.serviceWorker)
 	}
@@ -867,11 +872,15 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 		if lctx != nil {
 			payload.Deps = lctx.CollectDeps()
 		}
-		var assetTags string
+		var (
+			headAssetTags string
+			bodyEntryTag  string
+		)
 		if route.ClientKey != "" {
-			assetTags = s.viteManifest.assetTags(route.ClientKey, s.viteBase)
+			headAssetTags = s.viteManifest.headAssetTags(route.ClientKey, s.viteBase)
+			bodyEntryTag = s.viteManifest.bodyEntryTag(route.ClientKey, s.viteBase)
 		}
-		if err := s.renderStreaming(w, r, ev, inner, streams, status, headBytes, assetTags, payload); err != nil {
+		if err := s.renderStreaming(w, r, ev, inner, streams, status, headBytes, headAssetTags, bodyEntryTag, payload); err != nil {
 			if errors.Is(err, kit.ErrClientGone) {
 				return nil, errStreamingWrote
 			}
@@ -898,7 +907,7 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 		buf.WriteRaw(bytesAsString(headBytes))
 	}
 	if route != nil && route.ClientKey != "" {
-		if tags := s.viteManifest.assetTags(route.ClientKey, s.viteBase); tags != "" {
+		if tags := s.viteManifest.headAssetTags(route.ClientKey, s.viteBase); tags != "" {
 			buf.WriteString(tags)
 		}
 	}
@@ -912,6 +921,11 @@ func (s *Server) renderPage(w http.ResponseWriter, r *http.Request, ev *kit.Requ
 		payload.Deps = lctx.CollectDeps()
 	}
 	s.emitPayloadScriptTag(buf, payload)
+	if route != nil && route.ClientKey != "" {
+		if tag := s.viteManifest.bodyEntryTag(route.ClientKey, s.viteBase); tag != "" {
+			buf.WriteString(tag)
+		}
+	}
 	if s.serviceWorker != "" {
 		buf.WriteString(s.serviceWorker)
 	}
@@ -1058,11 +1072,19 @@ func isClientGone(ctx context.Context, err error) bool {
 // shellTail closes the document only after every stream resolves or
 // fails, so the response body is well-formed HTML even on timeout.
 //
+// headAssetTags carries the per-route stylesheet + modulepreload links
+// (head-belonging tags); bodyEntryTag carries the entry <script
+// type="module"> that lands at end of body just before the shell tail.
+// Splitting them matches SvelteKit's %sveltekit.head% / %sveltekit.body%
+// convention so the browser paints SSR HTML before any JS chunk
+// executes while still discovering the chunks during HTML parse via the
+// modulepreload hints.
+//
 // When a write fails because the client disconnected, renderStreaming
 // cancels any pending streams, logs once at debug level, and returns
 // kit.ErrClientGone. The caller must treat that as errStreamingWrote so
 // HandleError is not invoked — a disconnect is not a server fault.
-func (s *Server) renderStreaming(w http.ResponseWriter, r *http.Request, ev *kit.RequestEvent, inner func(*render.Writer) error, streams []streamedField, status int, headBytes []byte, assetTags string, payload clientPayload) error {
+func (s *Server) renderStreaming(w http.ResponseWriter, r *http.Request, ev *kit.RequestEvent, inner func(*render.Writer) error, streams []streamedField, status int, headBytes []byte, headAssetTags, bodyEntryTag string, payload clientPayload) error {
 	if ev.Cookies != nil {
 		ev.Cookies.Apply(w)
 	}
@@ -1078,8 +1100,8 @@ func (s *Server) renderStreaming(w http.ResponseWriter, r *http.Request, ev *kit
 	if len(headBytes) > 0 {
 		buf.WriteRaw(bytesAsString(headBytes))
 	}
-	if assetTags != "" {
-		buf.WriteString(assetTags)
+	if headAssetTags != "" {
+		buf.WriteString(headAssetTags)
 	}
 	buf.WriteString(s.shellMid)
 	if err := inner(buf); err != nil {
@@ -1124,6 +1146,9 @@ func (s *Server) renderStreaming(w http.ResponseWriter, r *http.Request, ev *kit
 		}
 	}
 
+	if bodyEntryTag != "" {
+		buf.WriteString(bodyEntryTag)
+	}
 	if s.serviceWorker != "" {
 		buf.WriteString(s.serviceWorker)
 	}

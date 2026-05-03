@@ -166,6 +166,33 @@ src/routes/about/
 - **Mixing modes in a layout chain.** A layout's data flows into every child page regardless of mode. SSG children that read SSR-only layout fields fail at build time with a clear error.
 - **Authoring SPA + Static together.** Both result in the client doing the rendering work. Pick Static when the page has no server data (no `_page.server.go`); pick SPA (`SSR: false`) when the page has server data that should not be SSR'd.
 
+## App-shell template (`app.html`)
+
+Every sveltego app ships an `app.html` shell with two placeholders the runtime fills on every render:
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>my app</title>
+  %sveltego.head%
+</head>
+<body>
+  %sveltego.body%
+</body>
+</html>
+```
+
+What expands where:
+
+- **`%sveltego.head%`** — head-belonging tags. Per-route stylesheet links and `<link rel="modulepreload">` hints so the browser can discover and parallel-fetch the chunks during HTML parse, plus any `<svelte:head>` content from the page and its layout chain (deduped `<title>`, meta tags, etc.).
+- **`%sveltego.body%`** — body content, expanded inline at the placeholder location, then the inline JSON hydration payload (`<script id="sveltego-data" type="application/json">…</script>`), then the per-route entry `<script type="module">`. The entry script lands at the **end of `<body>`** (just before `</body>`), matching SvelteKit's `%sveltekit.body%` convention. Putting the entry script after the SSR'd body lets the browser paint the page before any JS chunk executes (better LCP / FCP) and avoids hydration-timing races where modules try to mount markup the browser hasn't finished parsing.
+
+The `modulepreload` hints stay in `<head>` regardless — they are zero-execution, parse-time discovery only, and parallel-fetching the chunks during HTML parse is strictly faster than discovering them at end of body.
+
+For streaming (`kit.Streamed[T]` in a `Load` result) the order is the same: head + SSR body + payload first, then `<script>__sveltego__resolve(…)</script>` patches as each stream resolves, then the entry `<script type="module">` at end of body. The client glue queues incoming resolve calls until the entry module loads.
+
 ## adapter-static
 
 `packages/adapter-static` is currently a stub tracked by [#65](https://github.com/binsarjr/sveltego/issues/65). Until it lands, a static-output deploy ships the entire `Prerender: true` route set by running `sveltego build` and uploading the contents of the build's `static/` directory; the SSR Go binary is not needed if every route is `Prerender: true`. This is awkward but accurate — the prerender engine is live; the adapter wrapper is the missing piece.
