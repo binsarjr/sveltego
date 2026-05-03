@@ -5,19 +5,18 @@ import (
 	"testing"
 )
 
-func TestGenerateWrapper_singleLayoutNests(t *testing.T) {
+func TestGenerateChainWrapper_singleLayoutNests(t *testing.T) {
 	t.Parallel()
 
-	src := GenerateWrapper(WrapperOptions{
+	src := GenerateChainWrapper(ChainWrapperOptions{
 		LayoutImports: []string{"../../../src/routes/_layout.svelte"},
-		PagePath:      "../../../src/routes/_page.svelte",
-		StoreImport:   "../../__router/wrapper-store.svelte",
+		StoreImport:   "../wrapper-store.svelte",
 	})
 
 	for _, want := range []string{
 		`import L0 from "../../../src/routes/_layout.svelte";`,
-		`import Page from "../../../src/routes/_page.svelte";`,
-		`import { wrapperState } from "../../__router/wrapper-store.svelte";`,
+		`import { wrapperState } from "../wrapper-store.svelte";`,
+		`const Page = $derived(wrapperState.Page);`,
 		`<L0 data={wrapperState.layoutData[0] ?? {}}>`,
 		`<Page data={wrapperState.data} form={wrapperState.form} />`,
 		`</L0>`,
@@ -28,46 +27,46 @@ func TestGenerateWrapper_singleLayoutNests(t *testing.T) {
 	}
 }
 
-// TestGenerateWrapper_takesNoProps defends Bug 2 fix: any top-level
-// reference to `data`/`layoutData`/`form` props in the wrapper trips
-// Svelte 5's `state_referenced_locally` analyzer. Moving the seed into
-// `$effect` defers it past first render and breaks hydration. The fix
-// keeps the wrapper as a pure rune consumer — entry.ts owns the
-// `_setWrapperState` seed BEFORE mount runs (see
-// TestGenerateClientEntry_wrapperPathSwapsRoot).
-func TestGenerateWrapper_takesNoProps(t *testing.T) {
+// TestGenerateChainWrapper_takesNoProps locks in the rune-only contract:
+// the wrapper must not declare or write to any prop or rune field at the
+// top level. Cross-route same-chain SPA navs reuse the wrapper instance,
+// so the SPA router writes to wrapperState directly — top-level prop
+// references would either trip Svelte 5's `state_referenced_locally`
+// analyzer or capture stale module references on the swap.
+func TestGenerateChainWrapper_takesNoProps(t *testing.T) {
 	t.Parallel()
-	src := GenerateWrapper(WrapperOptions{
+	src := GenerateChainWrapper(ChainWrapperOptions{
 		LayoutImports: []string{"../../../src/routes/_layout.svelte"},
-		PagePath:      "../../../src/routes/_page.svelte",
-		StoreImport:   "../../__router/wrapper-store.svelte",
+		StoreImport:   "../wrapper-store.svelte",
 	})
 	for _, banned := range []string{
 		"$props()",
-		"$effect(() => {",
 		"wrapperState.data =",
 		"wrapperState.layoutData =",
 		"wrapperState.form =",
+		"wrapperState.Page =",
+		// No static page import — page module reference flows in via the
+		// wrapper-state rune, set by entry.ts before mount and rewritten
+		// by the SPA router on cross-route same-chain nav (#518).
+		"import Page from",
 	} {
 		if strings.Contains(src, banned) {
-			t.Errorf("wrapper must not contain %q (top-level prop refs trip state_referenced_locally):\n%s", banned, src)
+			t.Errorf("wrapper must not contain %q (chain wrapper is rune-only):\n%s", banned, src)
 		}
 	}
 }
 
-func TestGenerateWrapper_nestedLayoutsComposeOuterToInner(t *testing.T) {
+func TestGenerateChainWrapper_nestedLayoutsComposeOuterToInner(t *testing.T) {
 	t.Parallel()
 
-	src := GenerateWrapper(WrapperOptions{
+	src := GenerateChainWrapper(ChainWrapperOptions{
 		LayoutImports: []string{
 			"../../../src/routes/_layout.svelte",
 			"../../../src/routes/admin/_layout.svelte",
 		},
-		PagePath:    "../../../src/routes/admin/users/_page.svelte",
-		StoreImport: "../../../__router/wrapper-store.svelte",
+		StoreImport: "../wrapper-store.svelte",
 	})
 
-	// Outer layout opens before inner; inner closes before outer.
 	posL0Open := strings.Index(src, "<L0 ")
 	posL1Open := strings.Index(src, "<L1 ")
 	posPage := strings.Index(src, "<Page ")
@@ -85,111 +84,42 @@ func TestGenerateWrapper_nestedLayoutsComposeOuterToInner(t *testing.T) {
 	}
 }
 
-// TestGenerateWrapper_snapshotIsReExported guards Bug 1 fix: when the
-// page's `<script module>` exports `snapshot`, the wrapper must
-// re-export it via its own `<script module>` block (Svelte 5 only
-// recognises module-level exports there). The instance script must not
-// carry the export — that path is parsed as the legacy props syntax and
-// emits no ESM export, breaking the wrapper-as-snapshot bridge for
-// entry.ts (vite errors with `"snapshot" is not exported by ".../wrapper.svelte"`).
-func TestGenerateWrapper_snapshotIsReExported(t *testing.T) {
+// TestGenerateChainWrapper_dynamicPageReference defends the #518
+// hydration-parity contract: the wrapper renders the page through a
+// $derived rune reference, NOT through `<svelte:component>`,
+// `{#if}` / `{@const}` blocks, or a static import. Dynamic-component
+// reactivity is what lets a cross-route same-chain SPA nav swap the
+// page without unmounting the wrapper instance — that reuse is the
+// mechanism that preserves layout `$state` across `/post/1 → /post/2`.
+// Static imports would freeze the wrapper to a single page module per
+// chain and reintroduce the bug from PR #517's deferral note.
+func TestGenerateChainWrapper_dynamicPageReference(t *testing.T) {
 	t.Parallel()
-
-	src := GenerateWrapper(WrapperOptions{
+	src := GenerateChainWrapper(ChainWrapperOptions{
 		LayoutImports: []string{"../../../src/routes/_layout.svelte"},
-		PagePath:      "../../../src/routes/snapshot/_page.svelte",
-		StoreImport:   "../../__router/wrapper-store.svelte",
-		ModuleExports: []string{"snapshot"},
+		StoreImport:   "../wrapper-store.svelte",
 	})
-	if !strings.Contains(src, `<script module lang="ts">`) {
-		t.Errorf("missing <script module> block:\n%s", src)
+	if !strings.Contains(src, "$derived(wrapperState.Page)") {
+		t.Errorf("missing $derived page reference:\n%s", src)
 	}
-	if !strings.Contains(src, `export { snapshot } from "../../../src/routes/snapshot/_page.svelte";`) {
-		t.Errorf("missing snapshot re-export-from in module block:\n%s", src)
-	}
-	// The snapshot must NOT be re-exported from inside the instance
-	// `<script lang="ts">` — Svelte 5 reads that as the legacy props
-	// syntax and emits no ESM export.
-	moduleEnd := strings.Index(src, "</script>")
-	if moduleEnd < 0 {
-		t.Fatalf("malformed wrapper:\n%s", src)
-	}
-	instance := src[moduleEnd:]
-	if strings.Contains(instance, "export { snapshot }") {
-		t.Errorf("snapshot must not be re-exported from instance script:\n%s", src)
-	}
-	// Page must still be the default import for component composition.
-	if !strings.Contains(src, `import Page from "../../../src/routes/snapshot/_page.svelte";`) {
-		t.Errorf("missing Page default import in instance script:\n%s", src)
-	}
-}
-
-// TestGenerateWrapper_multipleModuleExportsReExported covers a synthetic
-// `<script module>` exporting more than just snapshot — the wrapper
-// must propagate every name through the same module-block re-export
-// (Bug 1 generalisation; the contract isn't snapshot-specific).
-func TestGenerateWrapper_multipleModuleExportsReExported(t *testing.T) {
-	t.Parallel()
-	src := GenerateWrapper(WrapperOptions{
-		LayoutImports: []string{"../../../src/routes/_layout.svelte"},
-		PagePath:      "../../../src/routes/multi/_page.svelte",
-		StoreImport:   "../../__router/wrapper-store.svelte",
-		ModuleExports: []string{"alpha", "beta", "snapshot"},
-	})
-	if !strings.Contains(src, `export { alpha, beta, snapshot } from "../../../src/routes/multi/_page.svelte";`) {
-		t.Errorf("missing combined module-export re-export:\n%s", src)
-	}
-}
-
-// TestGenerateWrapper_noModuleBlockWhenNoExports keeps the wrapper free
-// of an empty `<script module>` block when the page has no module-level
-// exports — Svelte 5 tolerates an empty module script but it is noise
-// in the generated output.
-func TestGenerateWrapper_noModuleBlockWhenNoExports(t *testing.T) {
-	t.Parallel()
-	src := GenerateWrapper(WrapperOptions{
-		LayoutImports: []string{"../../../src/routes/_layout.svelte"},
-		PagePath:      "../../../src/routes/_page.svelte",
-		StoreImport:   "../../__router/wrapper-store.svelte",
-	})
-	if strings.Contains(src, `<script module`) {
-		t.Errorf("wrapper should not emit <script module> when ModuleExports is empty:\n%s", src)
-	}
-}
-
-// TestGenerateWrapper_noDynamicComponentsOnFirstRender defends the
-// hydration-parity contract: the wrapper must render the page through a
-// STATIC `<Page>` reference, never through `{#if}`, `{@const}`, or
-// `<svelte:component>` dispatch. Dynamic dispatch injects Svelte
-// hydration comment markers that are absent from the SSR HTML and trips
-// `svelte/e/hydration_mismatch` warnings on first paint (regression
-// surfaced on basic playground's inert _layout.svelte).
-func TestGenerateWrapper_noDynamicComponentsOnFirstRender(t *testing.T) {
-	t.Parallel()
-	src := GenerateWrapper(WrapperOptions{
-		LayoutImports: []string{"../../../src/routes/_layout.svelte"},
-		PagePath:      "../../../src/routes/_page.svelte",
-		StoreImport:   "../../__router/wrapper-store.svelte",
-	})
-	for _, banned := range []string{"{#if", "{@const", "<svelte:component", "<PageSlot"} {
+	for _, banned := range []string{"<svelte:component", "{#if wrapperState.Page", "import Page from"} {
 		if strings.Contains(src, banned) {
-			t.Errorf("wrapper must not emit %q (hydration-mismatch hazard):\n%s", banned, src)
+			t.Errorf("wrapper must not use %q (cross-route layout-state regression):\n%s", banned, src)
 		}
 	}
 }
 
-func TestGenerateWrapper_deterministic(t *testing.T) {
+func TestGenerateChainWrapper_deterministic(t *testing.T) {
 	t.Parallel()
 
-	in := WrapperOptions{
+	in := ChainWrapperOptions{
 		LayoutImports: []string{"../a.svelte", "../b.svelte"},
-		PagePath:      "../page.svelte",
 		StoreImport:   "../store.svelte",
 	}
-	a := GenerateWrapper(in)
-	b := GenerateWrapper(in)
+	a := GenerateChainWrapper(in)
+	b := GenerateChainWrapper(in)
 	if a != b {
-		t.Fatal("GenerateWrapper non-deterministic")
+		t.Fatal("GenerateChainWrapper non-deterministic")
 	}
 }
 
@@ -231,21 +161,18 @@ func TestGenerateWrapperStoreModule_runeShape(t *testing.T) {
 	src := GenerateWrapperStoreModule()
 	for _, want := range []string{
 		"export const wrapperState = $state",
+		"Page: Component<any> | null;",
 		"data: unknown;",
 		"layoutData: unknown[];",
 		"form: unknown;",
 		"export function _setWrapperState",
+		"wrapperState.Page = next.Page;",
 		"wrapperState.data = next.data;",
 		"wrapperState.layoutData = next.layoutData;",
 		"wrapperState.form = next.form;",
 	} {
 		if !strings.Contains(src, want) {
 			t.Errorf("wrapper-store missing %q:\n%s", want, src)
-		}
-	}
-	for _, banned := range []string{"page: any;", "wrapperState.page", "next.page"} {
-		if strings.Contains(src, banned) {
-			t.Errorf("wrapper-store still references dropped page field (%q):\n%s", banned, src)
 		}
 	}
 }
@@ -256,19 +183,26 @@ func TestGenerateClientEntry_wrapperPathSwapsRoot(t *testing.T) {
 	src := GenerateClientEntry(ClientEntryOptions{
 		RelSveltePath:  "../../../src/routes/admin/_page.svelte",
 		RelRouterPath:  "../../__router/router",
-		RelWrapperPath: "./wrapper.svelte",
+		RelWrapperPath: "../__chain/abc123def4567890/wrapper.svelte",
 		LayoutChainKey: "abc123def4567890",
 	})
-	if !strings.Contains(src, `import Root from "./wrapper.svelte";`) {
-		t.Errorf("expected Root import to be the wrapper, got:\n%s", src)
+	// Wrapper is mounted as Root; the page module is imported separately
+	// so entry.ts can seed it into the wrapper-state rune (#518 cross-route
+	// preservation). Both imports are required.
+	if !strings.Contains(src, `import Root from "../__chain/abc123def4567890/wrapper.svelte";`) {
+		t.Errorf("expected Root import to be the chain wrapper, got:\n%s", src)
 	}
-	// Wrapper takes zero props — entry.ts seeds the rune store before
-	// mount via _setWrapperState (#508 hydration parity).
+	if !strings.Contains(src, `import Page from "../../../src/routes/admin/_page.svelte";`) {
+		t.Errorf("entry must import the page module so it can seed wrapperState.Page:\n%s", src)
+	}
 	if !strings.Contains(src, "import { _setWrapperState } from") {
 		t.Errorf("entry.ts must import _setWrapperState to seed the wrapper rune before mount:\n%s", src)
 	}
 	if !strings.Contains(src, "_setWrapperState({") {
 		t.Errorf("entry.ts must call _setWrapperState with the payload before mount:\n%s", src)
+	}
+	if !strings.Contains(src, "Page,") {
+		t.Errorf("_setWrapperState seed must include the Page module reference:\n%s", src)
 	}
 	if !strings.Contains(src, "  props: {},\n") {
 		t.Errorf("wrapped mount must pass empty props (rune is the source of truth):\n%s", src)
@@ -302,9 +236,12 @@ func TestGenerateRouter_emitsChainKeysMap(t *testing.T) {
 	t.Parallel()
 	src := GenerateRouter(RouterOptions{
 		Routes: map[string]string{
-			"/":      "../../routes/_page/wrapper.svelte",
-			"/about": "../../routes/about/_page/wrapper.svelte",
+			"/":      "../../routes/_page.svelte",
+			"/about": "../../routes/about/_page.svelte",
 			"/api":   "../../routes/api/_page.svelte",
+		},
+		ChainWrappers: map[string]string{
+			"deadbeef00000000": "../__chain/deadbeef00000000/wrapper.svelte",
 		},
 		ChainKeys: map[string]string{
 			"/":      "deadbeef00000000",
@@ -326,5 +263,43 @@ func TestGenerateRouter_emitsChainKeysMap(t *testing.T) {
 	}
 	if !strings.Contains(src, "_setWrapperState({") {
 		t.Errorf("missing _setWrapperState call in same-chain branch:\n%s", src)
+	}
+	if !strings.Contains(src, "const chainWrappers: Record<string, () => Promise<{ default: any }>> = {") {
+		t.Errorf("missing chainWrappers loader table:\n%s", src)
+	}
+	if !strings.Contains(src, `"deadbeef00000000": () => import("../__chain/deadbeef00000000/wrapper.svelte")`) {
+		t.Errorf("missing wrapper loader entry:\n%s", src)
+	}
+}
+
+// TestGenerateRouter_sameChainSwapsPage pins the cross-route same-chain
+// preservation contract from #518: when a navigation lands on a route
+// whose chainKey matches the currently mounted wrapper's, the router
+// loads the destination page module, writes `Page` + payload into the
+// wrapper-state rune, and skips the unmount/mount path.
+func TestGenerateRouter_sameChainSwapsPage(t *testing.T) {
+	t.Parallel()
+	src := GenerateRouter(RouterOptions{
+		Routes: map[string]string{
+			"/post/[id]":      "../../routes/post/[id]/_page.svelte",
+			"/post/[id]/edit": "../../routes/post/[id]/edit/_page.svelte",
+		},
+		ChainKeys: map[string]string{
+			"/post/[id]":      "abc",
+			"/post/[id]/edit": "abc",
+		},
+		ChainWrappers: map[string]string{
+			"abc": "../__chain/abc/wrapper.svelte",
+		},
+	})
+	for _, want := range []string{
+		"const sameChain =",
+		"nextChainKey === currentChainKey",
+		"_setWrapperState({",
+		"Page: pageMod.default",
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("router missing same-chain swap plumbing %q:\n%s", want, src)
+		}
 	}
 }

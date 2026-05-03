@@ -11,14 +11,15 @@ import (
 type RouterOptions struct {
 	// Routes maps each route's canonical pattern (matching the server's
 	// router.Route.Pattern, also surfaced as `routeId` in the hydration
-	// payload) to the path of its mount target — either a per-route
-	// wrapper.svelte (when the route has a layout chain, see #508) or
-	// the bare _page.svelte. Both paths resolve to a Svelte component
-	// module relative to the directory containing router.ts.
+	// payload) to the path of its **page module** (`_page.svelte`)
+	// relative to the directory containing router.ts. Routes without a
+	// layout chain mount the page module directly; routes with a chain
+	// mount the chainKey-shared wrapper instead and the page module is
+	// loaded into the wrapper-state rune (#518).
 	//
-	// The generated module uses dynamic imports so each route's component
-	// remains in its own Vite chunk; navigation only pulls in the chunk
-	// for the destination route.
+	// The generated module uses dynamic imports so each route's page
+	// stays in its own Vite chunk; navigation only pulls in the chunk
+	// for the destination route's page.
 	Routes map[string]string
 	// SnapshotRoutes flags route patterns whose _page.svelte exports a
 	// `snapshot` from `<script module>`. The generated router pulls the
@@ -32,9 +33,19 @@ type RouterOptions struct {
 	// layout chain map to the empty string. The router compares the
 	// destination's chain key against the currently mounted route's
 	// chain key on every navigation: equal keys mean the wrapper
-	// component is identical, so the router updates the shared
-	// wrapper-state rune instead of unmounting (#508).
+	// component is identical, so the router loads the destination page
+	// module and writes `Page` + payload into the wrapper-state rune
+	// instead of unmounting — preserving any layout-level $state across
+	// `/post/1 → /post/2`-shaped navs (#518).
 	ChainKeys map[string]string
+	// ChainWrappers maps each layout-chain identifier to the path of
+	// the chainKey-shared wrapper.svelte module relative to router.ts.
+	// One wrapper per chainKey covers every route in the chain. The
+	// generated router uses these for the initial mount and for the
+	// unmount+mount path on cross-chain navigation. Routes whose
+	// ChainKeys entry is empty have no wrapper here; the router mounts
+	// their bare page module directly.
+	ChainWrappers map[string]string
 }
 
 // GenerateRouter returns the contents of a per-app SPA router module that
@@ -73,8 +84,8 @@ func GenerateRouter(opts RouterOptions) string {
 	b.WriteString("import { _setPage, _setNavigating, type AppError } from './state.svelte';\n")
 	// Same module-extension story for the wrapper-state rune — the
 	// SPA router writes into it on every same-chain navigation so the
-	// mounted wrapper.svelte reactively re-renders the page slot
-	// without tearing down the layout chain (#508).
+	// mounted wrapper.svelte reactively swaps the page slot without
+	// tearing down the layout chain (#508 + #518).
 	b.WriteString("import { _setWrapperState } from './wrapper-store.svelte';\n\n")
 
 	b.WriteString("type Segment = { kind: number; name?: string; value?: string };\n")
@@ -95,7 +106,7 @@ func GenerateRouter(opts RouterOptions) string {
 	// chainKeys baked in at codegen time keys each route pattern to its
 	// layout-chain identifier. Empty string = no wrapper (page mounts
 	// directly). Routes sharing a key share a wrapper module, which
-	// lets the runtime swap pages without unmounting the layout (#508).
+	// lets the runtime swap pages without unmounting the layout (#518).
 	b.WriteString("const chainKeys: Record<string, string> = {\n")
 	for _, k := range sortedKeys(opts.ChainKeys) {
 		fmt.Fprintf(&b, "  %q: %q,\n", k, opts.ChainKeys[k])
@@ -117,16 +128,27 @@ func GenerateRouter(opts RouterOptions) string {
 	b.WriteString("};\n\n")
 
 	b.WriteString("type Snapshot = { capture?: () => unknown; restore?: (state: unknown) => void };\n")
-	// `page` is the wrapper's named re-export of the inner _page.svelte
-	// component (see GenerateWrapper). Routes without a layout chain
-	// don't ship a wrapper, so `page` is undefined for those and the
-	// router falls back to mounting `default` (the page itself) full-tree.
-	b.WriteString("type LoadedModule = { default: any; snapshot?: Snapshot; page?: any };\n")
-	b.WriteString("type Loader = () => Promise<LoadedModule>;\n\n")
+	// PageModule is the dynamic import shape returned by each per-route
+	// page loader: `default` is the Svelte 5 component constructor;
+	// `snapshot` is the optional `<script module>` snapshot export
+	// (#84). Routes without a wrapper (no layout chain) mount
+	// `default` directly with data/form props; routes with a wrapper
+	// hand `default` to the chainKey-shared wrapper through the
+	// wrapper-state rune so a same-chain SPA nav swaps the slot
+	// without unmounting the layout (#518).
+	b.WriteString("type PageModule = { default: any; snapshot?: Snapshot };\n")
+	b.WriteString("type PageLoader = () => Promise<PageModule>;\n")
+	b.WriteString("type WrapperLoader = () => Promise<{ default: any }>;\n\n")
 
-	b.WriteString("const loaders: Record<string, Loader> = {\n")
+	b.WriteString("const pageLoaders: Record<string, PageLoader> = {\n")
 	for _, k := range sortedKeys(opts.Routes) {
 		fmt.Fprintf(&b, "  %q: () => import(%q),\n", k, opts.Routes[k])
+	}
+	b.WriteString("};\n\n")
+
+	b.WriteString("const chainWrappers: Record<string, () => Promise<{ default: any }>> = {\n")
+	for _, ck := range SortedChainKeys(opts.ChainWrappers) {
+		fmt.Fprintf(&b, "  %q: () => import(%q),\n", ck, opts.ChainWrappers[ck])
 	}
 	b.WriteString("};\n\n")
 
@@ -183,24 +205,24 @@ const routerRuntime = `let mounted: any = null;
 let manifest: ManifestEntry[] = [];
 let activeAbort: AbortController | null = null;
 const cache = new Map<string, Payload>();
-const chunkCache = new Map<string, Promise<LoadedModule>>();
+const pageCache = new Map<string, Promise<PageModule>>();
+const wrapperCache = new Map<string, Promise<{ default: any }>>();
 const scrolls = new Map<number, [number, number]>();
 const snapshots = new Map<number, unknown>();
 let nextHistoryId = 1;
 let currentHistoryId = 0;
 let currentSnapshot: Snapshot | null = null;
 // currentChainKey is the layout-chain identifier of the currently
-// mounted wrapper. Same-route reactive refreshes (invalidate(),
-// query-string nav) write through the wrapper-state rune so the
-// layout chain re-renders without unmounting; navigations to a
-// different routeId always go through the unmount + mount path
-// because each route owns a wrapper module with a STATIC <Page>
-// import — reusing the wrapper instance across routes would render
-// the prior route's page against the new payload (#508).
+// mounted wrapper. Both same-route reactive refreshes
+// (invalidate(), query-string nav) and cross-route same-chain SPA
+// navs write through the wrapper-state rune so the wrapper instance
+// is reused — preserving any layout-level Svelte 5 $state across
+// '/post/1 -> /post/2' shaped navs (#518). Cross-chain navs always
+// unmount + mount because the wrapper module differs.
 let currentChainKey: string = '';
-// currentRouteId tracks the routeId of the currently mounted wrapper
-// so the same-chain shortcut fires only on a same-route reactive
-// refresh, never on a cross-route navigation within the same chain.
+// currentRouteId tracks the routeId of the currently mounted page so
+// state-module updates and snapshot accessor swaps stay in lock-step
+// with whichever page module the wrapper is rendering.
 let currentRouteId: string = '';
 const PREFETCH_CACHE_MAX = 30;
 const PREFETCH_HOVER_DELAY_MS = 150;
@@ -427,9 +449,14 @@ async function navigate(url: URL, opts: NavigateOpts): Promise<void> {
 
   const entry = matchManifest(url.pathname);
   const routeId = entry?.pattern ?? payload.routeId;
-  let mod: LoadedModule;
+  const nextChainKey = chainKeys[routeId] ?? '';
+  let pageMod: PageModule;
+  let wrapperMod: { default: any } | null = null;
   try {
-    mod = await loadChunk(routeId);
+    pageMod = await loadPage(routeId);
+    if (nextChainKey !== '' && nextChainKey !== currentChainKey) {
+      wrapperMod = await loadWrapper(nextChainKey);
+    }
   } catch {
     finishNavigating();
     location.assign(url.href);
@@ -450,27 +477,26 @@ async function navigate(url: URL, opts: NavigateOpts): Promise<void> {
 
   const target = document.body;
   fireLeaveCallbacks();
-  // Same-route reactive refresh shortcut (#508): when the navigation
-  // resolves to the SAME routeId currently mounted (e.g. a goto with
-  // a new query string, or invalidate-driven refetch), mutate the
-  // wrapper-state rune in place so the layout chain re-renders
-  // against the new payload without unmounting. Cross-route
-  // navigation — even within the same layout chain — must still go
-  // through unmount + mount because each route owns a wrapper module
-  // with a STATIC <Page> import (reusing across routes would render
-  // the wrong page component).
-  const nextChainKey = chainKeys[routeId] ?? '';
-  const sameRoute =
+  // Same-chain swap (#518): when the destination route shares the
+  // currently mounted wrapper's chainKey we reuse the wrapper
+  // instance — only the wrapper-state rune updates with the new
+  // page module reference and the new payload. The layout chain
+  // re-renders against the new data without unmounting, preserving
+  // any layout-level Svelte 5 $state across navs. Cross-chain navs
+  // and no-chain destinations still go through the unmount + mount
+  // path because the wrapper module itself differs.
+  const sameChain =
     nextChainKey !== '' &&
     nextChainKey === currentChainKey &&
-    routeId === currentRouteId &&
     mounted !== null;
-  if (sameRoute) {
+  if (sameChain) {
     _setWrapperState({
+      Page: pageMod.default,
       data: payload.data,
       layoutData: payload.layoutData ?? [],
       form: payload.form ?? null,
     });
+    currentRouteId = routeId;
   } else {
     if (mounted) {
       try {
@@ -481,18 +507,20 @@ async function navigate(url: URL, opts: NavigateOpts): Promise<void> {
         target.innerHTML = '';
       }
     }
-    if (nextChainKey !== '') {
+    if (nextChainKey !== '' && wrapperMod) {
       // Seed the wrapper-state rune BEFORE mount so the new wrapper's
-      // layout chain and page render against populated fields on first
-      // paint — same hydration parity contract as entry.ts (#508).
+      // layout chain and dynamic page slot render against populated
+      // fields on first paint — same hydration parity contract as
+      // entry.ts (#518).
       _setWrapperState({
+        Page: pageMod.default,
         data: payload.data,
         layoutData: payload.layoutData ?? [],
         form: payload.form ?? null,
       });
-      mounted = mount(mod.default, { target, props: {} });
+      mounted = mount(wrapperMod.default, { target, props: {} });
     } else {
-      mounted = mount(mod.default, { target, props: { data: payload.data, form: payload.form ?? null } });
+      mounted = mount(pageMod.default, { target, props: { data: payload.data, form: payload.form ?? null } });
     }
     currentChainKey = nextChainKey;
     currentRouteId = routeId;
@@ -503,7 +531,7 @@ async function navigate(url: URL, opts: NavigateOpts): Promise<void> {
   // Update the active snapshot accessor before any restore call so a
   // page that captures during restore (rare, but allowed) sees its own
   // hooks rather than the previous route's.
-  currentSnapshot = snapshotRoutes[routeId] ? mod.snapshot ?? null : null;
+  currentSnapshot = snapshotRoutes[routeId] ? pageMod.snapshot ?? null : null;
   if (opts.fromPop && opts.restoreId) {
     restoreSnapshot(opts.restoreId);
   }
@@ -554,13 +582,23 @@ async function fetchPayload(url: URL, signal?: AbortSignal, speculative = false)
   return (await res.json()) as Payload;
 }
 
-function loadChunk(routeId: string): Promise<LoadedModule> {
-  let p = chunkCache.get(routeId);
+function loadPage(routeId: string): Promise<PageModule> {
+  let p = pageCache.get(routeId);
   if (p) return p;
-  const loader = loaders[routeId];
-  if (!loader) return Promise.reject(new Error('no loader for ' + routeId));
+  const loader = pageLoaders[routeId];
+  if (!loader) return Promise.reject(new Error('no page loader for ' + routeId));
   p = loader();
-  chunkCache.set(routeId, p);
+  pageCache.set(routeId, p);
+  return p;
+}
+
+function loadWrapper(chainKey: string): Promise<{ default: any }> {
+  let p = wrapperCache.get(chainKey);
+  if (p) return p;
+  const loader = chainWrappers[chainKey];
+  if (!loader) return Promise.reject(new Error('no wrapper loader for ' + chainKey));
+  p = loader();
+  wrapperCache.set(chainKey, p);
   return p;
 }
 
@@ -665,16 +703,25 @@ async function refetchActive(): Promise<void> {
     const key = canonical(url.pathname + url.search);
     cache.set(key, payload);
     recordDeps(key, payload);
-    // When a wrapper is mounted (#508) the wrapper-state rune is the
-    // canonical reactive surface — writing to it propagates to both
-    // the page and every layout slot. The legacy $set fallback covers
-    // the no-wrapper, page-only mount path.
-    if (currentChainKey !== '') {
-      _setWrapperState({
-        data: payload.data,
-        layoutData: payload.layoutData ?? [],
-        form: payload.form ?? null,
-      });
+    // When a wrapper is mounted (#518) the wrapper-state rune is the
+    // canonical reactive surface — writing to it propagates to the
+    // dynamic page slot and every layout. We re-load the page module
+    // so the rune carries the live constructor reference (it should
+    // be cached, so this is a microtask resolution most of the time).
+    // The legacy $set fallback covers the no-wrapper, page-only mount path.
+    if (currentChainKey !== '' && currentRouteId !== '') {
+      try {
+        const pageMod = await loadPage(currentRouteId);
+        _setWrapperState({
+          Page: pageMod.default,
+          data: payload.data,
+          layoutData: payload.layoutData ?? [],
+          form: payload.form ?? null,
+        });
+      } catch (_e) {
+        // page module disappeared mid-flight (HMR teardown);
+        // leave the rune untouched so the wrapper keeps its prior reference.
+      }
     } else if (mounted && (mounted as { $set?: (p: unknown) => void }).$set) {
       (mounted as { $set: (p: unknown) => void }).$set({
         data: payload.data,
@@ -714,14 +761,21 @@ export async function preloadData(href: string | URL): Promise<void> {
 }
 
 // preloadCode warms the dynamic-import chunk for the route matching href
-// so click navigation runs no extra round-trip.
+// so click navigation runs no extra round-trip. Both the page module and
+// (when applicable) the chain wrapper are prefetched so a cross-chain
+// nav has both halves cached.
 export async function preloadCode(href: string | URL): Promise<void> {
   const url = typeof href === 'string' ? new URL(href, location.href) : href;
   if (url.origin !== location.origin) return;
   const entry = matchManifest(url.pathname);
   if (!entry) return;
+  const ck = chainKeys[entry.pattern] ?? '';
   try {
-    await loadChunk(entry.pattern);
+    if (ck !== '') {
+      await Promise.all([loadPage(entry.pattern), loadWrapper(ck)]);
+    } else {
+      await loadPage(entry.pattern);
+    }
   } catch (_e) {
     // best-effort prefetch: swallow errors
   }

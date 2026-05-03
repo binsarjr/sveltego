@@ -188,9 +188,21 @@ func renderChain__Index(w *render.Writer, ctx *kit.RenderCtx, page router.PageHa
 		Data:      pageData,
 		CSRFToken: ctx.CSRFToken(),
 	}
-	return render__layout__page_routes(w, ctx, layoutDataAt(layoutDatas, 0), func(w *render.Writer) error {
-		return page(w, ctx, pageData)
-	}, pageState)
+	w.WriteString(server.BlockOpen)
+	if err := func(w *render.Writer) error {
+		return render__layout__page_routes(w, ctx, layoutDataAt(layoutDatas, 0), func(w *render.Writer) error {
+			w.WriteString(server.BlockOpen)
+			if err := page(w, ctx, pageData); err != nil {
+				return err
+			}
+			w.WriteString(server.BlockClose)
+			return nil
+		}, pageState)
+	}(w); err != nil {
+		return err
+	}
+	w.WriteString(server.BlockClose)
+	return nil
 }
 
 // renderErrorChain__Index composes the surviving outer-layout prefix
@@ -216,11 +228,23 @@ func renderChain__Admin(w *render.Writer, ctx *kit.RenderCtx, page router.PageHa
 		Data:      pageData,
 		CSRFToken: ctx.CSRFToken(),
 	}
-	return render__layout__page_routes(w, ctx, layoutDataAt(layoutDatas, 0), func(w *render.Writer) error {
-		return render__layout__page_routes_admin(w, ctx, layoutDataAt(layoutDatas, 1), func(w *render.Writer) error {
-			return page(w, ctx, pageData)
+	w.WriteString(server.BlockOpen)
+	if err := func(w *render.Writer) error {
+		return render__layout__page_routes(w, ctx, layoutDataAt(layoutDatas, 0), func(w *render.Writer) error {
+			return render__layout__page_routes_admin(w, ctx, layoutDataAt(layoutDatas, 1), func(w *render.Writer) error {
+				w.WriteString(server.BlockOpen)
+				if err := page(w, ctx, pageData); err != nil {
+					return err
+				}
+				w.WriteString(server.BlockClose)
+				return nil
+			}, pageState)
 		}, pageState)
-	}, pageState)
+	}(w); err != nil {
+		return err
+	}
+	w.WriteString(server.BlockClose)
+	return nil
 }
 
 // renderErrorChain__Admin composes the surviving outer-layout prefix
@@ -248,11 +272,23 @@ func renderChain__AdminUsers(w *render.Writer, ctx *kit.RenderCtx, page router.P
 		Data:      pageData,
 		CSRFToken: ctx.CSRFToken(),
 	}
-	return render__layout__page_routes(w, ctx, layoutDataAt(layoutDatas, 0), func(w *render.Writer) error {
-		return render__layout__page_routes_admin(w, ctx, layoutDataAt(layoutDatas, 1), func(w *render.Writer) error {
-			return page(w, ctx, pageData)
+	w.WriteString(server.BlockOpen)
+	if err := func(w *render.Writer) error {
+		return render__layout__page_routes(w, ctx, layoutDataAt(layoutDatas, 0), func(w *render.Writer) error {
+			return render__layout__page_routes_admin(w, ctx, layoutDataAt(layoutDatas, 1), func(w *render.Writer) error {
+				w.WriteString(server.BlockOpen)
+				if err := page(w, ctx, pageData); err != nil {
+					return err
+				}
+				w.WriteString(server.BlockClose)
+				return nil
+			}, pageState)
 		}, pageState)
-	}, pageState)
+	}(w); err != nil {
+		return err
+	}
+	w.WriteString(server.BlockClose)
+	return nil
 }
 
 // renderErrorChain__AdminUsers composes the surviving outer-layout prefix

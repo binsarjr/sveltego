@@ -374,13 +374,15 @@ export const snapshot = {
 	}
 }
 
-// TestBuild_EmitsLayoutWrapper covers issue #508: a route with a
-// _layout.svelte chain must get a per-route wrapper.svelte that nests
-// the layout(s) around the page, the entry.ts must mount the wrapper
-// (not the bare page), startRouter must receive a non-empty chainKey,
-// and the SPA router must carry a chainKeys table plus the
-// wrapper-store import. Routes without a layout chain stay on the
-// pre-#508 page-only mount path.
+// TestBuild_EmitsLayoutWrapper covers issue #508 + #518: a route with
+// a _layout.svelte chain must get a chainKey-shared wrapper.svelte
+// under .gen/client/__chain/<chainKey>/ that nests the layout(s)
+// around a dynamic page slot, the entry.ts must mount that wrapper
+// (not the bare page) AND import the page module separately to seed
+// `wrapperState.Page`, startRouter must receive a non-empty chainKey,
+// and the SPA router must carry a chainKeys table + wrapper-store
+// import + chainWrappers loader table. Routes without a layout chain
+// stay on the page-only mount path.
 func TestBuild_EmitsLayoutWrapper(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -399,8 +401,18 @@ func TestBuild_EmitsLayoutWrapper(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 
-	// Wrapper file must be present alongside entry.ts for the root route.
-	wrapperPath := filepath.Join(root, ".gen", "client", "routes", "_page", "wrapper.svelte")
+	// Chain wrapper lives under .gen/client/__chain/<chainKey>/. There's
+	// only one chainKey in this single-chain test, so we walk the dir
+	// and grab whichever subdirectory exists.
+	chainRoot := filepath.Join(root, ".gen", "client", "__chain")
+	chainDirs, err := os.ReadDir(chainRoot)
+	if err != nil {
+		t.Fatalf("__chain dir not emitted at %s: %v", chainRoot, err)
+	}
+	if len(chainDirs) != 1 {
+		t.Fatalf("expected exactly one chainKey directory, got %d", len(chainDirs))
+	}
+	wrapperPath := filepath.Join(chainRoot, chainDirs[0].Name(), "wrapper.svelte")
 	wrapperBytes, err := os.ReadFile(wrapperPath)
 	if err != nil {
 		t.Fatalf("wrapper.svelte not emitted at %s: %v", wrapperPath, err)
@@ -408,8 +420,8 @@ func TestBuild_EmitsLayoutWrapper(t *testing.T) {
 	for _, want := range []string{
 		`import L0 from `,
 		`_layout.svelte"`,
-		`import Page from `,
 		`import { wrapperState } from `,
+		`const Page = $derived(wrapperState.Page);`,
 		`<L0 data={wrapperState.layoutData[0] ?? {}}>`,
 		`<Page data={wrapperState.data} form={wrapperState.form} />`,
 		`</L0>`,
@@ -418,32 +430,34 @@ func TestBuild_EmitsLayoutWrapper(t *testing.T) {
 			t.Errorf("wrapper.svelte missing %q:\n%s", want, wrapperBytes)
 		}
 	}
-	// Hydration parity: the wrapper must render the page through a
-	// STATIC <Page> reference. Dynamic dispatch ({#if}, {@const},
-	// <svelte:component>) injects comment markers absent from the SSR
-	// HTML and trips svelte/e/hydration_mismatch on first paint.
-	for _, banned := range []string{"{#if", "{@const", "<svelte:component", "<PageSlot"} {
-		if bytes.Contains(wrapperBytes, []byte(banned)) {
-			t.Errorf("wrapper.svelte must not emit %q (hydration-mismatch hazard):\n%s", banned, wrapperBytes)
-		}
+	// Chain wrappers must NOT statically import the page — the page
+	// reference flows in via the wrapper-state rune (#518).
+	if bytes.Contains(wrapperBytes, []byte("import Page from")) {
+		t.Errorf("chain wrapper must not statically import Page:\n%s", wrapperBytes)
 	}
 
-	// Entry must mount the wrapper, not Page directly, and seed the
-	// wrapper-state rune via _setWrapperState BEFORE mount so the
-	// wrapper's first paint matches SSR (#508 hydration parity).
+	// Entry must mount the wrapper, import the page module separately,
+	// and seed wrapperState.Page + payload BEFORE mount so the
+	// wrapper's first paint matches SSR (#518 hydration parity).
 	rootEntry := filepath.Join(root, ".gen", "client", "routes", "_page", "entry.ts")
 	rootEntryBytes, err := os.ReadFile(rootEntry)
 	if err != nil {
 		t.Fatalf("entry.ts not emitted: %v", err)
 	}
-	if !bytes.Contains(rootEntryBytes, []byte(`import Root from "./wrapper.svelte";`)) {
-		t.Errorf("entry.ts must import wrapper as Root:\n%s", rootEntryBytes)
+	if !bytes.Contains(rootEntryBytes, []byte(`import Root from "../../__chain/`)) {
+		t.Errorf("entry.ts must import wrapper as Root from __chain/:\n%s", rootEntryBytes)
+	}
+	if !bytes.Contains(rootEntryBytes, []byte(`import Page from `)) {
+		t.Errorf("entry.ts must import Page module separately so it can seed wrapperState.Page:\n%s", rootEntryBytes)
 	}
 	if !bytes.Contains(rootEntryBytes, []byte("import { _setWrapperState } from")) {
 		t.Errorf("entry.ts must import _setWrapperState to seed the rune store before mount:\n%s", rootEntryBytes)
 	}
 	if !bytes.Contains(rootEntryBytes, []byte("_setWrapperState({")) {
 		t.Errorf("entry.ts must call _setWrapperState before mount:\n%s", rootEntryBytes)
+	}
+	if !bytes.Contains(rootEntryBytes, []byte("Page,")) {
+		t.Errorf("entry.ts must include Page in the _setWrapperState seed:\n%s", rootEntryBytes)
 	}
 	if !bytes.Contains(rootEntryBytes, []byte("layoutData: payload.layoutData ?? []")) {
 		t.Errorf("entry.ts must seed layoutData into the rune store:\n%s", rootEntryBytes)
@@ -456,7 +470,8 @@ func TestBuild_EmitsLayoutWrapper(t *testing.T) {
 		t.Errorf("entry.ts must forward a chainKey to startRouter:\n%s", rootEntryBytes)
 	}
 
-	// Shared wrapper-store and the router's chainKeys table must be emitted.
+	// Shared wrapper-store and the router's chainKeys / chainWrappers
+	// tables must be emitted.
 	storePath := filepath.Join(root, ".gen", "client", "__router", "wrapper-store.svelte.ts")
 	storeBytes, err := os.ReadFile(storePath)
 	if err != nil {
@@ -476,22 +491,24 @@ func TestBuild_EmitsLayoutWrapper(t *testing.T) {
 	if !bytes.Contains(routerBytes, []byte("const chainKeys: Record<string, string> = {")) {
 		t.Errorf("router.ts missing chainKeys table:\n%s", routerBytes)
 	}
-	// The router's loader map must point at the wrapper, not the bare page.
-	if !bytes.Contains(routerBytes, []byte("/wrapper.svelte")) {
-		t.Errorf("router.ts loader map should target wrapper.svelte:\n%s", routerBytes)
+	if !bytes.Contains(routerBytes, []byte("const chainWrappers: Record<string, () => Promise<{ default: any }>> = {")) {
+		t.Errorf("router.ts missing chainWrappers loader table:\n%s", routerBytes)
+	}
+	// The pageLoaders map must target the bare page module — the wrapper
+	// is loaded separately via chainWrappers.
+	if !bytes.Contains(routerBytes, []byte("/_page.svelte\")")) {
+		t.Errorf("router.ts pageLoaders should target _page.svelte:\n%s", routerBytes)
 	}
 }
 
-// TestBuild_WrapperReExportsModuleSnapshot is the end-to-end regression
-// for Bug 1 in the PR-#517 follow-up: a route that has both a layout
-// chain (so the wrapper.svelte path kicks in) AND a `<script module>`
-// snapshot export must produce a wrapper whose `<script module>` block
-// re-exports `snapshot`. Without it, vite errors with `"snapshot" is
-// not exported by ".gen/client/.../wrapper.svelte"` because Svelte 5
-// reads `export {…}` inside the instance script as the legacy props
-// syntax (no ESM export). entry.ts pulls `snapshot` from the wrapper
-// path so the re-export is load-bearing.
-func TestBuild_WrapperReExportsModuleSnapshot(t *testing.T) {
+// TestBuild_EntryImportsSnapshotFromPageModule covers the post-#518
+// snapshot-import contract. With the chainKey-shared wrapper architecture
+// the wrapper no longer statically imports the page module — each
+// per-route entry.ts imports the page module directly so it can seed
+// `wrapperState.Page` AND pull module-level exports (snapshot, etc.)
+// from the page itself. This test pins that path so future refactors
+// keep the snapshot wiring intact for routes that walk a layout chain.
+func TestBuild_EntryImportsSnapshotFromPageModule(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/wmexp\n\ngo 1.22\n")
@@ -520,44 +537,39 @@ func TestBuild_WrapperReExportsModuleSnapshot(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 
-	wrapperPath := filepath.Join(root, ".gen", "client", "routes", "snap", "_page", "wrapper.svelte")
-	wrapperBytes, err := os.ReadFile(wrapperPath)
-	if err != nil {
-		t.Fatalf("snap wrapper.svelte not emitted: %v", err)
-	}
-	// The module-export re-export must live in a `<script module>` block —
-	// Svelte 5 only treats module-context exports as ESM exports.
-	if !bytes.Contains(wrapperBytes, []byte(`<script module lang="ts">`)) {
-		t.Errorf("wrapper missing <script module> block:\n%s", wrapperBytes)
-	}
-	// Both module exports must propagate (sorted: helper then snapshot).
-	if !bytes.Contains(wrapperBytes, []byte(`export { helper, snapshot } from `)) {
-		t.Errorf("wrapper missing combined module re-export:\n%s", wrapperBytes)
-	}
-	// The instance script must NOT carry an export.
-	endModule := bytes.Index(wrapperBytes, []byte("</script>"))
-	if endModule < 0 {
-		t.Fatalf("malformed wrapper:\n%s", wrapperBytes)
-	}
-	instance := wrapperBytes[endModule:]
-	if bytes.Contains(instance, []byte("export { snapshot }")) {
-		t.Errorf("snapshot must not be re-exported in instance script:\n%s", wrapperBytes)
-	}
-	// Wrapper takes zero props; entry.ts seeds the rune store before mount
-	// (Bug 2 fix). Top-level `$props()` reads or `$effect`-deferred seeds
-	// would trip state_referenced_locally / break hydration respectively.
-	for _, banned := range []string{"$props()", "$effect(() => {", "wrapperState.data ="} {
-		if bytes.Contains(wrapperBytes, []byte(banned)) {
-			t.Errorf("wrapper must not contain %q (Bug 2 regression):\n%s", banned, wrapperBytes)
-		}
-	}
-	// entry.ts must still pull `snapshot` through the wrapper path.
+	// entry.ts must import Page AND snapshot directly from the page
+	// module. The wrapper is chainKey-shared and lives under
+	// .gen/client/__chain/<chainKey>/ — it has no static page import.
 	entryBytes, err := os.ReadFile(filepath.Join(root, ".gen", "client", "routes", "snap", "_page", "entry.ts"))
 	if err != nil {
 		t.Fatalf("snap entry.ts not emitted: %v", err)
 	}
-	if !bytes.Contains(entryBytes, []byte(`import Root, { snapshot } from "./wrapper.svelte";`)) {
-		t.Errorf("snap entry.ts must pull snapshot through wrapper:\n%s", entryBytes)
+	if !bytes.Contains(entryBytes, []byte(`import Page, { snapshot } from `)) {
+		t.Errorf("snap entry.ts must import Page + snapshot directly from the page module:\n%s", entryBytes)
+	}
+	if !bytes.Contains(entryBytes, []byte(`/snap/_page.svelte"`)) {
+		t.Errorf("snap entry.ts page-module import must point at the snap route's _page.svelte:\n%s", entryBytes)
+	}
+	// Wrapper imports must not include the page — chain wrappers use a
+	// dynamic page slot fed by the wrapper-state rune (#518).
+	chainEntries, err := os.ReadDir(filepath.Join(root, ".gen", "client", "__chain"))
+	if err != nil {
+		t.Fatalf("__chain dir not emitted: %v", err)
+	}
+	if len(chainEntries) == 0 {
+		t.Fatalf("expected at least one chain wrapper directory under .gen/client/__chain")
+	}
+	for _, ce := range chainEntries {
+		wrapperBytes, rerr := os.ReadFile(filepath.Join(root, ".gen", "client", "__chain", ce.Name(), "wrapper.svelte"))
+		if rerr != nil {
+			t.Fatalf("chain wrapper not emitted for %s: %v", ce.Name(), rerr)
+		}
+		if bytes.Contains(wrapperBytes, []byte("import Page from")) {
+			t.Errorf("chain wrapper must not statically import a page module:\n%s", wrapperBytes)
+		}
+		if !bytes.Contains(wrapperBytes, []byte("$derived(wrapperState.Page)")) {
+			t.Errorf("chain wrapper missing dynamic Page reference:\n%s", wrapperBytes)
+		}
 	}
 }
 
