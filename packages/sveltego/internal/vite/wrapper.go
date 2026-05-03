@@ -8,99 +8,66 @@ import (
 	"strings"
 )
 
-// WrapperOptions controls the per-route wrapper.svelte emitted by
-// GenerateWrapper. A wrapper composes the SSR-cascading layout chain
-// around the route's _page.svelte so that the hydrated client tree
-// shape matches the SSR DOM (layout + page), eliminating Svelte's
-// "extra DOM nodes" mismatch which stripped <header>/<nav>/<footer>
-// after first interaction (#508).
+// ChainWrapperOptions controls the per-chainKey wrapper.svelte emitted
+// by GenerateChainWrapper. One wrapper exists per layout chain (not per
+// route, see #518): every route that walks the same `_layout.svelte`
+// chain mounts the same wrapper module. The page slot is rendered
+// dynamically — the wrapper reads `Page` (a Svelte component reference)
+// from the shared wrapper-state rune, so a same-chain SPA navigation
+// only swaps the rune fields and the wrapper instance is reused. That
+// reuse is what preserves any `$state` declared in `_layout.svelte`
+// across `/post/1 → /post/2`-shaped navigations.
 //
 // LayoutImports lists each layout component import path **relative to
 // the wrapper file's directory**, ordered outermost → innermost. The
 // ancestor `_layout.svelte` is index 0; the leaf-route's own
-// `_layout.svelte` (when present) is the last entry.
-//
-// PagePath is the import path for the route's `_page.svelte` (or its
-// `_page@.svelte` reset variant) relative to the wrapper file.
-//
-// ModuleExports is the sorted list of names exported from the page's
-// `<script module>` block (snapshot, plus any user additions). When
-// non-empty, the wrapper imports those names alongside Page from the
-// page module and re-exports them via its own `<script module>` block,
-// keeping any external import that resolves through the wrapper path
-// (e.g. entry.ts pulling `snapshot`) working. Re-exports MUST live in a
-// `<script module>` block — Svelte 5 only treats module-level exports
-// as ESM exports; an `export {…}` inside the instance `<script>` is
-// parsed as the legacy props syntax and emits no actual export
-// (vite errors with `"snapshot" is not exported by ".../wrapper.svelte"`).
+// `_layout.svelte` (when present) is the last entry. The chain itself
+// is fixed per chainKey, so this list is identical across every route
+// that shares the wrapper.
 //
 // StoreImport is the import path of the shared wrapper-store.svelte.ts
-// module relative to the wrapper file. The wrapper itself takes zero
-// props — entry.ts seeds the rune store via _setWrapperState before
-// mount() runs, so the layout and page templates read populated rune
-// fields on first paint (hydration matches the SSR HTML). Same-route
-// reactive refreshes (invalidate, query-string nav) write back to the
-// same store so the chain re-renders without unmounting.
-type WrapperOptions struct {
+// module relative to the wrapper file. The wrapper takes zero props —
+// each route's entry.ts seeds the rune store via `_setWrapperState`
+// (with the route's Page module reference) before mount runs, so the
+// layout chain and page render against populated rune fields on first
+// paint. Reactive reads through the same store let the SPA router
+// swap pages and refresh data without unmounting any layout instance.
+type ChainWrapperOptions struct {
 	LayoutImports []string
-	PagePath      string
-	ModuleExports []string
 	StoreImport   string
 }
 
-// GenerateWrapper returns the contents of a route-specific wrapper.svelte
-// that nests the layout chain (outer → inner) around the page component.
-// See WrapperOptions for the per-input semantics.
+// GenerateChainWrapper returns the contents of a chainKey-shared
+// wrapper.svelte that nests the layout chain (outer → inner) around a
+// dynamic `<Page>` slot. The slot reads the current page component out
+// of the wrapper-state rune so cross-route same-chain SPA navs swap
+// the page module without unmounting the wrapper — preserving any
+// `$state` declared in `_layout.svelte` (#518 acceptance criterion 1).
 //
-// Hydration parity contract: the wrapper renders the page through a
-// STATIC `<Page>` reference (matching how the Go SSR pipeline emits
-// the page body inline inside the layout chain). Dynamic dispatch
-// (`{#if}`, `{@const}`, `<svelte:component>`) injects Svelte comment
-// anchors that are absent from the SSR HTML and trips
-// `svelte/e/hydration_mismatch` warnings on first paint — that
-// regression first surfaced on the basic playground's inert
-// `_layout.svelte` (CI: hydration-parity job).
-//
-// Reactivity model: the wrapper writes its mount-time props into a
-// shared `$state` rune (wrapperState) at construction time. Reactive
-// reads through that store let the SPA router refresh layout/page
-// data in place on a same-route navigation (an `invalidate` call,
-// query-string change, etc.) without unmounting any layout instance.
-// Cross-route navigations within the same chain still go through the
-// router's unmount/mount path — wrapper modules are per-route, so
-// reusing a wrapper instance across routes would render the prior
-// route's statically imported Page against the new payload.
-func GenerateWrapper(opts WrapperOptions) string {
+// Hydration parity: Svelte 5 SSR wraps a dynamic-component slot in
+// `<!--[-->...<!--]-->` markers (see svelte/internal/server's
+// build_inline_component for `node.metadata.dynamic`). The Go SSR
+// pipeline matches by emitting the same markers around the page body
+// inside the chain composer (manifest.go's emitChainBody). Without
+// matching markers the client hydration walker would trip
+// `svelte/e/hydration_mismatch` on first paint.
+func GenerateChainWrapper(opts ChainWrapperOptions) string {
 	var b strings.Builder
 	b.WriteString("<!-- Code generated by sveltego — DO NOT EDIT. -->\n")
-
-	// Module-level re-exports must live in a `<script module>` block.
-	// Svelte 5 parses `export {…}` inside the instance `<script>` as the
-	// legacy prop syntax and emits no ESM export, so vite then fails with
-	// `"snapshot" is not exported by ".../wrapper.svelte"`. The names are
-	// imported here (not in the instance script) so the module-context
-	// re-export resolves before the instance script runs.
-	if len(opts.ModuleExports) > 0 {
-		b.WriteString("<script module lang=\"ts\">\n")
-		fmt.Fprintf(&b, "  export { %s } from %q;\n", strings.Join(opts.ModuleExports, ", "), opts.PagePath)
-		b.WriteString("</script>\n\n")
-	}
 
 	b.WriteString("<script lang=\"ts\">\n")
 	for i, layout := range opts.LayoutImports {
 		fmt.Fprintf(&b, "  import L%d from %q;\n", i, layout)
 	}
-	fmt.Fprintf(&b, "  import Page from %q;\n", opts.PagePath)
 	fmt.Fprintf(&b, "  import { wrapperState } from %q;\n", opts.StoreImport)
-	b.WriteString("  // Zero-prop wrapper: entry.ts owns the wrapper-state seed via\n")
-	b.WriteString("  // _setWrapperState before mount/hydrate so the layout chain and\n")
-	b.WriteString("  // page render against populated rune fields on first paint (#508).\n")
+	// `Page` must be a $derived rune so cross-route same-chain SPA navs
+	// (the SPA router writes a new wrapperState.Page) reactively swap
+	// the page slot without unmounting the wrapper instance — that
+	// reuse is what preserves layout-level $state across `/post/1 →
+	// /post/2` navigations (#518).
+	b.WriteString("  const Page = $derived(wrapperState.Page);\n")
 	b.WriteString("</script>\n\n")
 
-	// Compose the layout chain outer→inner around <Page/>. Each layer
-	// reads its slice of layoutData from the shared store; the page
-	// reads data + form. Static <Page> reference (not a dynamic
-	// component) keeps the hydration-parity contract intact.
 	indent := ""
 	for i := range opts.LayoutImports {
 		fmt.Fprintf(&b, "%s<L%d data={wrapperState.layoutData[%d] ?? {}}>\n", indent, i, i)
@@ -116,11 +83,12 @@ func GenerateWrapper(opts WrapperOptions) string {
 
 // GenerateWrapperStoreModule returns the contents of the shared
 // wrapper-store module emitted to .gen/client/__router/wrapper-store.svelte.ts.
-// Every per-route wrapper imports `wrapperState` from this module to
-// read its current data/layoutData/form trio. The SPA router writes
-// to the same rune on a same-route reactive refresh (invalidate,
-// query-string change) so the mounted wrapper instance reactively
-// updates without losing layout state.
+// Every chainKey-shared wrapper imports `wrapperState` from this module
+// to read its current page-component reference, data/layoutData/form
+// trio, and form-action result. The SPA router writes to the same rune
+// on a same-route reactive refresh AND on a cross-route same-chain
+// navigation so the mounted wrapper instance reactively swaps the
+// page slot without losing layout state (#518).
 //
 // The `.svelte.ts` extension routes the module through
 // vite-plugin-svelte so its `$state` rune compiles to a reactive
@@ -131,19 +99,24 @@ func GenerateWrapperStoreModule() string {
 
 const wrapperStoreSource = `// Code generated by sveltego — DO NOT EDIT.
 
-// wrapperState backs the per-route wrapper.svelte's reactivity contract
-// (see #508). Each wrapper imports this single rune-backed object,
-// seeds it from $props() at mount, and reads from it for every render.
-// On a same-route reactive refresh (an invalidate call, a query-string
-// change), the SPA router writes the new payload here instead of
-// unmounting; the reactive reads inside the wrapper flow new data
-// through both the layout chain and the page in place, preserving any
-// layout-level $state.
+import type { Component } from 'svelte';
+
+// wrapperState backs the chainKey-shared wrapper.svelte's reactivity
+// contract (see #518). One wrapper module per layout chain — every
+// route in the chain seeds this rune from $props() at mount, and reads
+// from it for every render. On a same-route reactive refresh
+// (invalidate, query-string change) OR a cross-route same-chain SPA
+// nav, the SPA router writes the new payload here instead of
+// unmounting; the reactive reads inside the wrapper flow new data and
+// a (potentially new) page component reference through the layout
+// chain in place, preserving any layout-level $state.
 export const wrapperState = $state<{
+  Page: Component<any> | null;
   data: unknown;
   layoutData: unknown[];
   form: unknown;
 }>({
+  Page: null,
   data: undefined,
   layoutData: [],
   form: null,
@@ -152,12 +125,14 @@ export const wrapperState = $state<{
 // _setWrapperState replaces the rune fields atomically so multiple
 // reads inside the same render see consistent values. Exported with a
 // leading underscore to keep it out of the public surface; only the
-// generated SPA router calls it.
+// generated SPA router and per-route entries call it.
 export function _setWrapperState(next: {
+  Page: Component<any> | null;
   data: unknown;
   layoutData: unknown[];
   form: unknown;
 }): void {
+  wrapperState.Page = next.Page;
   wrapperState.data = next.data;
   wrapperState.layoutData = next.layoutData;
   wrapperState.form = next.form;
@@ -168,7 +143,8 @@ export function _setWrapperState(next: {
 // chain — the SHA-1 of the joined absolute layout-directory paths. Two
 // routes that walk the exact same _layout.svelte chain receive the same
 // key, so the SPA router can recognise a navigation that stays within
-// the same layout cascade.
+// the same layout cascade and a single chainKey-shared wrapper module
+// covers every route in the chain (#518).
 //
 // An empty chain yields the empty string; callers treat that as "no
 // wrapper needed, mount the page component directly" (matching the

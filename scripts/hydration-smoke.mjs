@@ -31,16 +31,17 @@ const READY_TIMEOUT_MS = 15_000;
 const SETTLE_MS = 250;
 
 function parseArgs(args) {
-  const out = { base: '', routes: [], selfTest: false, retries: 2, playwrightFrom: '' };
+  const out = { base: '', routes: [], crossNav: [], selfTest: false, retries: 2, playwrightFrom: '' };
   for (let i = 2; i < args.length; i++) {
     const a = args[i];
     if (a === '--base') out.base = args[++i];
     else if (a === '--routes') out.routes = args[++i].split(',').map((s) => s.trim()).filter(Boolean);
+    else if (a === '--cross-nav') out.crossNav = args[++i].split(',').map((s) => s.trim()).filter(Boolean);
     else if (a === '--self-test') out.selfTest = true;
     else if (a === '--retries') out.retries = Number(args[++i]);
     else if (a === '--playwright-from') out.playwrightFrom = args[++i];
     else if (a === '--help' || a === '-h') {
-      console.log('usage: hydration-smoke.mjs --base URL --routes /a,/b [--self-test] [--playwright-from DIR]');
+      console.log('usage: hydration-smoke.mjs --base URL --routes /a,/b [--cross-nav /a,/b] [--self-test] [--playwright-from DIR]');
       exit(0);
     } else throw new Error(`unknown arg: ${a}`);
   }
@@ -133,6 +134,41 @@ async function checkWithRetry(browser, baseUrl, route, opts) {
   return last;
 }
 
+async function checkCrossNav(browser, baseUrl, routes, opts) {
+  if (routes.length < 2) {
+    return { ok: true };
+  }
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  const consoleMsgs = [];
+  page.on('console', (msg) => consoleMsgs.push({ type: msg.type(), text: msg.text() }));
+  page.on('pageerror', (err) => consoleMsgs.push({ type: 'pageerror', text: err.message }));
+  try {
+    const startUrl = new URL(routes[0], baseUrl).toString();
+    await page.goto(startUrl, { waitUntil: 'domcontentloaded', timeout: READY_TIMEOUT_MS });
+    await page.waitForFunction(() => window.__sveltego_hydrated === true, null, {
+      timeout: READY_TIMEOUT_MS,
+    });
+    for (let i = 1; i < routes.length; i++) {
+      const target = new URL(routes[i], baseUrl).toString();
+      await page.evaluate(async (href) => {
+        await window.__sveltego_router__.goto(href);
+      }, target);
+      await page.waitForFunction(
+        (path) => location.pathname + location.search === path,
+        new URL(target).pathname + new URL(target).search,
+        { timeout: READY_TIMEOUT_MS },
+      );
+      await page.waitForTimeout(SETTLE_MS);
+    }
+    const mismatches = consoleMsgs.filter((m) => looksLikeMismatch(m.text));
+    const errors = consoleMsgs.filter((m) => m.type === 'pageerror').map((m) => m.text);
+    return { ok: mismatches.length === 0 && errors.length === 0, mismatches, errors };
+  } finally {
+    await ctx.close();
+  }
+}
+
 async function main() {
   const opts = parseArgs(argv);
   const chromium = await loadPlaywright(opts.playwrightFrom);
@@ -155,6 +191,24 @@ async function main() {
         failed = true;
       } else {
         console.log(`  OK   ${route} (${res.elapsedMs}ms)`);
+      }
+    }
+
+    if (opts.crossNav.length >= 2) {
+      console.log(`hydration-smoke: cross-nav ${opts.crossNav.join(' -> ')}`);
+      const res = await checkCrossNav(browser, opts.base, opts.crossNav, opts);
+      if (!res.ok) {
+        if (res.mismatches?.length) {
+          console.error(`  FAIL cross-nav: ${res.mismatches.length} hydration warning(s)`);
+          for (const m of res.mismatches) console.error(`    [${m.type}] ${m.text}`);
+        }
+        if (res.errors?.length) {
+          console.error('  FAIL cross-nav: page errors');
+          for (const e of res.errors) console.error(`    ${e}`);
+        }
+        failed = true;
+      } else {
+        console.log('  OK   cross-nav');
       }
     }
   } finally {

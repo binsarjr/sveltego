@@ -329,7 +329,7 @@ func TestGenerateRouter_snapshotRuntime(t *testing.T) {
 		"function restoreSnapshot(",
 		"const snapshots = new Map<number, unknown>",
 		"snapshots.set(currentHistoryId, currentSnapshot.capture())",
-		"snapshotRoutes[routeId] ? mod.snapshot ?? null : null",
+		"snapshotRoutes[routeId] ? pageMod.snapshot ?? null : null",
 		"captureSnapshot();",
 		"snapshot?: Snapshot",
 		"restoreSnapshot(opts.restoreId)",
@@ -405,7 +405,7 @@ func TestGenerateRouter_onLeave(t *testing.T) {
 	// page sees a consistent DOM during cleanup. fireLeaveCallbacks() must
 	// appear before the unmount/mount block.
 	idxFire := strings.Index(src, "fireLeaveCallbacks();")
-	idxMount := strings.Index(src, "mounted = mount(mod.default")
+	idxMount := strings.Index(src, "mounted = mount(pageMod.default")
 	if idxFire < 0 || idxMount < 0 || idxFire >= idxMount {
 		t.Fatalf("fireLeaveCallbacks must precede mount; got fire=%d mount=%d", idxFire, idxMount)
 	}

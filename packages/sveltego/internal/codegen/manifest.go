@@ -956,23 +956,52 @@ func emitRouteRenderErrorChain(b *Builder, r routescan.ScannedRoute, layoutByPat
 // emitChainBody writes the success-path layout composition. For zero
 // layouts it just runs the inner expression. For N layouts it writes
 // nested children-callback closures wrapping inner.
+//
+// Two layers of fragment markers are emitted (#518):
+//
+//   - Outer `<!--[-->`/`<!--]-->` around the whole composition. The
+//     client hydrates the chainKey-shared wrapper via hydrate(Root,
+//     {target: document.body}); Svelte's hydrate walks `target`'s
+//     children looking for the first `<!--[-->` (HYDRATION_START)
+//     anchor that delimits the wrapper component's DOM. svelte/server's
+//     own renderer always emits that anchor; the Go pipeline must
+//     mirror it or hydrate falls through to a full re-mount.
+//   - Inner `<!--[-->`/`<!--]-->` around the page() call. This matches
+//     the dynamic-component slot the wrapper renders for `<Page />`
+//     where Page is a $derived rune reference; without it the
+//     hydration walker mismatches at the page slot.
 func emitChainBody(b *Builder, layoutPaths []string, layoutByPath map[string]layoutImport, innerCall string) {
 	if len(layoutPaths) == 0 {
 		b.Linef("return %s", innerCall)
 		return
 	}
-	openLayoutCalls(b, layoutPaths, layoutByPath, innerCall, false)
+	b.Line("w.WriteString(server.BlockOpen)")
+	b.Line("if err := func(w *render.Writer) error {")
+	b.Indent()
+	openLayoutCalls(b, layoutPaths, layoutByPath, innerCall, false, true)
+	b.Dedent()
+	b.Line("}(w); err != nil {")
+	b.Indent()
+	b.Line("return err")
+	b.Dedent()
+	b.Line("}")
+	b.Line("w.WriteString(server.BlockClose)")
+	b.Line("return nil")
 }
 
 // emitErrorChainBody writes the error-path layout composition. Each
 // layout receives nil for its data parameter, matching the legacy
-// renderErrorBoundary behavior.
+// renderErrorBoundary behavior. The innermost call is NOT wrapped in
+// page-slot fragment markers because the error template is not the
+// component the chain wrapper's dynamic page slot expects — keeping
+// the error path bytewise identical to the pre-#518 emit avoids
+// regressing any existing error-boundary hydration behavior.
 func emitErrorChainBody(b *Builder, layoutPaths []string, layoutByPath map[string]layoutImport, innerCall string) {
 	if len(layoutPaths) == 0 {
 		b.Linef("return %s", innerCall)
 		return
 	}
-	openLayoutCalls(b, layoutPaths, layoutByPath, innerCall, true)
+	openLayoutCalls(b, layoutPaths, layoutByPath, innerCall, true, false)
 }
 
 // openLayoutCalls emits the outer→inner layout-composition Go code as a
@@ -982,12 +1011,26 @@ func emitErrorChainBody(b *Builder, layoutPaths []string, layoutByPath map[strin
 // verbatim to every layout call so layout templates that read
 // $app/state runes see the same snapshot the page handler does
 // (issue #466).
-func openLayoutCalls(b *Builder, layoutPaths []string, layoutByPath map[string]layoutImport, innerCall string, nilData bool) {
-	// Build the nested expression depth-first. For three layouts l0,l1,l2:
+//
+// The innermost call is wrapped in `<!--[-->`/`<!--]-->` fragment
+// markers so the SSR HTML matches the dynamic-component slot the
+// chainKey-shared wrapper renders on the client (#518). svelte/server
+// emits the same markers around any `<Component />` whose constructor
+// is reactive — without them the client hydration walker trips
+// `svelte/e/hydration_mismatch` on first paint when it encounters the
+// dynamic page slot. The markers go around BOTH success and error
+// inners so the wrapper hydrates uniformly regardless of which
+// component the page slot ends up rendering.
+func openLayoutCalls(b *Builder, layoutPaths []string, layoutByPath map[string]layoutImport, innerCall string, nilData, wrapPageSlot bool) {
+	// Build the nested expression depth-first. For three layouts l0,l1,l2
+	// with wrapPageSlot=true:
 	//   return render__layout__<l0>(w, ctx, d0, func(w) error {
 	//     return render__layout__<l1>(w, ctx, d1, func(w) error {
 	//       return render__layout__<l2>(w, ctx, d2, func(w) error {
-	//         return <innerCall>
+	//         w.WriteString(server.BlockOpen)
+	//         if err := <innerCall>; err != nil { return err }
+	//         w.WriteString(server.BlockClose)
+	//         return nil
 	//       }, pageState)
 	//     }, pageState)
 	//   }, pageState)
@@ -1008,7 +1051,18 @@ func openLayoutCalls(b *Builder, layoutPaths []string, layoutByPath map[string]l
 		b.Linef("return render__layout__%s(w, ctx, %s, func(w *render.Writer) error {", li.alias, dataExpr)
 		b.Indent()
 	}
-	b.Linef("return %s", innerCall)
+	if wrapPageSlot {
+		b.Line("w.WriteString(server.BlockOpen)")
+		b.Linef("if err := %s; err != nil {", innerCall)
+		b.Indent()
+		b.Line("return err")
+		b.Dedent()
+		b.Line("}")
+		b.Line("w.WriteString(server.BlockClose)")
+		b.Line("return nil")
+	} else {
+		b.Linef("return %s", innerCall)
+	}
 	for range layoutPaths {
 		b.Dedent()
 		b.Line("}, pageState)")
