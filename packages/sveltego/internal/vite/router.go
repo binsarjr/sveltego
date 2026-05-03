@@ -11,8 +11,10 @@ import (
 type RouterOptions struct {
 	// Routes maps each route's canonical pattern (matching the server's
 	// router.Route.Pattern, also surfaced as `routeId` in the hydration
-	// payload) to the path of its _page.svelte source relative to the
-	// directory that will contain router.ts.
+	// payload) to the path of its mount target — either a per-route
+	// wrapper.svelte (when the route has a layout chain, see #508) or
+	// the bare _page.svelte. Both paths resolve to a Svelte component
+	// module relative to the directory containing router.ts.
 	//
 	// The generated module uses dynamic imports so each route's component
 	// remains in its own Vite chunk; navigation only pulls in the chunk
@@ -25,6 +27,14 @@ type RouterOptions struct {
 	// missing from this map are treated as snapshot-free; the router
 	// skips the dynamic-import lookup entirely for them.
 	SnapshotRoutes map[string]bool
+	// ChainKeys maps each route pattern to the deterministic identifier
+	// of its layout chain (LayoutChainKey output). Routes with no
+	// layout chain map to the empty string. The router compares the
+	// destination's chain key against the currently mounted route's
+	// chain key on every navigation: equal keys mean the wrapper
+	// component is identical, so the router updates the shared
+	// wrapper-state rune instead of unmounting (#508).
+	ChainKeys map[string]string
 }
 
 // GenerateRouter returns the contents of a per-app SPA router module that
@@ -60,7 +70,12 @@ func GenerateRouter(opts RouterOptions) string {
 	// compile to reactive implementations (#471). The import path keeps
 	// the `.svelte` half so Vite's extension resolution lands on the
 	// rune-bearing file rather than an unrelated `state.ts`.
-	b.WriteString("import { _setPage, _setNavigating, type AppError } from './state.svelte';\n\n")
+	b.WriteString("import { _setPage, _setNavigating, type AppError } from './state.svelte';\n")
+	// Same module-extension story for the wrapper-state rune — the
+	// SPA router writes into it on every same-chain navigation so the
+	// mounted wrapper.svelte reactively re-renders the page slot
+	// without tearing down the layout chain (#508).
+	b.WriteString("import { _setWrapperState } from './wrapper-store.svelte';\n\n")
 
 	b.WriteString("type Segment = { kind: number; name?: string; value?: string };\n")
 	b.WriteString("type ManifestEntry = { pattern: string; segments: Segment[] };\n")
@@ -75,6 +90,16 @@ func GenerateRouter(opts RouterOptions) string {
 	b.WriteString("  error: AppError;\n")
 	b.WriteString("  manifest?: ManifestEntry[];\n")
 	b.WriteString("  deps?: string[];\n")
+	b.WriteString("};\n\n")
+
+	// chainKeys baked in at codegen time keys each route pattern to its
+	// layout-chain identifier. Empty string = no wrapper (page mounts
+	// directly). Routes sharing a key share a wrapper module, which
+	// lets the runtime swap pages without unmounting the layout (#508).
+	b.WriteString("const chainKeys: Record<string, string> = {\n")
+	for _, k := range sortedKeys(opts.ChainKeys) {
+		fmt.Fprintf(&b, "  %q: %q,\n", k, opts.ChainKeys[k])
+	}
 	b.WriteString("};\n\n")
 
 	b.WriteString("export type GotoOpts = {\n")
@@ -92,7 +117,11 @@ func GenerateRouter(opts RouterOptions) string {
 	b.WriteString("};\n\n")
 
 	b.WriteString("type Snapshot = { capture?: () => unknown; restore?: (state: unknown) => void };\n")
-	b.WriteString("type LoadedModule = { default: any; snapshot?: Snapshot };\n")
+	// `page` is the wrapper's named re-export of the inner _page.svelte
+	// component (see GenerateWrapper). Routes without a layout chain
+	// don't ship a wrapper, so `page` is undefined for those and the
+	// router falls back to mounting `default` (the page itself) full-tree.
+	b.WriteString("type LoadedModule = { default: any; snapshot?: Snapshot; page?: any };\n")
 	b.WriteString("type Loader = () => Promise<LoadedModule>;\n\n")
 
 	b.WriteString("const loaders: Record<string, Loader> = {\n")
@@ -160,6 +189,19 @@ const snapshots = new Map<number, unknown>();
 let nextHistoryId = 1;
 let currentHistoryId = 0;
 let currentSnapshot: Snapshot | null = null;
+// currentChainKey is the layout-chain identifier of the currently
+// mounted wrapper. Same-route reactive refreshes (invalidate(),
+// query-string nav) write through the wrapper-state rune so the
+// layout chain re-renders without unmounting; navigations to a
+// different routeId always go through the unmount + mount path
+// because each route owns a wrapper module with a STATIC <Page>
+// import — reusing the wrapper instance across routes would render
+// the prior route's page against the new payload (#508).
+let currentChainKey: string = '';
+// currentRouteId tracks the routeId of the currently mounted wrapper
+// so the same-chain shortcut fires only on a same-route reactive
+// refresh, never on a cross-route navigation within the same chain.
+let currentRouteId: string = '';
 const PREFETCH_CACHE_MAX = 30;
 const PREFETCH_HOVER_DELAY_MS = 150;
 
@@ -188,10 +230,13 @@ export function startRouter(initial: {
   payload: Payload;
   target: HTMLElement;
   snapshot?: Snapshot;
+  chainKey?: string;
 }): void {
   mounted = initial.component;
   manifest = initial.payload.manifest ?? [];
   currentSnapshot = initial.snapshot ?? null;
+  currentChainKey = initial.chainKey ?? '';
+  currentRouteId = initial.payload.routeId ?? '';
   // Take ownership of scroll restoration so back/forward replays the
   // saved offsets instead of letting the browser race the mount.
   if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
@@ -405,19 +450,45 @@ async function navigate(url: URL, opts: NavigateOpts): Promise<void> {
 
   const target = document.body;
   fireLeaveCallbacks();
-  if (mounted) {
-    try {
-      unmount(mounted);
-    } catch (_e) {
-      // mount() returned a non-unmountable value (rare with Svelte 5);
-      // fall back to clearing the target so the next mount has a clean slate.
-      target.innerHTML = '';
+  // Same-route reactive refresh shortcut (#508): when the navigation
+  // resolves to the SAME routeId currently mounted (e.g. a goto with
+  // a new query string, or invalidate-driven refetch), mutate the
+  // wrapper-state rune in place so the layout chain re-renders
+  // against the new payload without unmounting. Cross-route
+  // navigation — even within the same layout chain — must still go
+  // through unmount + mount because each route owns a wrapper module
+  // with a STATIC <Page> import (reusing across routes would render
+  // the wrong page component).
+  const nextChainKey = chainKeys[routeId] ?? '';
+  const sameRoute =
+    nextChainKey !== '' &&
+    nextChainKey === currentChainKey &&
+    routeId === currentRouteId &&
+    mounted !== null;
+  if (sameRoute) {
+    _setWrapperState({
+      data: payload.data,
+      layoutData: payload.layoutData ?? [],
+      form: payload.form ?? null,
+    });
+  } else {
+    if (mounted) {
+      try {
+        unmount(mounted);
+      } catch (_e) {
+        // mount() returned a non-unmountable value (rare with Svelte 5);
+        // fall back to clearing the target so the next mount has a clean slate.
+        target.innerHTML = '';
+      }
     }
+    const props =
+      nextChainKey !== ''
+        ? { data: payload.data, layoutData: payload.layoutData ?? [], form: payload.form ?? null }
+        : { data: payload.data, form: payload.form ?? null };
+    mounted = mount(mod.default, { target, props });
+    currentChainKey = nextChainKey;
+    currentRouteId = routeId;
   }
-  mounted = mount(mod.default, {
-    target,
-    props: { data: payload.data, form: payload.form ?? null },
-  });
   (window as any).__sveltego__ = payload;
   _setPage(payload, { state: opts.state as Record<string, unknown> | undefined });
   activeKey = key;
@@ -586,7 +657,17 @@ async function refetchActive(): Promise<void> {
     const key = canonical(url.pathname + url.search);
     cache.set(key, payload);
     recordDeps(key, payload);
-    if (mounted && (mounted as { $set?: (p: unknown) => void }).$set) {
+    // When a wrapper is mounted (#508) the wrapper-state rune is the
+    // canonical reactive surface — writing to it propagates to both
+    // the page and every layout slot. The legacy $set fallback covers
+    // the no-wrapper, page-only mount path.
+    if (currentChainKey !== '') {
+      _setWrapperState({
+        data: payload.data,
+        layoutData: payload.layoutData ?? [],
+        form: payload.form ?? null,
+      });
+    } else if (mounted && (mounted as { $set?: (p: unknown) => void }).$set) {
       (mounted as { $set: (p: unknown) => void }).$set({
         data: payload.data,
         form: payload.form ?? null,

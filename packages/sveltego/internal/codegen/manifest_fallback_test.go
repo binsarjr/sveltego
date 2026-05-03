@@ -99,7 +99,8 @@ func TestGenerateManifest_FallbackAdapter_CSRFInject(t *testing.T) {
 	s := string(out)
 	for _, want := range []string{
 		"runtime/svelte/csrfinject",
-		"csrfinject.Rewrite(resp.Body, ctx.CSRFToken())",
+		"fallback.StripFragmentMarkers(resp.Body)",
+		"csrfinject.Rewrite(body, ctx.CSRFToken())",
 	} {
 		if !strings.Contains(s, want) {
 			t.Errorf("missing %q in manifest output:\n%s", want, s)
