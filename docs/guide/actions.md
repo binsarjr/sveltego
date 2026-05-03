@@ -86,4 +86,40 @@ Submit to `?/create` or `?/delete`:
 
 ## Progressive enhancement
 
-Actions degrade gracefully without JavaScript: a plain `<form method="POST">` works. Use the standard SvelteKit `use:enhance` action on the client for AJAX-style submissions (lands with the v0.3 client bundle work — track issue #34).
+Actions degrade gracefully without JavaScript: a plain `<form method="POST">` posts natively, the server re-renders the page with the action's data on the `form` prop, and the browser performs a full reload — identical to SvelteKit's no-JS path.
+
+For AJAX-style submissions (no full reload, `form` prop updates in place), import `enhance` from `$app/forms` and apply it as a Svelte action:
+
+```svelte
+<script lang="ts">
+  import { enhance } from '$app/forms';
+
+  let { form } = $props();
+</script>
+
+<form method="post" action="?/login" use:enhance>
+  <input name="username" required />
+  <input type="password" name="password" required />
+  <button>Sign in</button>
+</form>
+
+{#if form?.ok}
+  <p>Welcome, {form.username}.</p>
+{:else if form?.error}
+  <p class="err">{form.error}</p>
+{/if}
+```
+
+The default `use:enhance` posts the form via `fetch` with the `X-Sveltego-Action` header, parses the JSON envelope (`{type, status, data}`) the server returns, and updates `window.__sveltego__.form` so the page's `form` prop reflects the action data. Pass a callback for fine-grained control:
+
+```svelte
+<form
+  method="post"
+  use:enhance={({ form, data, action, cancel }) => {
+    if (!data.get('username')) cancel();
+    return async ({ result, update }) => {
+      if (result.type === 'success') update();
+    };
+  }}
+>...</form>
+```

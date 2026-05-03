@@ -11,8 +11,8 @@ func TestGenerateClientEntry_ImportsEnhance(t *testing.T) {
 		RelSveltePath: "../../../src/routes/_page.svelte",
 		RelRouterPath: "../../__router/router",
 	})
-	if !strings.Contains(out, "import { enhance } from './enhance';") {
-		t.Errorf("expected enhance import in entry.ts:\n%s", out)
+	if !strings.Contains(out, `import { enhance } from "../../__router/forms";`) {
+		t.Errorf("expected enhance import from shared $app/forms module in entry.ts:\n%s", out)
 	}
 	if !strings.Contains(out, "(window as any).__sveltego__ = { ...payload, enhance }") {
 		t.Errorf("expected enhance to be exposed on window.__sveltego__:\n%s", out)
