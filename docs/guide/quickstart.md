@@ -31,7 +31,7 @@ cd hello
 Until [#368](https://github.com/binsarjr/sveltego/issues/368) ships release binaries, install the build CLI from source:
 
 ```sh
-go install github.com/binsarjr/sveltego/packages/sveltego/cmd/sveltego@latest
+go install github.com/binsarjr/sveltego/packages/sveltego/cmd/sveltego@v0.1.0-alpha.0
 sveltego version
 ```
 
