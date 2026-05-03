@@ -648,6 +648,14 @@ func emitFallbackAdapters(b *Builder, entries []entry, routeOptions map[string]k
 		b.Line("w.WriteString(resp.Head)")
 		b.Dedent()
 		b.Line("}")
+		// Strip the top-level fragment markers svelte/server.render
+		// always wraps around the rendered component output. The Go
+		// chain wrapper makes the page a child of the route's wrapper
+		// component, and on the client the wrapper renders <Page/> as a
+		// child too — child components don't carry <!--[-->...<!--]-->
+		// markers, so leaving them in the SSR HTML trips
+		// svelte/e/hydration_mismatch on first paint (#508).
+		b.Line("body := fallback.StripFragmentMarkers(resp.Body)")
 		if csrfEnabled {
 			// CSRF auto-inject (issue #510): the build-time AST splice
 			// in svelte_js2go runs only on the transpile path. Routes
@@ -656,9 +664,9 @@ func emitFallbackAdapters(b *Builder, entries []entry, routeOptions map[string]k
 			// sidecar's HTML output here. csrfinject.Rewrite is a
 			// no-op on responses that contain no POST forms (or that
 			// already carry the input from a prior pass).
-			b.Line("w.WriteString(csrfinject.Rewrite(resp.Body, ctx.CSRFToken()))")
+			b.Line("w.WriteString(csrfinject.Rewrite(body, ctx.CSRFToken()))")
 		} else {
-			b.Line("w.WriteString(resp.Body)")
+			b.Line("w.WriteString(body)")
 		}
 		b.Line("return nil")
 		b.Dedent()

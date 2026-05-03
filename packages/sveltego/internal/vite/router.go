@@ -190,11 +190,18 @@ let nextHistoryId = 1;
 let currentHistoryId = 0;
 let currentSnapshot: Snapshot | null = null;
 // currentChainKey is the layout-chain identifier of the currently
-// mounted wrapper. A navigation that resolves to the same key reuses
-// the existing wrapper instance and updates the wrapper-state rune
-// instead of unmounting; cross-chain navigations fall back to the
-// previous unmount + mount path so layout swaps still work (#508).
+// mounted wrapper. Same-route reactive refreshes (invalidate(),
+// query-string nav) write through the wrapper-state rune so the
+// layout chain re-renders without unmounting; navigations to a
+// different routeId always go through the unmount + mount path
+// because each route owns a wrapper module with a STATIC <Page>
+// import — reusing the wrapper instance across routes would render
+// the prior route's page against the new payload (#508).
 let currentChainKey: string = '';
+// currentRouteId tracks the routeId of the currently mounted wrapper
+// so the same-chain shortcut fires only on a same-route reactive
+// refresh, never on a cross-route navigation within the same chain.
+let currentRouteId: string = '';
 const PREFETCH_CACHE_MAX = 30;
 const PREFETCH_HOVER_DELAY_MS = 150;
 
@@ -229,6 +236,7 @@ export function startRouter(initial: {
   manifest = initial.payload.manifest ?? [];
   currentSnapshot = initial.snapshot ?? null;
   currentChainKey = initial.chainKey ?? '';
+  currentRouteId = initial.payload.routeId ?? '';
   // Take ownership of scroll restoration so back/forward replays the
   // saved offsets instead of letting the browser race the mount.
   if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
@@ -442,20 +450,26 @@ async function navigate(url: URL, opts: NavigateOpts): Promise<void> {
 
   const target = document.body;
   fireLeaveCallbacks();
-  // Same-chain shortcut (#508): when the destination route shares a
-  // wrapper module with the active route, mutating the wrapper-state
-  // rune re-renders the page slot without unmounting the layout
-  // chain. Layout-level $state survives the navigation, which the
-  // unmount + mount path below cannot offer.
+  // Same-route reactive refresh shortcut (#508): when the navigation
+  // resolves to the SAME routeId currently mounted (e.g. a goto with
+  // a new query string, or invalidate-driven refetch), mutate the
+  // wrapper-state rune in place so the layout chain re-renders
+  // against the new payload without unmounting. Cross-route
+  // navigation — even within the same layout chain — must still go
+  // through unmount + mount because each route owns a wrapper module
+  // with a STATIC <Page> import (reusing across routes would render
+  // the wrong page component).
   const nextChainKey = chainKeys[routeId] ?? '';
-  const sameChain =
-    nextChainKey !== '' && nextChainKey === currentChainKey && mounted !== null;
-  if (sameChain) {
+  const sameRoute =
+    nextChainKey !== '' &&
+    nextChainKey === currentChainKey &&
+    routeId === currentRouteId &&
+    mounted !== null;
+  if (sameRoute) {
     _setWrapperState({
       data: payload.data,
       layoutData: payload.layoutData ?? [],
       form: payload.form ?? null,
-      page: mod.page ?? mod.default,
     });
   } else {
     if (mounted) {
@@ -469,10 +483,11 @@ async function navigate(url: URL, opts: NavigateOpts): Promise<void> {
     }
     const props =
       nextChainKey !== ''
-        ? { data: payload.data, layoutData: payload.layoutData ?? [], form: payload.form ?? null, page: mod.page ?? mod.default }
+        ? { data: payload.data, layoutData: payload.layoutData ?? [], form: payload.form ?? null }
         : { data: payload.data, form: payload.form ?? null };
     mounted = mount(mod.default, { target, props });
     currentChainKey = nextChainKey;
+    currentRouteId = routeId;
   }
   (window as any).__sveltego__ = payload;
   _setPage(payload, { state: opts.state as Record<string, unknown> | undefined });

@@ -17,16 +17,13 @@ func TestGenerateWrapper_singleLayoutNests(t *testing.T) {
 	for _, want := range []string{
 		`import L0 from "../../../src/routes/_layout.svelte";`,
 		`import Page from "../../../src/routes/_page.svelte";`,
-		`export { Page as page };`,
 		`import { wrapperState } from "../../__router/wrapper-store.svelte";`,
-		"let { data, layoutData = [], form = null, page = Page } = $props();",
+		"let { data, layoutData = [], form = null } = $props();",
 		"wrapperState.data = data;",
 		"wrapperState.layoutData = layoutData;",
 		"wrapperState.form = form;",
-		"wrapperState.page = page;",
 		`<L0 data={wrapperState.layoutData[0] ?? {}}>`,
-		`{@const PageSlot = wrapperState.page}`,
-		`<PageSlot data={wrapperState.data} form={wrapperState.form} />`,
+		`<Page data={wrapperState.data} form={wrapperState.form} />`,
 		`</L0>`,
 	} {
 		if !strings.Contains(src, want) {
@@ -50,7 +47,7 @@ func TestGenerateWrapper_nestedLayoutsComposeOuterToInner(t *testing.T) {
 	// Outer layout opens before inner; inner closes before outer.
 	posL0Open := strings.Index(src, "<L0 ")
 	posL1Open := strings.Index(src, "<L1 ")
-	posPage := strings.Index(src, "<PageSlot ")
+	posPage := strings.Index(src, "<Page ")
 	posL1Close := strings.Index(src, "</L1>")
 	posL0Close := strings.Index(src, "</L0>")
 	if !(posL0Open >= 0 && posL1Open > posL0Open && posPage > posL1Open && posL1Close > posPage && posL0Close > posL1Close) {
@@ -77,26 +74,29 @@ func TestGenerateWrapper_snapshotIsReExported(t *testing.T) {
 	if !strings.Contains(src, `import Page, { snapshot } from "../../../src/routes/snapshot/_page.svelte";`) {
 		t.Errorf("missing snapshot import:\n%s", src)
 	}
-	if !strings.Contains(src, "export { Page as page, snapshot };") {
-		t.Errorf("missing combined Page+snapshot re-export:\n%s", src)
+	if !strings.Contains(src, "export { snapshot };") {
+		t.Errorf("missing snapshot re-export:\n%s", src)
 	}
 }
 
-// TestGenerateWrapper_noConditionalGuardOnPageSlot defends against a
-// regression where wrapping the page slot in an `{#if}` block injected
-// Svelte hydration comment markers absent from the SSR HTML and tripped
-// svelte/e/hydration_mismatch warnings on first paint. The slot must
-// render unconditionally; the prop default keeps wrapperState.page
-// non-null at first render.
-func TestGenerateWrapper_noConditionalGuardOnPageSlot(t *testing.T) {
+// TestGenerateWrapper_noDynamicComponentsOnFirstRender defends the
+// hydration-parity contract: the wrapper must render the page through a
+// STATIC `<Page>` reference, never through `{#if}`, `{@const}`, or
+// `<svelte:component>` dispatch. Dynamic dispatch injects Svelte
+// hydration comment markers that are absent from the SSR HTML and trips
+// `svelte/e/hydration_mismatch` warnings on first paint (regression
+// surfaced on basic playground's inert _layout.svelte).
+func TestGenerateWrapper_noDynamicComponentsOnFirstRender(t *testing.T) {
 	t.Parallel()
 	src := GenerateWrapper(WrapperOptions{
 		LayoutImports: []string{"../../../src/routes/_layout.svelte"},
 		PagePath:      "../../../src/routes/_page.svelte",
 		StoreImport:   "../../__router/wrapper-store.svelte",
 	})
-	if strings.Contains(src, "{#if") {
-		t.Errorf("wrapper must not introduce an {#if} guard around the page slot — comment markers cause hydration mismatches:\n%s", src)
+	for _, banned := range []string{"{#if", "{@const", "<svelte:component", "<PageSlot"} {
+		if strings.Contains(src, banned) {
+			t.Errorf("wrapper must not emit %q (hydration-mismatch hazard):\n%s", banned, src)
+		}
 	}
 }
 
@@ -156,13 +156,18 @@ func TestGenerateWrapperStoreModule_runeShape(t *testing.T) {
 		"data: unknown;",
 		"layoutData: unknown[];",
 		"form: unknown;",
-		"page: any;",
 		"export function _setWrapperState",
 		"wrapperState.data = next.data;",
-		"wrapperState.page = next.page;",
+		"wrapperState.layoutData = next.layoutData;",
+		"wrapperState.form = next.form;",
 	} {
 		if !strings.Contains(src, want) {
 			t.Errorf("wrapper-store missing %q:\n%s", want, src)
+		}
+	}
+	for _, banned := range []string{"page: any;", "wrapperState.page", "next.page"} {
+		if strings.Contains(src, banned) {
+			t.Errorf("wrapper-store still references dropped page field (%q):\n%s", banned, src)
 		}
 	}
 }

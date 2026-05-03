@@ -409,22 +409,23 @@ func TestBuild_EmitsLayoutWrapper(t *testing.T) {
 		`import L0 from `,
 		`_layout.svelte"`,
 		`import Page from `,
-		`export { Page as page };`,
 		`import { wrapperState } from `,
 		`<L0 data={wrapperState.layoutData[0] ?? {}}>`,
-		`{@const PageSlot = wrapperState.page}`,
-		`<PageSlot data={wrapperState.data} form={wrapperState.form} />`,
+		`<Page data={wrapperState.data} form={wrapperState.form} />`,
 		`</L0>`,
 	} {
 		if !bytes.Contains(wrapperBytes, []byte(want)) {
 			t.Errorf("wrapper.svelte missing %q:\n%s", want, wrapperBytes)
 		}
 	}
-	// Hydration safety: the page slot must NOT be wrapped in `{#if}`,
-	// which would insert Svelte comment markers absent from SSR HTML
-	// and trip svelte/e/hydration_mismatch warnings on first paint.
-	if bytes.Contains(wrapperBytes, []byte("{#if")) {
-		t.Errorf("wrapper.svelte must not wrap the page slot in {#if}:\n%s", wrapperBytes)
+	// Hydration parity: the wrapper must render the page through a
+	// STATIC <Page> reference. Dynamic dispatch ({#if}, {@const},
+	// <svelte:component>) injects comment markers absent from the SSR
+	// HTML and trips svelte/e/hydration_mismatch on first paint.
+	for _, banned := range []string{"{#if", "{@const", "<svelte:component", "<PageSlot"} {
+		if bytes.Contains(wrapperBytes, []byte(banned)) {
+			t.Errorf("wrapper.svelte must not emit %q (hydration-mismatch hazard):\n%s", banned, wrapperBytes)
+		}
 	}
 
 	// Entry must mount the wrapper, not Page directly, and forward layoutData.
