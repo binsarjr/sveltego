@@ -74,7 +74,17 @@ func GenerateClientEntry(opts ClientEntryOptions) string {
 	// state module through vite-plugin-svelte so its `$state` runes
 	// compile rather than shipping raw to the browser (#471).
 	relStatePath := strings.TrimSuffix(opts.RelRouterPath, "/router") + "/state.svelte"
-	fmt.Fprintf(&b, "import { _setPage, _startVersionPoller } from %q;\n\n", relStatePath)
+	fmt.Fprintf(&b, "import { _setPage, _startVersionPoller } from %q;\n", relStatePath)
+	if useWrapper {
+		// _setWrapperState seeds the per-route wrapper's rune store
+		// before mount/hydrate so the layout chain and page render
+		// against populated fields on first paint. Without this, the
+		// wrapper would render against an empty rune and trip
+		// svelte/e/hydration_mismatch on every wrapped route (#508).
+		relStoreFromEntry := strings.TrimSuffix(opts.RelRouterPath, "/router") + "/wrapper-store.svelte"
+		fmt.Fprintf(&b, "import { _setWrapperState } from %q;\n", relStoreFromEntry)
+	}
+	b.WriteString("\n")
 	b.WriteString("const el = document.getElementById('sveltego-data');\n")
 	b.WriteString("const payload = el ? JSON.parse(el.textContent ?? '{}') : {};\n")
 	b.WriteString("(window as any).__sveltego__ = { ...payload, enhance };\n")
@@ -84,6 +94,17 @@ func GenerateClientEntry(opts ClientEntryOptions) string {
 	// off the version poller — only the first call has effect, so it
 	// is safe to inline in every per-route entry script.
 	b.WriteString("_setPage(payload);\n")
+	if useWrapper {
+		// Seed the per-route wrapper's rune store BEFORE mount so the
+		// layout and page templates read populated fields on first
+		// paint — hydration must match the SSR HTML to avoid
+		// svelte/e/hydration_mismatch (#508).
+		b.WriteString("_setWrapperState({\n")
+		b.WriteString("  data: payload.data,\n")
+		b.WriteString("  layoutData: payload.layoutData ?? [],\n")
+		b.WriteString("  form: payload.form ?? null,\n")
+		b.WriteString("});\n")
+	}
 	b.WriteString("if (payload.appVersion) _startVersionPoller(payload.appVersion, payload.versionPoll);\n\n")
 	// renderEmptyShell + renderSvelteShell inject `<div id="app">` for
 	// client-only routes; SSR/SSG render the page body directly so no
@@ -94,7 +115,9 @@ func GenerateClientEntry(opts ClientEntryOptions) string {
 	b.WriteString("const component = attach(Root, {\n")
 	b.WriteString("  target,\n")
 	if useWrapper {
-		b.WriteString("  props: { data: payload.data, layoutData: payload.layoutData ?? [], form: payload.form ?? null },\n")
+		// Wrapper takes zero props — it reads everything from the
+		// wrapper-state rune that we just seeded above.
+		b.WriteString("  props: {},\n")
 	} else {
 		b.WriteString("  props: { data: payload.data, form: payload.form ?? null },\n")
 	}

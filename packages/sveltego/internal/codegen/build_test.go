@@ -428,7 +428,9 @@ func TestBuild_EmitsLayoutWrapper(t *testing.T) {
 		}
 	}
 
-	// Entry must mount the wrapper, not Page directly, and forward layoutData.
+	// Entry must mount the wrapper, not Page directly, and seed the
+	// wrapper-state rune via _setWrapperState BEFORE mount so the
+	// wrapper's first paint matches SSR (#508 hydration parity).
 	rootEntry := filepath.Join(root, ".gen", "client", "routes", "_page", "entry.ts")
 	rootEntryBytes, err := os.ReadFile(rootEntry)
 	if err != nil {
@@ -437,8 +439,18 @@ func TestBuild_EmitsLayoutWrapper(t *testing.T) {
 	if !bytes.Contains(rootEntryBytes, []byte(`import Root from "./wrapper.svelte";`)) {
 		t.Errorf("entry.ts must import wrapper as Root:\n%s", rootEntryBytes)
 	}
+	if !bytes.Contains(rootEntryBytes, []byte("import { _setWrapperState } from")) {
+		t.Errorf("entry.ts must import _setWrapperState to seed the rune store before mount:\n%s", rootEntryBytes)
+	}
+	if !bytes.Contains(rootEntryBytes, []byte("_setWrapperState({")) {
+		t.Errorf("entry.ts must call _setWrapperState before mount:\n%s", rootEntryBytes)
+	}
 	if !bytes.Contains(rootEntryBytes, []byte("layoutData: payload.layoutData ?? []")) {
-		t.Errorf("entry.ts must forward layoutData to wrapper:\n%s", rootEntryBytes)
+		t.Errorf("entry.ts must seed layoutData into the rune store:\n%s", rootEntryBytes)
+	}
+	// Wrapper takes zero props — rune store is the source of truth.
+	if !bytes.Contains(rootEntryBytes, []byte("props: {},")) {
+		t.Errorf("entry.ts must pass empty props to wrapper mount:\n%s", rootEntryBytes)
 	}
 	if !bytes.Contains(rootEntryBytes, []byte(`chainKey: "`)) {
 		t.Errorf("entry.ts must forward a chainKey to startRouter:\n%s", rootEntryBytes)
@@ -467,6 +479,85 @@ func TestBuild_EmitsLayoutWrapper(t *testing.T) {
 	// The router's loader map must point at the wrapper, not the bare page.
 	if !bytes.Contains(routerBytes, []byte("/wrapper.svelte")) {
 		t.Errorf("router.ts loader map should target wrapper.svelte:\n%s", routerBytes)
+	}
+}
+
+// TestBuild_WrapperReExportsModuleSnapshot is the end-to-end regression
+// for Bug 1 in the PR-#517 follow-up: a route that has both a layout
+// chain (so the wrapper.svelte path kicks in) AND a `<script module>`
+// snapshot export must produce a wrapper whose `<script module>` block
+// re-exports `snapshot`. Without it, vite errors with `"snapshot" is
+// not exported by ".gen/client/.../wrapper.svelte"` because Svelte 5
+// reads `export {…}` inside the instance script as the legacy props
+// syntax (no ESM export). entry.ts pulls `snapshot` from the wrapper
+// path so the re-export is load-bearing.
+func TestBuild_WrapperReExportsModuleSnapshot(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/wmexp\n\ngo 1.22\n")
+	writeFile(t, filepath.Join(root, "src", "routes", "_layout.svelte"),
+		"<script>let { data, children } = $props();</script><header>{data?.user ?? ''}</header>{@render children()}")
+	// Root page keeps the route scanner happy (no orphan _page.server.go).
+	writeFile(t, filepath.Join(root, "src", "routes", "_page.svelte"),
+		"<h1>home</h1>\n")
+	writeFile(t, filepath.Join(root, "src", "routes", "_page.server.go"),
+		"//go:build sveltego\n\npackage routes\n\nconst SSR = false\n")
+	// SSR=false keeps the snap route off the Node sidecar dependency.
+	writeFile(t, filepath.Join(root, "src", "routes", "snap", "_page.server.go"),
+		"//go:build sveltego\n\npackage snap\n\nconst SSR = false\n")
+	writeFile(t, filepath.Join(root, "src", "routes", "snap", "_page.svelte"),
+		`<script module lang="ts">
+  export const snapshot = {
+    capture: () => ({ d: '' }),
+    restore: (_: { d: string }) => {},
+  };
+  export const helper = () => 1;
+</script>
+<h1>snap</h1>
+`)
+
+	if _, err := Build(context.Background(), BuildOptions{ProjectRoot: root}); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	wrapperPath := filepath.Join(root, ".gen", "client", "routes", "snap", "_page", "wrapper.svelte")
+	wrapperBytes, err := os.ReadFile(wrapperPath)
+	if err != nil {
+		t.Fatalf("snap wrapper.svelte not emitted: %v", err)
+	}
+	// The module-export re-export must live in a `<script module>` block —
+	// Svelte 5 only treats module-context exports as ESM exports.
+	if !bytes.Contains(wrapperBytes, []byte(`<script module lang="ts">`)) {
+		t.Errorf("wrapper missing <script module> block:\n%s", wrapperBytes)
+	}
+	// Both module exports must propagate (sorted: helper then snapshot).
+	if !bytes.Contains(wrapperBytes, []byte(`export { helper, snapshot } from `)) {
+		t.Errorf("wrapper missing combined module re-export:\n%s", wrapperBytes)
+	}
+	// The instance script must NOT carry an export.
+	endModule := bytes.Index(wrapperBytes, []byte("</script>"))
+	if endModule < 0 {
+		t.Fatalf("malformed wrapper:\n%s", wrapperBytes)
+	}
+	instance := wrapperBytes[endModule:]
+	if bytes.Contains(instance, []byte("export { snapshot }")) {
+		t.Errorf("snapshot must not be re-exported in instance script:\n%s", wrapperBytes)
+	}
+	// Wrapper takes zero props; entry.ts seeds the rune store before mount
+	// (Bug 2 fix). Top-level `$props()` reads or `$effect`-deferred seeds
+	// would trip state_referenced_locally / break hydration respectively.
+	for _, banned := range []string{"$props()", "$effect(() => {", "wrapperState.data ="} {
+		if bytes.Contains(wrapperBytes, []byte(banned)) {
+			t.Errorf("wrapper must not contain %q (Bug 2 regression):\n%s", banned, wrapperBytes)
+		}
+	}
+	// entry.ts must still pull `snapshot` through the wrapper path.
+	entryBytes, err := os.ReadFile(filepath.Join(root, ".gen", "client", "routes", "snap", "_page", "entry.ts"))
+	if err != nil {
+		t.Fatalf("snap entry.ts not emitted: %v", err)
+	}
+	if !bytes.Contains(entryBytes, []byte(`import Root, { snapshot } from "./wrapper.svelte";`)) {
+		t.Errorf("snap entry.ts must pull snapshot through wrapper:\n%s", entryBytes)
 	}
 }
 
