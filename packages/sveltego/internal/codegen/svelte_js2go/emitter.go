@@ -130,14 +130,36 @@ type SpreadRewriter interface {
 	RewriteObjectSpread(scope *Scope, spread *Node, inner string) (rewritten string, expanded bool)
 }
 
+// SliceTypeResolver is an optional interface a Rewriter can implement
+// to expose the element-type identifier (a key into its typegen Shape)
+// for an AST node that resolves to a typed slice on the data root.
+// The emitter consults it inside the each-array lowering pre-pass so
+// slice-of-struct iteration can preserve the element type through the
+// `each_array` scratch and the per-iteration alias (issue #509 bug
+// 2.2). Returns ok=false when the operand isn't a typed slice the
+// rewriter recognises, in which case the emitter keeps the
+// `EnsureArrayLike` fallback the Phase 3 lowering emits.
+type SliceTypeResolver interface {
+	ResolveSliceElement(scope *Scope, n *Node) (typeName string, ok bool)
+}
+
 // Scope tracks locals introduced inside the render function. Phase 5
 // reads it to know which identifiers are user-data references (subject
 // to lowering) and which are emitter-introduced bookkeeping (left
 // alone).
+//
+// elemTypes carries the element-type identifier (a key into the
+// Lowerer's typegen Shape) for locals introduced by the each-array
+// pattern: the `each_array := data.Foo` scratch and the per-iteration
+// `item := each_array[i]` alias both need the typed element name so
+// chain accesses on `item.<json>` lower to `item.<GoName>`. Issue #509
+// (bug 2.2). Empty / missing entries mean no type info — the lowerer
+// then treats the local as opaque, the existing behaviour.
 type Scope struct {
-	parent  *Scope
-	locals  map[string]LocalKind
-	dataVar string
+	parent    *Scope
+	locals    map[string]LocalKind
+	dataVar   string
+	elemTypes map[string]string
 }
 
 // LocalKind classifies how a name was bound in scope. Phase 5 uses
@@ -172,7 +194,39 @@ const (
 )
 
 func newScope(parent *Scope) *Scope {
-	return &Scope{parent: parent, locals: map[string]LocalKind{}}
+	return &Scope{
+		parent:    parent,
+		locals:    map[string]LocalKind{},
+		elemTypes: map[string]string{},
+	}
+}
+
+// declareElemType records that name binds a value whose element type is
+// the given typegen Shape Types key. Used by the each-array lowering
+// (issue #509 bug 2.2) to flow slice-of-struct typing through the
+// scratch `each_array` and the per-iteration item alias so the Lowerer
+// can translate JSON-tag chains on the iteration variable.
+func (s *Scope) declareElemType(name, typeName string) {
+	if name == "" || typeName == "" {
+		return
+	}
+	if s.elemTypes == nil {
+		s.elemTypes = map[string]string{}
+	}
+	s.elemTypes[name] = typeName
+}
+
+// LookupElemType returns the element-type identifier recorded for name
+// (walking parent scopes), and ok=false when no type info is known. The
+// Lowerer reads it to decide whether to apply JSON-tag → GoName
+// rewriting on chains rooted at a local each-loop alias.
+func (s *Scope) LookupElemType(name string) (string, bool) {
+	for cur := s; cur != nil; cur = cur.parent {
+		if t, ok := cur.elemTypes[name]; ok {
+			return t, true
+		}
+	}
+	return "", false
 }
 
 // Lookup returns the kind of a local, walking parent scopes. Returns
@@ -981,7 +1035,28 @@ func (e *emitter) emitDeclarator(b *Buf, kind string, d *Node) error {
 
 	// Pattern 2: `const each_array = $.ensure_array_like(...)`
 	if d.Init != nil && e.isHelperCall(d.Init, "ensure_array_like") {
-		inner, err := e.formatExpression(d.Init.Arguments[0])
+		operand := d.Init.Arguments[0]
+		// Ask the rewriter (when it implements SliceTypeResolver) whether
+		// the operand resolves to a typed slice on the data root. When
+		// it does, skip the runtime helper entirely and assign the typed
+		// slice directly so the per-iteration item alias stays typed and
+		// chain accesses lower through the typegen Shape. Issue #509
+		// (bug 2.2). Falls back to the legacy `EnsureArrayLike` form when
+		// the operand is opaque (no shape, computed access, untyped
+		// slice element) so the existing 80+ goldens stay byte-identical.
+		if r, ok := e.opts.Rewriter.(SliceTypeResolver); ok {
+			if elemType, ok := r.ResolveSliceElement(e.scope, operand); ok {
+				inner, err := e.formatExpression(operand)
+				if err != nil {
+					return err
+				}
+				e.scope.declare(name, LocalScratch)
+				e.scope.declareElemType(name, elemType)
+				b.Line("%s := %s", name, inner)
+				return nil
+			}
+		}
+		inner, err := e.formatExpression(operand)
 		if err != nil {
 			return err
 		}
@@ -1002,6 +1077,14 @@ func (e *emitter) emitDeclarator(b *Buf, kind string, d *Node) error {
 			return err
 		}
 		e.scope.declare(name, LocalEach)
+		// Propagate any element-type info recorded on the source slice
+		// (typed each-array path, issue #509) so the lowerer can rewrite
+		// `item.<json>` chains via the JSON-tag map.
+		if d.Init.Object != nil && d.Init.Object.Type == "Identifier" {
+			if t, ok := e.scope.LookupElemType(d.Init.Object.Name); ok {
+				e.scope.declareElemType(name, t)
+			}
+		}
 		b.Line("%s := %s[%s]", name, obj, idx)
 		return nil
 	}
@@ -1075,6 +1158,14 @@ func (e *emitter) lengthExpr(member *Node, def string) string {
 }
 
 func (e *emitter) emitPropsDestructure(b *Buf, pat *Node) error {
+	// In typed-data mode the function signature binds the user-data as
+	// the typed `data` parameter regardless of what the Svelte template
+	// destructured. The first destructured prop (after `children`) is
+	// treated as the data root; if its source-side name differs from
+	// `data` we emit a Go alias so chain references in the body resolve.
+	// Issue #509 surfaced this for `_error.svelte` whose convention is
+	// `let { error } = $props()` and the typed param is `data ErrorData`.
+	dataBound := false
 	for _, p := range pat.Properties {
 		if p.Type != "Property" {
 			return unknownShape(p, "prop-pat:"+p.Type)
@@ -1106,7 +1197,16 @@ func (e *emitter) emitPropsDestructure(b *Buf, pat *Node) error {
 		// the Lowerer's typed field-access output. Skip the cast for
 		// the data root only — auxiliary destructured props still need
 		// the map fallback because no typed parameter exists for them.
-		if e.opts.TypedDataParam != "" && jsName == "data" {
+		if e.opts.TypedDataParam != "" && !dataBound {
+			dataBound = true
+			if goName != "data" {
+				// Error templates and any other route that destructures
+				// the typed payload under a non-`data` name (e.g.
+				// `let { error } = $props()` in `_error.svelte`) get a
+				// Go alias so member chains in the template resolve to
+				// the typed parameter. Issue #509 (bug 2.1).
+				b.Line("%s := data", goName)
+			}
 			continue
 		}
 		b.Line(`%s, _ := props[%q].(map[string]any)`, goName, jsName)
@@ -1252,6 +1352,15 @@ func (e *emitter) emitForOf(b *Buf, stmt *Node) error {
 		return err
 	}
 	e.scope.declare(name, LocalEach)
+	// Same typed-element propagation the each-array lowering uses for
+	// the C-style `let item = each_array[$$index]` form. Issue #509
+	// (bug 2.2). Covers user-authored `for-of` loops and any
+	// hypothetical Svelte minor that switches to the for-of shape.
+	if r, ok := e.opts.Rewriter.(SliceTypeResolver); ok {
+		if elemType, ok := r.ResolveSliceElement(e.scope, stmt.Right); ok {
+			e.scope.declareElemType(name, elemType)
+		}
+	}
 	b.Line("for _, %s := range %s {", name, rhs)
 	b.In(func() {
 		_ = e.emitStatement(b, stmt.FuncBody)

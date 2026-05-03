@@ -138,6 +138,22 @@ func (l *Lowerer) rewriteMember(scope *Scope, n *Node, def string) string {
 		return l.lowerAppStateChain(root, chain, n, def)
 	}
 
+	// Locals with a recorded element type (each-loop alias rooted at a
+	// typed slice on the data root) get the JSON-tag rewrite treatment
+	// against the recorded element shape. Issue #509 (bug 2.2). Tested
+	// before the generic local-skip branch so the typed-element path
+	// wins over the opaque pass-through. Restricted to LocalEach: the
+	// per-iteration item alias IS an element value, while LocalScratch
+	// covers `each_array` itself which is a slice (chains like
+	// `each_array.length` must not lower against the element shape).
+	if scope != nil && scope.Lookup(root.Name) == LocalEach {
+		if elemType, ok := scope.LookupElemType(root.Name); ok {
+			if _, known := l.LookupShapeType(elemType); known {
+				return l.lowerLocalChain(root, chain, n, def, elemType)
+			}
+		}
+	}
+
 	// Locals (each-loop alias, snippet param, @const, function param,
 	// hoisted for-init scratch) skip lowering. Their default rendering
 	// (mangled identifier dotted into raw JS member names) is what we
@@ -257,6 +273,11 @@ func (l *Lowerer) lowerDataChain(_ *Scope, root *Node, segs []chainSegment, n *N
 	// an error in strict mode).
 	currentType := l.shape.RootType
 	parts := []string{root.Name}
+	// fields parallels parts: fields[i] describes the typegen Field that
+	// produced parts[i+1]. fields[-1] doesn't exist (root has no
+	// owning field); kept off-by-one so optional-chain guard logic can
+	// inspect "what's at parts[:i+1]" by reading fields[i-1].
+	fields := make([]typegen.Field, 0, len(segs))
 	for i, s := range segs {
 		st, ok := l.shape.Types[currentType]
 		if !ok {
@@ -280,6 +301,7 @@ func (l *Lowerer) lowerDataChain(_ *Scope, root *Node, segs []chainSegment, n *N
 			goName = titleCase(s.name)
 		}
 		parts = append(parts, goName)
+		fields = append(fields, field)
 		// Advance the cursor to the next nested type. Slices end the
 		// chain (further dots would mean indexing, which Svelte's
 		// compiled output does not emit at this layer).
@@ -306,7 +328,72 @@ func (l *Lowerer) lowerDataChain(_ *Scope, root *Node, segs []chainSegment, n *N
 	}
 
 	if hasOptional {
-		return l.lowerOptionalChain(parts, segs)
+		return l.lowerOptionalChain(parts, segs, fields)
+	}
+	return strings.Join(parts, ".")
+}
+
+// lowerLocalChain walks a chain rooted at a local whose element type
+// the emitter recorded via Scope.declareElemType. The walk reuses the
+// same JSON-tag → GoName logic as lowerDataChain but starts from the
+// recorded type rather than the route's RootType. Issue #509 (bug 2.2).
+//
+// On any unknown segment the lowerer returns "" so the emitter falls
+// back to the JS-style default rendering — strict mode does not error
+// here because the surrounding Phase 6 typegen Shape may legitimately
+// not describe every nested struct (e.g. an inline anonymous struct).
+// The caller's downstream `go build` would then surface the failure on
+// the offending field name, which still points at the right source.
+func (l *Lowerer) lowerLocalChain(root *Node, segs []chainSegment, n *Node, def string, startType string) string {
+	if l.shape == nil {
+		return ""
+	}
+	currentType := startType
+	parts := []string{root.Name}
+	fields := make([]typegen.Field, 0, len(segs))
+	hasOptional := false
+	for i, s := range segs {
+		st, ok := l.shape.Types[currentType]
+		if !ok {
+			return ""
+		}
+		field, found := st.Lookup(s.name)
+		if !found {
+			if l.strict {
+				l.recordMissingField(currentType, s.name, n, def)
+			}
+			return ""
+		}
+		goName := field.GoName
+		if goName == "" {
+			goName = titleCase(s.name)
+		}
+		parts = append(parts, goName)
+		fields = append(fields, field)
+		if s.optional {
+			hasOptional = true
+		}
+		switch {
+		case field.Slice:
+			if i < len(segs)-1 {
+				if l.strict {
+					l.recordTraverseThroughSlice(field, n, def)
+				}
+				return ""
+			}
+		case field.NamedType != "":
+			currentType = field.NamedType
+		default:
+			if i < len(segs)-1 {
+				if l.strict {
+					l.recordTraversePrimitive(field, n, def)
+				}
+				return ""
+			}
+		}
+	}
+	if hasOptional {
+		return l.lowerOptionalChain(parts, segs, fields)
 	}
 	return strings.Join(parts, ".")
 }
@@ -630,18 +717,74 @@ func (l *Lowerer) recordTerminalAppStateField(field string, n *Node, def string)
 // A single closure (rather than nested closures per link) keeps the
 // generated source compact — the reader scans a flat list of guards
 // rather than tracking nested IIFE binding scopes.
-func (l *Lowerer) lowerOptionalChain(parts []string, segs []chainSegment) string {
-	var b strings.Builder
-	b.WriteString("func() any { ")
+//
+// fields parallels segs: fields[i] is the typegen Field that produced
+// parts[i+1]. The guard is omitted when the prefix at parts[:i+1] is a
+// concrete struct value (no Pointer / Slice / Map indirection) — Go
+// would refuse `structVal == nil` and the field is non-nilable anyway.
+// Issue #509 (bug 2.4): `data?.active` against `type PageData struct{
+// Active bool }` lowers to a guarded chain on a struct value.
+func (l *Lowerer) lowerOptionalChain(parts []string, segs []chainSegment, fields []typegen.Field) string {
+	// Walk segs collecting the guards we still need after type-aware
+	// pruning. fields[i-1] describes the prefix that ends at parts[i];
+	// fields[-1] (i==0) is the bare root, always a typed value — drop
+	// any optional flag there.
+	guards := make([]string, 0, len(segs))
 	for i, s := range segs {
 		if !s.optional {
 			continue
 		}
-		guard := strings.Join(parts[:i+1], ".")
-		fmt.Fprintf(&b, "if %s == nil { return nil }; ", guard)
+		if i == 0 || isNonNilable(fields[i-1]) {
+			continue
+		}
+		guards = append(guards, strings.Join(parts[:i+1], "."))
 	}
-	fmt.Fprintf(&b, "return %s }()", strings.Join(parts, "."))
+	full := strings.Join(parts, ".")
+	if len(guards) == 0 {
+		// Type-aware pruning eliminated every guard; the JS `?.` was
+		// purely defensive against a nil that can't happen on the Go
+		// side. Emit the direct chain so the generated source stays
+		// readable and the Go compiler doesn't need to inline an IIFE.
+		return full
+	}
+	var b strings.Builder
+	b.WriteString("func() any { ")
+	for _, g := range guards {
+		fmt.Fprintf(&b, "if %s == nil { return nil }; ", g)
+	}
+	fmt.Fprintf(&b, "return %s }()", full)
 	return b.String()
+}
+
+// isNonNilable reports whether a typegen Field resolves to a Go value
+// that cannot be nil. Struct values, primitives (bool/int/string/...),
+// and any non-pointer / non-slice / non-map type satisfy this. The
+// optional-chain lowerer uses it to decide whether the JS `?.` guard
+// has any meaning on the Go side; emitting `data == nil` on a struct
+// value fails to compile (`mismatched types T and untyped nil`).
+//
+// The check is intentionally conservative: when GoType wraps an
+// interface or a generic type parameter we don't recognise, we report
+// `false` so the guard stays in place — keeping the JS semantics rather
+// than risking a "nil compare" surprise.
+func isNonNilable(f typegen.Field) bool {
+	if f.Pointer || f.Slice {
+		return false
+	}
+	// MapType comes through the walker as GoType "map[K]V"; the parsed
+	// Field doesn't carry an explicit Map flag, so check the source
+	// rendering. Same for interface-typed fields whose GoType begins
+	// with "interface{" or is an anonymous selector we didn't model.
+	if strings.HasPrefix(f.GoType, "map[") {
+		return false
+	}
+	if strings.HasPrefix(f.GoType, "interface") {
+		return false
+	}
+	if f.GoType == "any" {
+		return false
+	}
+	return true
 }
 
 // recordUnknownRoot pushes a hard-error onto the lowerer's accumulator
@@ -763,6 +906,82 @@ func isEmitterScratch(name string) bool {
 		return true
 	}
 	return false
+}
+
+// ResolveSliceElement implements [SliceTypeResolver]. It walks the
+// MemberExpression chain rooted at a destructured prop (the data root)
+// and reports the slice-element typegen Type name when the chain
+// resolves to a `[]T` field with NamedType="T". Used by the each-array
+// pre-pass to preserve typed-element iteration. Issue #509 (bug 2.2).
+//
+// Returns ok=false for any operand the rewriter doesn't recognise as a
+// typed-slice expression: bare identifiers, computed access, chains
+// rooted at a local each alias, and chains whose tail field is not a
+// slice. Non-strict mode (no shape) also returns ok=false so existing
+// goldens stay byte-identical.
+func (l *Lowerer) ResolveSliceElement(scope *Scope, n *Node) (string, bool) {
+	if l == nil || l.shape == nil || l.shape.RootType == "" {
+		return "", false
+	}
+	if n == nil || n.Type != "MemberExpression" {
+		// Bare-identifier slice (e.g. {#each items as item}) lands here
+		// when the user hoisted the slice into a local. Handled when
+		// the local was tracked via declareElemType.
+		if n != nil && n.Type == "Identifier" && scope != nil {
+			if t, ok := scope.LookupElemType(n.Name); ok {
+				return t, true
+			}
+		}
+		return "", false
+	}
+	chain, root, ok := flattenChain(n)
+	if !ok {
+		return "", false
+	}
+	if scope == nil || !scope.IsDataRoot(root.Name) {
+		return "", false
+	}
+	currentType := l.shape.RootType
+	var lastField typegen.Field
+	for _, s := range chain {
+		st, ok := l.shape.Types[currentType]
+		if !ok {
+			return "", false
+		}
+		field, found := st.Lookup(s.name)
+		if !found {
+			return "", false
+		}
+		lastField = field
+		switch {
+		case field.Slice:
+			// Slices end the typegen walk — the element type lives in
+			// NamedType (set by the typegen walker for `[]T` where T is
+			// a same-file struct). Primitive slices (`[]string`) don't
+			// carry a NamedType; fall through to the not-ok return.
+		case field.NamedType != "":
+			currentType = field.NamedType
+		default:
+			return "", false
+		}
+	}
+	if !lastField.Slice || lastField.NamedType == "" {
+		return "", false
+	}
+	return lastField.NamedType, true
+}
+
+// LookupShapeType reports whether the lowerer's typegen Shape declares
+// a struct type under name. The emitter uses it to decide whether a
+// candidate element type recorded on a local can drive JSON-tag
+// rewriting (a missing type means the lowerer would error inside the
+// chain walk, so we keep the local opaque instead).
+func (l *Lowerer) LookupShapeType(name string) (typegen.ShapeType, bool) {
+	if l == nil || l.shape == nil {
+		return typegen.ShapeType{}, false
+	}
+	t, ok := l.shape.Types[name]
+	return t, ok
 }
 
 // RewriteObjectSpread implements [SpreadRewriter]. It receives the
