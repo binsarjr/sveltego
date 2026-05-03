@@ -43,6 +43,8 @@ const appShimURLs = {
 	"$app/navigation": pathToFileURL(
 		joinPath(sidecarDir, "shims", "app-navigation.mjs"),
 	).href,
+	"$app/forms": pathToFileURL(joinPath(sidecarDir, "shims", "app-forms.mjs"))
+		.href,
 };
 
 // rewriteAppAliases substitutes `'$app/state'` and `'$app/navigation'`
@@ -55,7 +57,7 @@ const appShimURLs = {
 // silently substituting an unrelated module.
 export function rewriteAppAliases(code) {
 	return code.replace(
-		/(\bfrom\s*|\bimport\s*\(\s*)(['"])(\$app\/(?:state|navigation))\2/g,
+		/(\bfrom\s*|\bimport\s*\(\s*)(['"])(\$app\/(?:state|navigation|forms))\2/g,
 		(_match, prefix, quote, specifier) => {
 			const url = appShimURLs[specifier];
 			return `${prefix}${quote}${url}${quote}`;

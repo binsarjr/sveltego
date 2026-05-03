@@ -53,11 +53,12 @@ export function initialize(data) {
 	appShimURLs = {
 		"$app/state": pathToFileURL(joinPath(sidecarDir, "shims", "app-state.mjs")).href,
 		"$app/navigation": pathToFileURL(joinPath(sidecarDir, "shims", "app-navigation.mjs")).href,
+		"$app/forms": pathToFileURL(joinPath(sidecarDir, "shims", "app-forms.mjs")).href,
 	};
 }
 
 function resolveAlias(specifier) {
-	if (specifier === "$app/state" || specifier === "$app/navigation") {
+	if (specifier === "$app/state" || specifier === "$app/navigation" || specifier === "$app/forms") {
 		return appShimURLs[specifier];
 	}
 	if (specifier.startsWith("$lib/")) {
@@ -110,7 +111,7 @@ export async function resolve(specifier, context, nextResolve) {
 // any `.svelte` the loader compiles, not just the entry.
 function rewriteImports(code) {
 	return code.replace(
-		/(\bfrom\s*|\bimport\s*\(\s*)(['"])((?:\$app\/(?:state|navigation))|(?:\$lib\/[^'"]+))\2/g,
+		/(\bfrom\s*|\bimport\s*\(\s*)(['"])((?:\$app\/(?:state|navigation|forms))|(?:\$lib\/[^'"]+))\2/g,
 		(_match, prefix, quote, specifier) => {
 			const url = resolveAlias(specifier);
 			if (!url) return _match;
