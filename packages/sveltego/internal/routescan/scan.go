@@ -547,7 +547,7 @@ func validateMatcherRefs(routes []ScannedRoute, matchers []DiscoveredMatcher) []
 					"route %q references unknown matcher %q on parameter %q",
 					r.Pattern, seg.Matcher, seg.Name,
 				),
-				Hint: "add src/params/" + seg.Matcher + ".go with `func Match(s string) bool` or use a built-in (int, uuid, slug)",
+				Hint: "add src/params/" + seg.Matcher + "/" + seg.Matcher + ".go with `func Match(s string) bool` or use a built-in (int, uuid, slug)",
 			})
 		}
 	}

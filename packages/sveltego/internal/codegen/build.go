@@ -314,6 +314,15 @@ func Build(ctx context.Context, opts BuildOptions) (*BuildResult, error) {
 		return nil, err
 	}
 
+	// Auto-register user-defined param matchers so the runtime sees
+	// them without requiring a manual `cmd/app/main.go` wire-up.
+	// Emitted unconditionally so callers can reference gen.Matchers()
+	// even when src/params/ is empty (the call returns the built-in
+	// defaults in that case).
+	if err := emitMatchers(opts.ProjectRoot, outDir, modulePath, "gen", scan.Matchers); err != nil {
+		return nil, err
+	}
+
 	if err := emitEmbedStub(opts.ProjectRoot, outAbs); err != nil {
 		return nil, err
 	}
