@@ -169,6 +169,56 @@ func TestCSRFInject_HydrationPayloadIncludesCSRFToken(t *testing.T) {
 	}
 }
 
+// TestCSRFInject_DataJSONPayloadIncludesCSRFToken covers issue #541:
+// the __data.json response served to the SPA router on every client
+// navigation must carry the per-request csrfToken. Without this, the
+// second-and-later page rendered after SPA nav has no token in
+// window.__sveltego__, the splicer reads undefined, and the user's
+// first POST returns 403. The fix runs applyCSRF before
+// renderDataJSON so the token lands in ev.Locals.
+func TestCSRFInject_DataJSONPayloadIncludesCSRFToken(t *testing.T) {
+	t.Parallel()
+	actions := kit.ActionMap{
+		"login": func(_ *kit.RequestEvent) kit.ActionResult {
+			return kit.ActionDataResult(200, "ok")
+		},
+	}
+	opts := kit.DefaultPageOptions()
+	opts.Templates = ""
+	srv := newTestServer(t, []router.Route{{
+		Pattern:  "/login",
+		Segments: []router.Segment{{Kind: router.SegmentStatic, Value: "login"}},
+		Page:     fallbackInjectedPage(),
+		Actions:  func() any { return actions },
+		Options:  opts,
+	}})
+	ts := httptest.NewServer(srv)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/login/__data.json")
+	if err != nil {
+		t.Fatalf("GET __data.json: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+
+	var cookieToken string
+	for _, c := range resp.Cookies() {
+		if c.Name == "_csrf" {
+			cookieToken = c.Value
+			break
+		}
+	}
+	if cookieToken == "" {
+		t.Fatalf("expected _csrf cookie on __data.json GET; got cookies=%v", resp.Cookies())
+	}
+
+	want := `"csrfToken":"` + cookieToken + `"`
+	if !strings.Contains(string(body), want) {
+		t.Fatalf("__data.json payload missing %q; body=\n%s", want, body)
+	}
+}
+
 // TestCSRFInject_FallbackPathSkipsGetForm asserts the same renderFallback
 // shape leaves GET forms alone — the runtime rewriter gates on method
 // just like the build-time pass.

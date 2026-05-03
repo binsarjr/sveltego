@@ -75,7 +75,7 @@ func GenerateClientEntry(opts ClientEntryOptions) string {
 	default:
 		fmt.Fprintf(&b, "import Root from %q;\n", opts.RelSveltePath)
 	}
-	fmt.Fprintf(&b, "import { startRouter } from %q;\n", opts.RelRouterPath)
+	fmt.Fprintf(&b, "import { startRouter, afterNavigate } from %q;\n", opts.RelRouterPath)
 	// `.svelte.ts` (matched via the `.svelte` half here) routes the
 	// state module through vite-plugin-svelte so its `$state` runes
 	// compile rather than shipping raw to the browser (#471).
@@ -130,12 +130,15 @@ func GenerateClientEntry(opts ClientEntryOptions) string {
 	// CSRF auto-inject for client-rendered POST forms (#510). The
 	// build-time AST splice handles SSR; the runtime sidecar splice
 	// handles fallback routes; this third path covers SPA / Static
-	// routes whose forms are constructed in the browser. The walk
-	// runs once after mount (no MutationObserver — keeps the runtime
-	// dead simple; users adding forms dynamically can re-run via
-	// window.__sveltego_csrf__()).
+	// routes whose forms are constructed in the browser. Reads from
+	// window.__sveltego__.csrfToken so the value stays current after
+	// SPA nav (router rewrites the global on every nav). Registered
+	// via afterNavigate so the splicer re-fires on each navigation
+	// (#541) — without it the second-and-later page rendered via
+	// the client router has no hidden input and the user's first
+	// POST returns 403.
 	b.WriteString("const __sveltegoInjectCSRF = () => {\n")
-	b.WriteString("  const t = (payload as any).csrfToken;\n")
+	b.WriteString("  const t = (window as any).__sveltego__?.csrfToken;\n")
 	b.WriteString("  if (!t) return;\n")
 	b.WriteString("  const forms = target.querySelectorAll('form');\n")
 	b.WriteString("  forms.forEach((f) => {\n")
@@ -150,6 +153,7 @@ func GenerateClientEntry(opts ClientEntryOptions) string {
 	b.WriteString("  });\n")
 	b.WriteString("};\n")
 	b.WriteString("queueMicrotask(__sveltegoInjectCSRF);\n")
+	b.WriteString("afterNavigate(__sveltegoInjectCSRF);\n")
 	b.WriteString("(window as any).__sveltego_csrf__ = __sveltegoInjectCSRF;\n\n")
 	b.WriteString("(window as any).__sveltego_hydrated = true;\n\n")
 	// Forward the layout chain identifier so the SPA router can swap

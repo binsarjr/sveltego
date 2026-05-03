@@ -63,12 +63,15 @@ func TestGenerateEnhanceRuntime_Deterministic(t *testing.T) {
 	}
 }
 
-// TestGenerateClientEntry_CSRFAutoInject covers issue #510 on the SPA
-// path: the per-route entry must walk every <form method="post"> the
-// client mounts and splice a hidden _csrf_token input populated from
-// payload.csrfToken. Without this, SPA / Static routes that render
-// forms entirely in the browser would POST without the field and
-// trigger the framework's 403 CSRF rejection.
+// TestGenerateClientEntry_CSRFAutoInject covers #510 (SPA path) and
+// #541 (SPA-nav re-fire). The per-route entry must walk every
+// <form method="post"> the client mounts and splice a hidden
+// _csrf_token input populated from window.__sveltego__.csrfToken (the
+// router rewrites the global on every nav, so reading from the global
+// keeps the value fresh after navigation). The splicer is registered
+// via afterNavigate so it re-runs on each SPA navigation; without it
+// the second-and-later page rendered via the client router has no
+// hidden input and the user's first POST returns 403.
 func TestGenerateClientEntry_CSRFAutoInject(t *testing.T) {
 	t.Parallel()
 	out := GenerateClientEntry(ClientEntryOptions{
@@ -76,12 +79,13 @@ func TestGenerateClientEntry_CSRFAutoInject(t *testing.T) {
 		RelRouterPath: "../../__router/router",
 	})
 	for _, want := range []string{
-		"(payload as any).csrfToken",
+		"(window as any).__sveltego__?.csrfToken",
 		"target.querySelectorAll('form')",
 		"_csrf_token",
 		"input.type = 'hidden';",
 		"f.insertBefore(input, f.firstChild);",
 		"window as any).__sveltego_csrf__",
+		"afterNavigate(__sveltegoInjectCSRF)",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("client entry missing %q for CSRF auto-inject:\n%s", want, out)

@@ -253,6 +253,12 @@ func (s *Server) resolve(w http.ResponseWriter, r *http.Request, ev *kit.Request
 		if route.Options.SSROnly {
 			return nil, kit.SafeError{Code: http.StatusNotFound, Message: http.StatusText(http.StatusNotFound)}
 		}
+		// Run applyCSRF for the GET-only __data.json path so the
+		// payload carries `csrfToken` after SPA nav. Without this,
+		// the second-and-later page rendered via the client router
+		// has no token in its hydration payload, the splicer reads
+		// undefined, and the user's first POST returns 403 (#541).
+		s.applyCSRF(r, ev, route)
 		return s.renderDataJSON(r, ev, route, nil)
 	}
 	if rejected := s.applyCSRF(r, ev, route); rejected != nil {
