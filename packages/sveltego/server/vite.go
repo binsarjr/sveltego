@@ -47,20 +47,28 @@ func (m viteManifestMap) globalCSSFile() string {
 	return c.File
 }
 
-// assetTags returns the HTML fragment (script + modulepreload + stylesheet
-// tags) for routeKey. Returns an empty string when routeKey is not in the
+// headAssetTags returns the head-belonging HTML fragment for routeKey:
+// stylesheet links plus <link rel="modulepreload"> hints for every
+// transitive import. Returns an empty string when routeKey is not in the
 // manifest or when m is nil. When the manifest has a `src/app.css` entry
 // (Tailwind / PostCSS / global stylesheet path), its hashed file is
 // prepended as a <link rel="stylesheet"> so the global stylesheet loads
 // alongside route-scoped CSS.
-func (m viteManifestMap) assetTags(routeKey, base string) string {
+//
+// The entry <script type="module"> is intentionally NOT in this fragment
+// — see bodyEntryTag. End-of-body script placement matches SvelteKit's
+// %sveltekit.body% convention so the browser paints SSR HTML before any
+// JS chunk executes (better LCP, fewer hydration-timing races). The
+// modulepreload hints stay in <head> so the browser still discovers and
+// parallel-fetches the chunks during HTML parse.
+func (m viteManifestMap) headAssetTags(routeKey, base string) string {
 	if m == nil {
 		return ""
 	}
-	chunk, ok := m[routeKey]
-	if !ok {
+	if _, ok := m[routeKey]; !ok {
 		return ""
 	}
+	chunk := m[routeKey]
 	base = strings.TrimRight(base, "/")
 
 	var b strings.Builder
@@ -98,8 +106,31 @@ func (m viteManifestMap) assetTags(routeKey, base string) string {
 		b.WriteByte('\n')
 	}
 
+	return b.String()
+}
+
+// bodyEntryTag returns the per-route entry <script type="module"> tag for
+// routeKey, suitable for emission at the end of <body> just before the
+// shell tail. Returns an empty string when routeKey is not in the
+// manifest or when m is nil.
+//
+// Pairs with headAssetTags: the head fragment carries stylesheet + module
+// preload hints (parsed during the HEAD walk so the browser starts the
+// chunk fetches in parallel with HTML parsing); the body fragment carries
+// the entry script that consumes those preloaded chunks once the SSR
+// body has fully parsed.
+func (m viteManifestMap) bodyEntryTag(routeKey, base string) string {
+	if m == nil {
+		return ""
+	}
+	chunk, ok := m[routeKey]
+	if !ok {
+		return ""
+	}
+	base = strings.TrimRight(base, "/")
+
+	var b strings.Builder
 	fmt.Fprintf(&b, `<script type="module" src="%s/%s"></script>`, base, chunk.File)
 	b.WriteByte('\n')
-
 	return b.String()
 }

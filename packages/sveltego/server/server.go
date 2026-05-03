@@ -95,9 +95,11 @@ type Config struct {
 	CronTasks []kit.CronTask
 	// ViteManifest is the JSON content of the Vite manifest produced by
 	// `vite build`. When non-empty the server parses it at startup and
-	// injects <script type="module"> and <link rel="modulepreload"> tags
-	// for the matching route chunk during SSR. Typically embedded in the
-	// binary so no runtime FS read is required.
+	// injects <link rel="modulepreload"> hints into <head> plus the
+	// per-route entry <script type="module"> at the end of <body> during
+	// SSR (#521; matches SvelteKit's %sveltekit.head% / %sveltekit.body%
+	// split). Typically embedded in the binary so no runtime FS read is
+	// required.
 	ViteManifest string
 	// ViteBase is the URL base path for Vite assets, e.g. "/static/_app".
 	// Defaults to "/static/_app" when ViteManifest is non-empty.

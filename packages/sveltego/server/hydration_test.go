@@ -714,21 +714,34 @@ func TestStreaming_emitsViteAssetTags(t *testing.T) {
 		t.Errorf("body missing modulepreload tag for imported chunk %q; got:\n%s", preloadTag, bs)
 	}
 
-	// CSS link must precede page content (FOUC prevention) and the
-	// content must precede the resolve script (out-of-order patches
-	// arrive after first flush).
+	// CSS link must precede page content (FOUC prevention).
+	// Issue #521: the entry <script type="module"> now lands at end of
+	// body, AFTER the resolve patches. The client glue queues incoming
+	// resolve calls until the entry module loads.
 	contentIdx := strings.Index(bs, `<h1>shell</h1>`)
 	cssIdx := strings.Index(bs, cssTag)
 	jsIdx := strings.Index(bs, jsTag)
+	preloadIdx := strings.Index(bs, preloadTag)
 	resolveIdx := strings.Index(bs, `__sveltego__resolve(`)
-	if cssIdx < 0 || contentIdx < 0 || jsIdx < 0 || resolveIdx < 0 {
-		t.Fatalf("missing markers; css=%d content=%d js=%d resolve=%d", cssIdx, contentIdx, jsIdx, resolveIdx)
+	if cssIdx < 0 || contentIdx < 0 || jsIdx < 0 || resolveIdx < 0 || preloadIdx < 0 {
+		t.Fatalf("missing markers; css=%d content=%d js=%d preload=%d resolve=%d", cssIdx, contentIdx, jsIdx, preloadIdx, resolveIdx)
 	}
 	if cssIdx > contentIdx {
 		t.Errorf("CSS link must precede page content; css=%d content=%d", cssIdx, contentIdx)
 	}
-	if jsIdx > resolveIdx {
-		t.Errorf("module script must precede resolve patches; js=%d resolve=%d", jsIdx, resolveIdx)
+	// Issue #521: entry module script lives at end of body, not head.
+	headEnd := strings.Index(bs, `</head>`)
+	if headEnd < 0 {
+		t.Fatalf("missing </head> in body:\n%s", bs)
+	}
+	if jsIdx < headEnd {
+		t.Errorf("entry <script type=\"module\"> must be in body, not head; js=%d headEnd=%d", jsIdx, headEnd)
+	}
+	if preloadIdx > headEnd {
+		t.Errorf("modulepreload hint must stay in head; preload=%d headEnd=%d", preloadIdx, headEnd)
+	}
+	if jsIdx < resolveIdx {
+		t.Errorf("entry script must come AFTER resolve patches at end of body; js=%d resolve=%d", jsIdx, resolveIdx)
 	}
 }
 
