@@ -166,9 +166,11 @@ func BuildSSRAST(ctx context.Context, opts SSROptions) ([]SSRResult, error) {
 		}
 		sidecarDir = p
 	}
-	if _, err := os.Stat(filepath.Join(sidecarDir, "node_modules", "acorn")); err != nil {
-		return nil, fmt.Errorf("svelterender: sidecar deps not installed at %s: run `npm install` in the sidecar tree", sidecarDir)
+	readyDir, err := EnsureSidecarDeps(sidecarDir)
+	if err != nil {
+		return nil, err
 	}
+	sidecarDir = readyDir
 
 	manifest := struct {
 		Root   string   `json:"root"`

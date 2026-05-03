@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/binsarjr/sveltego/packages/sveltego/internal/codegen/svelterender"
 	"github.com/binsarjr/sveltego/packages/sveltego/runtime/svelte/fallback"
 )
 
@@ -99,6 +100,11 @@ func StartFallbackSidecar(ctx context.Context, cfg SSRFallbackConfig) (*fallback
 		}
 		cfg.SidecarDir = dir
 	}
+	readyDir, err := svelterender.EnsureSidecarDeps(cfg.SidecarDir)
+	if err != nil {
+		return nil, fmt.Errorf("server: ensure sidecar deps: %w", err)
+	}
+	cfg.SidecarDir = readyDir
 	if cfg.ProjectRoot == "" {
 		wd, err := os.Getwd()
 		if err != nil {
