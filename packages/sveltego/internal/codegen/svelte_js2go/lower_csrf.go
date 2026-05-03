@@ -176,64 +176,6 @@ func rewriteFormsInPushArgument(arg *Node) {
 	}
 }
 
-// walkTemplateLiterals invokes fn on every TemplateLiteral node found
-// in n. Walks the same set of child links the emitter cares about
-// (mirrors collectBareCallees in emitter.go) so newly added node types
-// get covered there too.
-func walkTemplateLiterals(n *Node, fn func(*Node)) {
-	if n == nil {
-		return
-	}
-	if n.Type == "TemplateLiteral" {
-		fn(n)
-		// Fall through so nested templates inside interpolations are
-		// also visited — rare but possible.
-	}
-	walkTemplateLiterals(n.Expression, fn)
-	walkTemplateLiterals(n.Callee, fn)
-	walkTemplateLiterals(n.Object, fn)
-	walkTemplateLiterals(n.Property, fn)
-	walkTemplateLiterals(n.Argument, fn)
-	walkTemplateLiterals(n.Left, fn)
-	walkTemplateLiterals(n.Right, fn)
-	walkTemplateLiterals(n.Test, fn)
-	walkTemplateLiterals(n.Consequent, fn)
-	walkTemplateLiterals(n.Alternate, fn)
-	walkTemplateLiterals(n.Init, fn)
-	walkTemplateLiterals(n.Update, fn)
-	walkTemplateLiterals(n.FuncBody, fn)
-	walkTemplateLiterals(n.ID, fn)
-	walkTemplateLiterals(n.Source, fn)
-	walkTemplateLiterals(n.Declaration, fn)
-	walkTemplateLiterals(n.Imported, fn)
-	walkTemplateLiterals(n.Local, fn)
-	walkTemplateLiterals(n.Key, fn)
-	walkTemplateLiterals(n.Value, fn)
-	for _, c := range n.Body {
-		walkTemplateLiterals(c, fn)
-	}
-	for _, c := range n.Arguments {
-		walkTemplateLiterals(c, fn)
-	}
-	for _, c := range n.Params {
-		walkTemplateLiterals(c, fn)
-	}
-	for _, c := range n.Declarations {
-		walkTemplateLiterals(c, fn)
-	}
-	for _, c := range n.Properties {
-		walkTemplateLiterals(c, fn)
-	}
-	for _, c := range n.Specifiers {
-		walkTemplateLiterals(c, fn)
-	}
-	// Quasis carry no rewriteable nodes (TemplateElement.Cooked is a
-	// string), but child Expressions do — those are walked above.
-	for _, c := range n.Expressions {
-		walkTemplateLiterals(c, fn)
-	}
-}
-
 // rewriteFormsInTemplateLiteral scans tl's quasis for POST-form open
 // tags and splices the hidden CSRF input in after each. Operates on
 // quasis one at a time; multi-quasi form open tags (dynamic attributes
@@ -426,10 +368,10 @@ func containsFormStart(s string) bool {
 		if s[i] != '<' {
 			continue
 		}
-		if asciiToLower(s[i+1]) == 'f' &&
-			asciiToLower(s[i+2]) == 'o' &&
-			asciiToLower(s[i+3]) == 'r' &&
-			asciiToLower(s[i+4]) == 'm' {
+		if asciiToLowerByte(s[i+1]) == 'f' &&
+			asciiToLowerByte(s[i+2]) == 'o' &&
+			asciiToLowerByte(s[i+3]) == 'r' &&
+			asciiToLowerByte(s[i+4]) == 'm' {
 			return true
 		}
 	}
@@ -445,10 +387,10 @@ func indexFormStart(s string, start int) int {
 		if s[i] != '<' {
 			continue
 		}
-		if asciiToLower(s[i+1]) != 'f' ||
-			asciiToLower(s[i+2]) != 'o' ||
-			asciiToLower(s[i+3]) != 'r' ||
-			asciiToLower(s[i+4]) != 'm' {
+		if asciiToLowerByte(s[i+1]) != 'f' ||
+			asciiToLowerByte(s[i+2]) != 'o' ||
+			asciiToLowerByte(s[i+3]) != 'r' ||
+			asciiToLowerByte(s[i+4]) != 'm' {
 			continue
 		}
 		if i+5 == len(s) {
@@ -628,7 +570,7 @@ func scanFormOpenTag(s string, idx int) (end int, rest string, attrs formAttrs, 
 			delStart := sp.nameStart
 			// Walk back over leading whitespace so the rendered tag
 			// doesn't end up with a double space.
-			for delStart > pos && isAsciiSpace(s[delStart-1]) {
+			for delStart > pos && isASCIISpace(s[delStart-1]) {
 				delStart--
 			}
 			delEnd := sp.nameEnd
@@ -672,13 +614,13 @@ func scanFormOpenTag(s string, idx int) (end int, rest string, attrs formAttrs, 
 	return end, rest, attrs, true
 }
 
-func asciiToLower(b byte) byte {
+func asciiToLowerByte(b byte) byte {
 	if b >= 'A' && b <= 'Z' {
 		return b + ('a' - 'A')
 	}
 	return b
 }
 
-func isAsciiSpace(b byte) bool {
+func isASCIISpace(b byte) bool {
 	return b == ' ' || b == '\t' || b == '\n' || b == '\r'
 }
